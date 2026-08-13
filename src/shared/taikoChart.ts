@@ -31,7 +31,7 @@ export function splitByMeasure(chart: TaikoChart): TaikoNote[][] {
   const measures: TaikoNote[][] = Array.from({ length: count }, () => []);
   for (const note of chart.notes) {
     const idx = Math.min(count - 1, Math.floor(note.timeMs / len));
-    measures[idx].push(note);
+    measures[idx]?.push(note);
   }
   return measures;
 }
