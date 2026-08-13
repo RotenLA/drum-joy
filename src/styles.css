@@ -95,6 +95,14 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /* 太鼓模块：极简纸墨 */
+  --taiko-paper: oklch(0.966 0.008 85);
+  --taiko-surface: oklch(0.918 0.011 82);
+  --taiko-line: oklch(0.82 0.012 82);
+  --taiko-ink: oklch(0.24 0.011 65);
+  --taiko-don: oklch(0.56 0.181 26);
+  --taiko-ka: oklch(0.52 0.122 249);
 }
 
 .dark {
