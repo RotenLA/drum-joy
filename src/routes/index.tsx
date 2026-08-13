@@ -1,24 +1,27 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { TaikoShell } from "@/taiko/TaikoShell";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "太鼓谱面工作台 — LovableSynth" },
+      {
+        name: "description",
+        content:
+          "空气鼓太鼓模块：游玩轨道、谱面预览与鼓件咚/嗒映射设置，双脚为咚、双手为嗒。",
+      },
+      { property: "og:title", content: "太鼓谱面工作台 — LovableSynth" },
+      {
+        property: "og:description",
+        content: "游玩轨道、谱面预览与鼓件咚/嗒映射设置的一体化界面。",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
+  return <TaikoShell />;
 }
