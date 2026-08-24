@@ -5,10 +5,10 @@
  * laneLayouts 的 PAD_ANCHORS / DRUM_PARTS，本文件只负责绘制。
  *
  * 场景：专辑封面墙（压灰压暗）+ 深色镜面地板（墙面翻转倒影，随深度渐隐），
- * 9 条细光车道从顶部「收束段」（宽约一个通鼓，非单点）辐射到各鼓盘，
+ * 9 条细光车道按「三排独立收束段」辐射到各排鼓盘（宽约一个通鼓，非单点），
  * 音符由小变大滑向鼓盘，鼓盘即判定落点，命中时鼓盘增亮回弹并喷火花粒子。
  * 接触阴影锚在各部件的地面接触线上，压扁比统一 = 同一地板视角；
- * 踏板为后缘收窄的透视楔块，与鼓共享俯视相机。
+ * 踏板为斜放的立方体（顶面旋转后按 0.42 均匀压扁，与鼓同一仿射地板）。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
 import stageWallUrl from "@/assets/stage-wall.jpg";
@@ -33,10 +33,15 @@ const wallImg = typeof Image !== "undefined" ? new Image() : null;
 if (wallImg) wallImg.src = stageWallUrl;
 
 /**
- * 车道收束段（顶部中央）：y 归一化，半宽 0.05 → 总宽 0.10w，
- * ≈ 高通/中通鼓面宽度（2×0.048w），避免所有车道挤成一个点。
+ * 车道收束段：三排（上/中/下）各自独立，横向半宽 0.05 → 总宽 0.10w
+ * ≈ 高通/中通鼓面宽度（2×0.048w）。分层后各排车道在屏幕上按高度分开，
+ * 不再长距离重叠；同列部件（高通↔踩镲踏板、中通↔底鼓）的车道接近平行。
  */
-const GATE = { y: 0.13, halfW: 0.05 } as const;
+const ROW_GATES = [
+  { y: 0.13, halfW: 0.05 },
+  { y: 0.3, halfW: 0.05 },
+  { y: 0.46, halfW: 0.05 },
+] as const;
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
@@ -45,6 +50,8 @@ const LEAD_MS = 2400;
 const EASE = 1.55;
 /** 命中闪光时长（与 FallScreen 的 FLASH_MS 对应） */
 const FLASH_MS = 200;
+/** 踏板斜放角：左右镜像「外八」，顶面正方形旋转后再按 0.42 压扁 */
+const PEDAL_TILT = (12 * Math.PI) / 180;
 
 export interface StageFrame {
   chart: TaikoChart;
@@ -91,18 +98,20 @@ function padPixels(a: PadAnchor, w: number, h: number) {
 /**
  * 各部件的地面接触线（相对鼓盘中心 cy 的向下偏移）。
  * 鼓 = 鼓腔底缘（侧深 0.9ry + 底椭圆 ry）；镲 = 镲片底缘（边带在 0.22ry 处）；
- * 踏板 = 楔块底边（ry + 侧沿 0.45ry）。接触阴影锚在这里，部件才不悬浮。
+ * 踏板 = 立方体盒底（旋转后顶面最大纵偏 ~1.19ry + 厚度 1.0ry）。
+ * 接触阴影锚在这里，部件才不悬浮。
  */
 function groundOffset(a: PadAnchor, ry: number): number {
-  if (a.square) return ry * 1.45;
+  if (a.square) return ry * 2.2;
   if (a.kind === "cymbal") return ry * 1.22;
   return ry * 1.9;
 }
 
-/** 车道起点（收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
-function gatePoint(padCx: number, w: number, h: number) {
-  const x = (0.5 + (padCx - 0.5) * (GATE.halfW / PAD_SPREAD)) * w;
-  return { x, y: GATE.y * h };
+/** 车道起点（本排收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
+function gatePoint(anchor: PadAnchor, w: number, h: number) {
+  const g = ROW_GATES[anchor.row];
+  const x = (0.5 + (anchor.cx - 0.5) * (g.halfW / PAD_SPREAD)) * w;
+  return { x, y: g.y * h };
 }
 
 function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -188,7 +197,7 @@ function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number) {
   for (const part of DRUM_PARTS) {
     const anchor = PAD_ANCHORS[part.id];
     const p = padPixels(anchor, w, h);
-    const g0 = gatePoint(anchor.cx, w, h);
+    const g0 = gatePoint(anchor, w, h);
     const g = ctx.createLinearGradient(g0.x, g0.y, p.cx, p.cy);
     g.addColorStop(0, "rgba(255,255,255,0)");
     g.addColorStop(1, "rgba(255,255,255,0.2)");
@@ -223,7 +232,7 @@ function drawNotes(
   for (const { part, t, big } of visible) {
     const anchor = PAD_ANCHORS[part];
     const pad = padPixels(anchor, w, h);
-    const g0 = gatePoint(anchor.cx, w, h);
+    const g0 = gatePoint(anchor, w, h);
     const p = Math.pow(t, EASE);
     const x = g0.x + (pad.cx - g0.x) * p;
     const y = g0.y + (pad.cy - g0.y) * p;
@@ -233,11 +242,13 @@ function drawNotes(
     // 芯片长边垂直于车道方向
     const ang = Math.atan2(pad.cy - g0.y, pad.cx - g0.x) + Math.PI / 2;
     const color = PART_BY_ID[part].color;
+    // 出生淡入：中/下排收束段在屏幕中段，避免音符凭空冒出
+    const fadeIn = Math.min(1, t / 0.1);
 
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(ang);
-    ctx.globalAlpha = 0.25 + 0.75 * p;
+    ctx.globalAlpha = (0.25 + 0.75 * p) * fadeIn;
     ctx.shadowColor = color;
     ctx.shadowBlur = 16 * scale;
     ctx.fillStyle = color;
@@ -312,7 +323,11 @@ function drawContactShadow(
   ctx.restore();
 }
 
-/** 方形踏板鼓盘（底鼓/踩镲踏板）：后缘收窄的透视楔块 + 薄侧沿 */
+/**
+ * 方形踏板鼓盘（底鼓/踩镲踏板）：斜放的立方体。
+ * 顶面 = 旋转 ±PEDAL_TILT 的正方形按 0.42 均匀压扁（与鼓同一仿射地板，
+ * 无透视收窄）；左右踏板镜像「外八」。侧面只画朝向玩家的可见面。
+ */
 function drawSquarePad(
   ctx: CanvasRenderingContext2D,
   color: string,
@@ -321,42 +336,76 @@ function drawSquarePad(
   rx: number,
   ry: number,
   intensity: number,
+  mirror: boolean,
 ) {
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = rx * s;
   const RY = ry * s;
-  const back = RX * 0.72; // 后缘收窄（远小近大，与鼓同一俯视相机）
-  const backY = -RY * 0.85; // 后缘上移
-  const depth = RY * 0.45; // 低趴侧沿厚度
+  const th = mirror ? -PEDAL_TILT : PEDAL_TILT;
+  const cos = Math.cos(th);
+  const sin = Math.sin(th);
+  const depth = RY * 1.0; // 盒体厚度
+
+  // 顶面四角：地板坐标（未压扁的正方形）先旋转，再按 0.42 压扁 —— 与鼓面椭圆同一投影规则
+  const corner = (sx: number, sy: number) => {
+    const fx = sx * RX;
+    const fy = sy * RX;
+    return { x: fx * cos - fy * sin, y: (fx * sin + fy * cos) * 0.42 };
+  };
+  const top = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  const bot = top.map((p) => ({ x: p.x, y: p.y + depth }));
 
   const topPath = () => {
     ctx.beginPath();
-    ctx.moveTo(-back, backY);
-    ctx.lineTo(back, backY);
-    ctx.lineTo(RX, RY);
-    ctx.lineTo(-RX, RY);
+    ctx.moveTo(top[0]!.x, top[0]!.y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(top[i]!.x, top[i]!.y);
     ctx.closePath();
   };
+
+  // 可见侧面：外法线朝下（朝向玩家）的顶面边
+  const visibleEdges: [number, number][] = [];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const a = top[i]!;
+    const b = top[j]!;
+    let nx = b.y - a.y;
+    let ny = -(b.x - a.x);
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    if (nx * mx + ny * my < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    if (ny > 0) visibleEdges.push([i, j]);
+  }
 
   ctx.save();
   ctx.translate(cx, cy);
   ctx.lineJoin = "round";
 
-  // 侧沿（前缘露出的低趴厚度）
-  const side = ctx.createLinearGradient(0, RY, 0, RY + depth);
-  side.addColorStop(0, "#1e1e24");
-  side.addColorStop(1, "#0a0a0d");
-  ctx.beginPath();
-  ctx.moveTo(-RX, RY);
-  ctx.lineTo(RX, RY);
-  ctx.lineTo(RX * 0.98, RY + depth);
-  ctx.lineTo(-RX * 0.98, RY + depth);
-  ctx.closePath();
-  ctx.fillStyle = side;
-  ctx.fill();
+  // 侧面：上暗下更暗的纵向渐变 + 部件色淡染
+  for (const [i, j] of visibleEdges) {
+    const a = top[i]!;
+    const b = top[j]!;
+    const my = (a.y + b.y) / 2;
+    const side = ctx.createLinearGradient(0, my, 0, my + depth);
+    side.addColorStop(0, "#1e1e24");
+    side.addColorStop(1, "#0a0a0d");
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(bot[j]!.x, bot[j]!.y);
+    ctx.lineTo(bot[i]!.x, bot[i]!.y);
+    ctx.closePath();
+    ctx.fillStyle = side;
+    ctx.fill();
+    ctx.fillStyle = hexToRgba(color, 0.06 + 0.14 * intensity);
+    ctx.fill();
+  }
 
-  // 踏板顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染
-  const face = ctx.createLinearGradient(0, backY, 0, RY);
+  // 顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染
+  const ys = top.map((p) => p.y);
+  const face = ctx.createLinearGradient(0, Math.min(...ys), 0, Math.max(...ys));
   face.addColorStop(0, "#17171b");
   face.addColorStop(1, "#2b2b33");
   topPath();
@@ -365,13 +414,15 @@ function drawSquarePad(
   ctx.fillStyle = hexToRgba(color, 0.1 + 0.28 * intensity);
   ctx.fill();
 
-  // 前沿金属亮边
-  ctx.beginPath();
-  ctx.moveTo(-RX, RY);
-  ctx.lineTo(RX, RY);
-  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  // 底沿金属亮边（可见侧面的下缘）
+  ctx.strokeStyle = "rgba(255,255,255,0.16)";
   ctx.lineWidth = 1.5;
-  ctx.stroke();
+  for (const [i, j] of visibleEdges) {
+    ctx.beginPath();
+    ctx.moveTo(bot[i]!.x, bot[i]!.y);
+    ctx.lineTo(bot[j]!.x, bot[j]!.y);
+    ctx.stroke();
+  }
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
@@ -387,7 +438,7 @@ function drawSquarePad(
     ctx.strokeStyle = `rgba(255,255,255,${0.7 * intensity})`;
     ctx.lineWidth = 1.5;
     ctx.save();
-    ctx.scale(1.05, 1.1);
+    ctx.scale(1.06, 1.06);
     topPath();
     ctx.stroke();
     ctx.restore();
@@ -411,7 +462,8 @@ function drawPad(
   drawContactShadow(ctx, p.cx, p.cy + groundOffset(anchor, p.ry), p.rx);
 
   if (anchor.square) {
-    drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity);
+    // 左右踏板镜像「外八」斜放
+    drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity, partId === "kick");
     return;
   }
 
