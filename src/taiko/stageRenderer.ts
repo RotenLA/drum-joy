@@ -485,56 +485,33 @@ function drawPad(
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = p.rx * s;
   const RY = p.ry * s;
-  const isCymbal = anchor.kind === "cymbal";
-
   ctx.save();
   ctx.translate(p.cx, p.cy);
   // 鼓盘整体随车道旋转：鼓腔/盘面/描边/命中闪一起转，等效鼓面朝向来球方向倾斜
   ctx.rotate(padRotation(anchor, w, h));
 
-  if (isCymbal) {
-    // 镲片边缘厚度：下方露出的暗色边带
-    ctx.beginPath();
-    ctx.ellipse(0, RY * 0.22, RX, RY, 0, 0, Math.PI);
-    ctx.lineTo(-RX, 0);
-    ctx.closePath();
-    ctx.fillStyle = "#0e0e11";
-    ctx.fill();
-    ctx.strokeStyle = hexToRgba(color, 0.2 + 0.4 * intensity);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  } else {
-    // 鼓腔侧面：强纵向明暗 + 部件色淡染
-    const depth = RY * 0.9;
-    const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
-    side.addColorStop(0, "#232329");
-    side.addColorStop(1, "#0a0a0d");
-    ctx.beginPath();
-    ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI);
-    ctx.lineTo(-RX, depth);
-    ctx.ellipse(0, depth, RX, RY, 0, Math.PI, 0, true);
-    ctx.closePath();
-    ctx.fillStyle = side;
-    ctx.fill();
-    ctx.fillStyle = hexToRgba(color, 0.07 + 0.16 * intensity);
-    ctx.fill();
-    ctx.strokeStyle = hexToRgba(color, 0.25 + 0.5 * intensity);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
+  // 鼓腔侧面：强纵向明暗 + 部件色淡染
+  const depth = RY * 0.9;
+  const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
+  side.addColorStop(0, "#232329");
+  side.addColorStop(1, "#0a0a0d");
+  ctx.beginPath();
+  ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI);
+  ctx.lineTo(-RX, depth);
+  ctx.ellipse(0, depth, RX, RY, 0, Math.PI, 0, true);
+  ctx.closePath();
+  ctx.fillStyle = side;
+  ctx.fill();
+  ctx.fillStyle = hexToRgba(color, 0.07 + 0.16 * intensity);
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba(color, 0.25 + 0.5 * intensity);
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
-  // 盘面：方向性顶光（左上方来光），镲片比鼓更亮一档
-  const face = isCymbal
-    ? ctx.createRadialGradient(-RX * 0.28, -RY * 0.4, RY * 0.15, 0, 0, RX * 1.05)
-    : ctx.createRadialGradient(0, -RY * 0.45, RY * 0.2, 0, 0, RX);
-  if (isCymbal) {
-    face.addColorStop(0, "#3d3d47");
-    face.addColorStop(0.55, "#232328");
-    face.addColorStop(1, "#111114");
-  } else {
-    face.addColorStop(0, "#2b2b32");
-    face.addColorStop(1, "#121215");
-  }
+  // 盘面：方向性顶光（上方来光）
+  const face = ctx.createRadialGradient(0, -RY * 0.45, RY * 0.2, 0, 0, RX);
+  face.addColorStop(0, "#2b2b32");
+  face.addColorStop(1, "#121215");
   ctx.beginPath();
   ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI * 2);
   ctx.fillStyle = face;
@@ -542,31 +519,16 @@ function drawPad(
   ctx.fillStyle = hexToRgba(color, 0.1 + 0.28 * intensity);
   ctx.fill();
 
-  if (isCymbal) {
-    // 车纹：亮纹 + 紧邻暗纹
-    for (const g of [0.45, 0.62, 0.8]) {
-      ctx.beginPath();
-      ctx.ellipse(0, 0, RX * g, RY * g, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,255,255,0.06)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(0, 0, RX * (g + 0.045), RY * (g + 0.045), 0, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(0,0,0,0.22)";
-      ctx.stroke();
-    }
-  } else {
-    // 鼓圈（rim）高光：鼓皮内沿一圈亮色金属环
-    ctx.beginPath();
-    ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.14)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, Math.PI * 1.15, Math.PI * 1.85);
-    ctx.strokeStyle = "rgba(255,255,255,0.3)";
-    ctx.stroke();
-  }
+  // 鼓圈（rim）高光：鼓皮内沿一圈亮色金属环
+  ctx.beginPath();
+  ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.14)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, Math.PI * 1.15, Math.PI * 1.85);
+  ctx.strokeStyle = "rgba(255,255,255,0.3)";
+  ctx.stroke();
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
