@@ -76,9 +76,9 @@ export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
   hihat: { cx: 0.27, cy: 0.79, r: 0.056, kind: "cymbal" },
   snare: { cx: 0.5, cy: 0.79, r: 0.06, kind: "drum" },
   floorTom: { cx: 0.73, cy: 0.79, r: 0.06, kind: "drum" },
-  // 下排（最近最大，方形踏板与手击鼓盘区分）
-  pedalHat: { cx: 0.35, cy: 0.91, r: 0.062, kind: "pedal", square: true },
-  kick: { cx: 0.65, cy: 0.91, r: 0.078, kind: "drum", square: true },
+  // 下排（最近一排，方形低趴踏板与手击鼓盘区分，明显小于军鼓）
+  pedalHat: { cx: 0.35, cy: 0.91, r: 0.045, kind: "pedal", square: true },
+  kick: { cx: 0.65, cy: 0.91, r: 0.055, kind: "drum", square: true },
 };
 
 export type LayoutMode = "five" | "nine";
