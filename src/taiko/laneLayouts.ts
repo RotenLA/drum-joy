@@ -69,10 +69,10 @@ export interface PadAnchor {
  * 三排纵向拉开、车道按排独立收束（stageRenderer 的 ROW_GATES）。
  * 摆位/大小要调整只改这张表。
  */
-/** 上排中心高度：旋转后顶缘（鼓阵最高点）落在屏高 1/2 处，微调只改这个数 */
-const TOP_ROW_CY = 0.545;
+/** 上排中心高度：按 ~16:9 画布标定，旋转后顶缘（鼓阵最高点）落在屏高 1/2 处，微调只改这个数 */
+const TOP_ROW_CY = 0.568;
 /** 中排中心高度（与上排保持 0.16 排距，整体随之上移） */
-const MID_ROW_CY = 0.705;
+const MID_ROW_CY = 0.728;
 /** 上排横坐标：中排踩镲/地通的车道端点取相邻上排两端点的正中 */
 const TOP_CX = { crash: 0.16, highTom: 0.38, midTom: 0.62, ride: 0.84 } as const;
 
