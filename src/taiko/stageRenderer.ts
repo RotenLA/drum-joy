@@ -323,7 +323,11 @@ function drawContactShadow(
   ctx.restore();
 }
 
-/** 方形踏板鼓盘（底鼓/踩镲踏板）：后缘收窄的透视楔块 + 薄侧沿 */
+/**
+ * 方形踏板鼓盘（底鼓/踩镲踏板）：斜放的立方体。
+ * 顶面 = 旋转 ±PEDAL_TILT 的正方形按 0.42 均匀压扁（与鼓同一仿射地板，
+ * 无透视收窄）；左右踏板镜像「外八」。侧面只画朝向玩家的可见面。
+ */
 function drawSquarePad(
   ctx: CanvasRenderingContext2D,
   color: string,
@@ -332,42 +336,76 @@ function drawSquarePad(
   rx: number,
   ry: number,
   intensity: number,
+  mirror: boolean,
 ) {
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = rx * s;
   const RY = ry * s;
-  const back = RX * 0.72; // 后缘收窄（远小近大，与鼓同一俯视相机）
-  const backY = -RY * 0.85; // 后缘上移
-  const depth = RY * 0.45; // 低趴侧沿厚度
+  const th = mirror ? -PEDAL_TILT : PEDAL_TILT;
+  const cos = Math.cos(th);
+  const sin = Math.sin(th);
+  const depth = RY * 1.0; // 盒体厚度
+
+  // 顶面四角：地板坐标（未压扁的正方形）先旋转，再按 0.42 压扁 —— 与鼓面椭圆同一投影规则
+  const corner = (sx: number, sy: number) => {
+    const fx = sx * RX;
+    const fy = sy * RX;
+    return { x: fx * cos - fy * sin, y: (fx * sin + fy * cos) * 0.42 };
+  };
+  const top = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  const bot = top.map((p) => ({ x: p.x, y: p.y + depth }));
 
   const topPath = () => {
     ctx.beginPath();
-    ctx.moveTo(-back, backY);
-    ctx.lineTo(back, backY);
-    ctx.lineTo(RX, RY);
-    ctx.lineTo(-RX, RY);
+    ctx.moveTo(top[0]!.x, top[0]!.y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(top[i]!.x, top[i]!.y);
     ctx.closePath();
   };
+
+  // 可见侧面：外法线朝下（朝向玩家）的顶面边
+  const visibleEdges: [number, number][] = [];
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    const a = top[i]!;
+    const b = top[j]!;
+    let nx = b.y - a.y;
+    let ny = -(b.x - a.x);
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2;
+    if (nx * mx + ny * my < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    if (ny > 0) visibleEdges.push([i, j]);
+  }
 
   ctx.save();
   ctx.translate(cx, cy);
   ctx.lineJoin = "round";
 
-  // 侧沿（前缘露出的低趴厚度）
-  const side = ctx.createLinearGradient(0, RY, 0, RY + depth);
-  side.addColorStop(0, "#1e1e24");
-  side.addColorStop(1, "#0a0a0d");
-  ctx.beginPath();
-  ctx.moveTo(-RX, RY);
-  ctx.lineTo(RX, RY);
-  ctx.lineTo(RX * 0.98, RY + depth);
-  ctx.lineTo(-RX * 0.98, RY + depth);
-  ctx.closePath();
-  ctx.fillStyle = side;
-  ctx.fill();
+  // 侧面：上暗下更暗的纵向渐变 + 部件色淡染
+  for (const [i, j] of visibleEdges) {
+    const a = top[i]!;
+    const b = top[j]!;
+    const my = (a.y + b.y) / 2;
+    const side = ctx.createLinearGradient(0, my, 0, my + depth);
+    side.addColorStop(0, "#1e1e24");
+    side.addColorStop(1, "#0a0a0d");
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.lineTo(bot[j]!.x, bot[j]!.y);
+    ctx.lineTo(bot[i]!.x, bot[i]!.y);
+    ctx.closePath();
+    ctx.fillStyle = side;
+    ctx.fill();
+    ctx.fillStyle = hexToRgba(color, 0.06 + 0.14 * intensity);
+    ctx.fill();
+  }
 
-  // 踏板顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染
-  const face = ctx.createLinearGradient(0, backY, 0, RY);
+  // 顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染
+  const ys = top.map((p) => p.y);
+  const face = ctx.createLinearGradient(0, Math.min(...ys), 0, Math.max(...ys));
   face.addColorStop(0, "#17171b");
   face.addColorStop(1, "#2b2b33");
   topPath();
@@ -376,13 +414,15 @@ function drawSquarePad(
   ctx.fillStyle = hexToRgba(color, 0.1 + 0.28 * intensity);
   ctx.fill();
 
-  // 前沿金属亮边
-  ctx.beginPath();
-  ctx.moveTo(-RX, RY);
-  ctx.lineTo(RX, RY);
-  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  // 底沿金属亮边（可见侧面的下缘）
+  ctx.strokeStyle = "rgba(255,255,255,0.16)";
   ctx.lineWidth = 1.5;
-  ctx.stroke();
+  for (const [i, j] of visibleEdges) {
+    ctx.beginPath();
+    ctx.moveTo(bot[i]!.x, bot[i]!.y);
+    ctx.lineTo(bot[j]!.x, bot[j]!.y);
+    ctx.stroke();
+  }
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
@@ -398,7 +438,7 @@ function drawSquarePad(
     ctx.strokeStyle = `rgba(255,255,255,${0.7 * intensity})`;
     ctx.lineWidth = 1.5;
     ctx.save();
-    ctx.scale(1.05, 1.1);
+    ctx.scale(1.06, 1.06);
     topPath();
     ctx.stroke();
     ctx.restore();
@@ -422,7 +462,8 @@ function drawPad(
   drawContactShadow(ctx, p.cx, p.cy + groundOffset(anchor, p.ry), p.rx);
 
   if (anchor.square) {
-    drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity);
+    // 左右踏板镜像「外八」斜放
+    drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity, partId === "kick");
     return;
   }
 
