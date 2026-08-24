@@ -427,15 +427,14 @@ function drawZones(
     ctx.stroke();
     ctx.restore();
 
-    // 分区标签（近沿下方）
+    // 分区标签收集起来，等音符画完再统一绘制，避免被音符遮住
     const mid = project(cam, (z.x0 + z.x1) / 2, z.t1);
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.font = "10px ui-monospace, monospace";
-    ctx.fillStyle = rgba(z.color, 0.85);
-    ctx.fillText(`${z.keyLabel} · ${z.label}`, mid.x, mid.y + 12);
-    ctx.restore();
+    labels.push({
+      x: mid.x,
+      y: mid.y + 12,
+      text: `${z.keyLabel} · ${z.label}`,
+      color: z.color,
+    });
 
     // 下一个音符落点辉光提示
     const next = p.chart.notes.find(
