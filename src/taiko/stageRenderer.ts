@@ -1,12 +1,13 @@
 /**
- * 舞台下落式渲染器：扇形鼓盘阵 + 顶部消失点辐射车道
+ * 舞台下落式渲染器：扇形鼓盘阵 + 顶部收束段辐射车道
  *
  * 纯 Canvas 2D 伪 3D，与 React 解耦。鼓盘摆位/颜色全部来自
  * laneLayouts 的 PAD_ANCHORS / DRUM_PARTS，本文件只负责绘制。
  *
- * 场景：深灰黑舞台 + 顶部聚光灯，9 条细光车道从顶部中央消失点
- * 辐射到各鼓盘，音符由小变大滑向鼓盘，鼓盘即判定落点，
- * 命中时鼓盘增亮回弹并喷火花粒子。
+ * 场景：录音棚背景（墙/地分界线对齐顶排鼓身后）+ 顶部聚光灯，
+ * 9 条细光车道从顶部「收束段」（宽约一个通鼓，非单点）辐射到各鼓盘，
+ * 音符由小变大滑向鼓盘，鼓盘即判定落点，命中时鼓盘增亮回弹并喷火花粒子。
+ * 所有部件带地面接触阴影，压扁比统一 = 同一地板视角。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
 import stageBgUrl from "@/assets/stage-bg.jpg";
@@ -21,16 +22,25 @@ import {
 
 /** 背景图墙/地分界线（归一化 y，相对背景图高度） */
 const BG_SEAM_Y = 0.638;
-/** 分界线在屏幕上的目标位置（顶排鼓与中排鼓之间） */
-const SEAM_SCREEN_Y = 0.72;
+/**
+ * 分界线在屏幕上的目标位置。
+ * 推算：顶排镲（cy=0.66）后缘 y≈0.634，分界线放在其上方 ~0.034 屏高处，
+ * 让顶排鼓站在墙根前的地板上，墙根暗色读作鼓的后阴影。
+ */
+const SEAM_SCREEN_Y = 0.6;
 
 /** 录音棚背景图（浏览器侧懒加载；SSR 无 Image，退回纯色舞台） */
 const bgImg = typeof Image !== "undefined" ? new Image() : null;
 if (bgImg) bgImg.src = stageBgUrl;
 
-/** 消失点（顶部中央，归一化坐标） */
-const VP = { x: 0.5, y: 0.13 } as const;
-/** 音符从消失点飞到鼓盘的时间（1x 速度下，毫秒） */
+/**
+ * 车道收束段（顶部中央）：y 归一化，半宽 0.05 → 总宽 0.10w，
+ * ≈ 高通/中通鼓面宽度（2×0.048w），避免所有车道挤成一个点。
+ */
+const GATE = { y: 0.13, halfW: 0.05 } as const;
+/** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
+const PAD_SPREAD = 0.34;
+/** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
 const LEAD_MS = 2400;
 /** 透视加速指数：>1 让音符近大远小的同时近处加速 */
 const EASE = 1.55;
@@ -73,15 +83,23 @@ function hexToRgba(hex: string, a: number): string {
 /** 鼓盘锚点 → 像素几何 */
 function padPixels(a: PadAnchor, w: number, h: number) {
   const rx = a.r * w;
-  const ratio = a.kind === "drum" ? 0.42 : a.kind === "cymbal" ? 0.3 : 0.28;
+  // 同一地板视角：鼓面与平放的踏板共享压扁比 0.42；
+  // 镲片略平（0.3）表现微微倾向演奏者的倾角。
+  const ratio = a.kind === "cymbal" ? 0.3 : 0.42;
   return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * ratio };
+}
+
+/** 车道起点（收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
+function gatePoint(padCx: number, w: number, h: number) {
+  const x = (0.5 + (padCx - 0.5) * (GATE.halfW / PAD_SPREAD)) * w;
+  return { x, y: GATE.y * h };
 }
 
 function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0a0a0c";
   ctx.fillRect(0, 0, w, h);
 
-  // 录音棚背景：墙/地分界线对齐到 SEAM_SCREEN_Y（顶排与中排鼓之间）
+  // 录音棚背景：墙/地分界线对齐到 SEAM_SCREEN_Y（顶排鼓身后墙根）
   if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
     const iw = bgImg.naturalWidth;
     const ih = bgImg.naturalHeight;
@@ -121,18 +139,18 @@ function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
 }
 
 function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const vpX = VP.x * w;
-  const vpY = VP.y * h;
   ctx.save();
   ctx.lineWidth = 1.5;
   for (const part of DRUM_PARTS) {
-    const p = padPixels(PAD_ANCHORS[part.id], w, h);
-    const g = ctx.createLinearGradient(vpX, vpY, p.cx, p.cy);
+    const anchor = PAD_ANCHORS[part.id];
+    const p = padPixels(anchor, w, h);
+    const g0 = gatePoint(anchor.cx, w, h);
+    const g = ctx.createLinearGradient(g0.x, g0.y, p.cx, p.cy);
     g.addColorStop(0, "rgba(255,255,255,0)");
     g.addColorStop(1, "rgba(255,255,255,0.2)");
     ctx.strokeStyle = g;
     ctx.beginPath();
-    ctx.moveTo(vpX, vpY);
+    ctx.moveTo(g0.x, g0.y);
     ctx.lineTo(p.cx, p.cy);
     ctx.stroke();
   }
@@ -145,15 +163,12 @@ function drawNotes(
   h: number,
   f: StageFrame,
 ) {
-  const vpX = VP.x * w;
-  const vpY = VP.y * h;
-
   const visible: { part: PartId; t: number; big: boolean }[] = [];
   for (const n of f.chart.notes) {
     if (n.note === undefined) continue;
     const part = PART_BY_NOTE[n.note];
     if (!part) continue;
-    // t: 0 = 消失点，1 = 鼓盘（到达即命中，不再绘制）
+    // t: 0 = 收束段，1 = 鼓盘（到达即命中，不再绘制）
     const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
     if (t <= 0.02 || t >= 1) continue;
     visible.push({ part, t, big: !!n.big });
@@ -164,14 +179,15 @@ function drawNotes(
   for (const { part, t, big } of visible) {
     const anchor = PAD_ANCHORS[part];
     const pad = padPixels(anchor, w, h);
+    const g0 = gatePoint(anchor.cx, w, h);
     const p = Math.pow(t, EASE);
-    const x = vpX + (pad.cx - vpX) * p;
-    const y = vpY + (pad.cy - vpY) * p;
+    const x = g0.x + (pad.cx - g0.x) * p;
+    const y = g0.y + (pad.cy - g0.y) * p;
     const scale = (0.18 + 0.82 * p) * (big ? 1.35 : 1);
     const nw = Math.max(6, pad.rx * 0.8 * scale);
     const nh = Math.max(3, nw * 0.34);
     // 芯片长边垂直于车道方向
-    const ang = Math.atan2(pad.cy - vpY, pad.cx - vpX) + Math.PI / 2;
+    const ang = Math.atan2(pad.cy - g0.y, pad.cx - g0.x) + Math.PI / 2;
     const color = PART_BY_ID[part].color;
 
     ctx.save();
@@ -235,7 +251,25 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
   ctx.restore();
 }
 
-/** 方形踏板鼓盘（底鼓/踩镲踏板）：圆角矩形面板 + 侧沿厚度 */
+/** 地面接触阴影：把部件「钉」在地板上，统一视角的关键 */
+function drawContactShadow(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+) {
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.shadowColor = "rgba(0,0,0,0.9)";
+  ctx.shadowBlur = 18;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + ry * 0.85, rx * 1.12, ry * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** 方形踏板鼓盘（底鼓/踩镲踏板）：低趴圆角矩形踏板 + 薄侧沿 */
 function drawSquarePad(
   ctx: CanvasRenderingContext2D,
   color: string,
@@ -248,16 +282,16 @@ function drawSquarePad(
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = rx * s;
   const RY = ry * s;
-  const rr = Math.min(RY * 0.45, 10);
+  const rr = Math.min(RY * 0.4, 8);
 
   ctx.save();
   ctx.translate(cx, cy);
 
-  // 侧沿厚度（向后下方延伸的暗色底座）
-  const depth = RY * 1.1;
+  // 薄侧沿（低趴楔块，不再像立起来的盒子）
+  const depth = RY * 0.45;
   const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
-  side.addColorStop(0, "#1b1b20");
-  side.addColorStop(1, "#0c0c0f");
+  side.addColorStop(0, "#1e1e24");
+  side.addColorStop(1, "#0a0a0d");
   ctx.beginPath();
   ctx.roundRect(-RX, -RY + depth, RX * 2, RY * 2, rr);
   ctx.fillStyle = side;
@@ -268,7 +302,7 @@ function drawSquarePad(
 
   // 面板：深灰金属 + 部件色淡染
   const face = ctx.createRadialGradient(0, -RY * 0.4, RY * 0.2, 0, 0, RX);
-  face.addColorStop(0, "#26262c");
+  face.addColorStop(0, "#28282f");
   face.addColorStop(1, "#131316");
   ctx.beginPath();
   ctx.roundRect(-RX, -RY, RX * 2, RY * 2, rr);
@@ -309,23 +343,40 @@ function drawPad(
   const anchor = PAD_ANCHORS[partId];
   const color = PART_BY_ID[partId].color;
   const p = padPixels(anchor, w, h);
+
+  // 接触阴影不随命中回弹缩放
+  drawContactShadow(ctx, p.cx, p.cy, p.rx, p.ry);
+
   if (anchor.square) {
     drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity);
     return;
   }
+
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = p.rx * s;
   const RY = p.ry * s;
+  const isCymbal = anchor.kind === "cymbal";
 
   ctx.save();
   ctx.translate(p.cx, p.cy);
 
-  // 鼓腔侧面（仅 drum 有厚度）
-  if (anchor.kind === "drum") {
+  if (isCymbal) {
+    // 镲片边缘厚度：下方露出的暗色边带
+    ctx.beginPath();
+    ctx.ellipse(0, RY * 0.22, RX, RY, 0, 0, Math.PI);
+    ctx.lineTo(-RX, 0);
+    ctx.closePath();
+    ctx.fillStyle = "#0e0e11";
+    ctx.fill();
+    ctx.strokeStyle = hexToRgba(color, 0.2 + 0.4 * intensity);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  } else {
+    // 鼓腔侧面：强纵向明暗 + 部件色淡染
     const depth = RY * 0.9;
     const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
-    side.addColorStop(0, "#1d1d22");
-    side.addColorStop(1, "#0d0d10");
+    side.addColorStop(0, "#232329");
+    side.addColorStop(1, "#0a0a0d");
     ctx.beginPath();
     ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI);
     ctx.lineTo(-RX, depth);
@@ -333,21 +384,57 @@ function drawPad(
     ctx.closePath();
     ctx.fillStyle = side;
     ctx.fill();
+    ctx.fillStyle = hexToRgba(color, 0.07 + 0.16 * intensity);
+    ctx.fill();
     ctx.strokeStyle = hexToRgba(color, 0.25 + 0.5 * intensity);
     ctx.lineWidth = 1;
     ctx.stroke();
   }
 
-  // 盘面：深灰金属 + 部件色淡染
-  const face = ctx.createRadialGradient(0, -RY * 0.4, RY * 0.2, 0, 0, RX);
-  face.addColorStop(0, anchor.kind === "cymbal" ? "#2e2e34" : "#26262c");
-  face.addColorStop(1, "#131316");
+  // 盘面：方向性顶光（左上方来光），镲片比鼓更亮一档
+  const face = isCymbal
+    ? ctx.createRadialGradient(-RX * 0.28, -RY * 0.4, RY * 0.15, 0, 0, RX * 1.05)
+    : ctx.createRadialGradient(0, -RY * 0.45, RY * 0.2, 0, 0, RX);
+  if (isCymbal) {
+    face.addColorStop(0, "#3d3d47");
+    face.addColorStop(0.55, "#232328");
+    face.addColorStop(1, "#111114");
+  } else {
+    face.addColorStop(0, "#2b2b32");
+    face.addColorStop(1, "#121215");
+  }
   ctx.beginPath();
   ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI * 2);
   ctx.fillStyle = face;
   ctx.fill();
   ctx.fillStyle = hexToRgba(color, 0.1 + 0.28 * intensity);
   ctx.fill();
+
+  if (isCymbal) {
+    // 车纹：亮纹 + 紧邻暗纹
+    for (const g of [0.45, 0.62, 0.8]) {
+      ctx.beginPath();
+      ctx.ellipse(0, 0, RX * g, RY * g, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.06)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(0, 0, RX * (g + 0.045), RY * (g + 0.045), 0, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(0,0,0,0.22)";
+      ctx.stroke();
+    }
+  } else {
+    // 鼓圈（rim）高光：鼓皮内沿一圈亮色金属环
+    ctx.beginPath();
+    ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(255,255,255,0.14)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.stroke();
+  }
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
@@ -368,12 +455,27 @@ function drawPad(
     ctx.stroke();
   }
 
-  // 镲片中心帽
-  if (anchor.kind === "cymbal") {
+  if (isCymbal) {
+    // Bell 中心拱起：径向渐变圆顶 + 高光点
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "#1a1a1e";
+    const bell = ctx.createRadialGradient(
+      -RX * 0.05,
+      -RY * 0.08,
+      RY * 0.05,
+      0,
+      0,
+      RX * 0.24,
+    );
+    bell.addColorStop(0, "#4c4c57");
+    bell.addColorStop(0.6, "#26262c");
+    bell.addColorStop(1, "#131316");
     ctx.beginPath();
-    ctx.ellipse(0, 0, RX * 0.16, RY * 0.16, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, RX * 0.24, RY * 0.24, 0, 0, Math.PI * 2);
+    ctx.fillStyle = bell;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(-RX * 0.07, -RY * 0.09, RX * 0.05, RY * 0.05, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.28)";
     ctx.fill();
   }
 
