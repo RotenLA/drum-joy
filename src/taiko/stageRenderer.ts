@@ -23,10 +23,10 @@ import {
 
 /**
  * 墙/地分界线在屏幕上的位置。
- * 顶排镲（cy=0.66）后缘 y≈0.634，分界线在其上方 ~0.034 屏高处，
+ * 顶排鼓（cy=0.568）旋转后顶缘 ≈0.50（屏高 1/2），分界线贴在其上方，
  * 让顶排鼓站在墙根前的地板上，墙根暗色读作鼓的后阴影。
  */
-const SEAM_SCREEN_Y = 0.6;
+const SEAM_SCREEN_Y = 0.49;
 
 /** 专辑封面墙（浏览器侧懒加载；SSR 无 Image，退回纯色舞台） */
 const wallImg = typeof Image !== "undefined" ? new Image() : null;
@@ -89,21 +89,18 @@ function hexToRgba(hex: string, a: number): string {
 /** 鼓盘锚点 → 像素几何 */
 function padPixels(a: PadAnchor, w: number, h: number) {
   const rx = a.r * w;
-  // 同一地板视角：鼓面与平放的踏板共享压扁比 0.42；
-  // 镲片略平（0.3）表现微微倾向演奏者的倾角。
-  const ratio = a.kind === "cymbal" ? 0.3 : 0.42;
-  return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * ratio };
+  // 同一地板视角：鼓面与平放的踏板共享压扁比 0.42
+  return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * 0.42 };
 }
 
 /**
  * 各部件的地面接触线（相对鼓盘中心 cy 的向下偏移）。
- * 鼓 = 鼓腔底缘（侧深 0.9ry + 底椭圆 ry）；镲 = 镲片底缘（边带在 0.22ry 处）；
+ * 鼓 = 鼓腔底缘（侧深 0.9ry + 底椭圆 ry）；
  * 踏板 = 立方体盒底（旋转后顶面最大纵偏 ~1.19ry + 厚度 1.0ry）。
  * 接触阴影锚在这里，部件才不悬浮。
  */
 function groundOffset(a: PadAnchor, ry: number): number {
   if (a.square) return ry * 2.2;
-  if (a.kind === "cymbal") return ry * 1.22;
   return ry * 1.9;
 }
 
@@ -116,7 +113,7 @@ function gatePoint(anchor: PadAnchor, w: number, h: number) {
 
 /**
  * 鼓盘随车道旋转角（相对垂直方向的偏角）：长轴垂直于车道，与飞来音符同向，
- * 扇形鼓阵「面向消失点」。中间列 ≈0°，外侧镲片约 ±36°，左右镜像对称。
+ * 扇形鼓阵「面向消失点」。中间列 ≈0°，最外侧（吊镲/叮叮镲）约 ±41°，左右镜像对称。
  * 踏板不适用（保持外八斜放）。
  */
 function padRotation(anchor: PadAnchor, w: number, h: number): number {
@@ -488,56 +485,33 @@ function drawPad(
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = p.rx * s;
   const RY = p.ry * s;
-  const isCymbal = anchor.kind === "cymbal";
-
   ctx.save();
   ctx.translate(p.cx, p.cy);
   // 鼓盘整体随车道旋转：鼓腔/盘面/描边/命中闪一起转，等效鼓面朝向来球方向倾斜
   ctx.rotate(padRotation(anchor, w, h));
 
-  if (isCymbal) {
-    // 镲片边缘厚度：下方露出的暗色边带
-    ctx.beginPath();
-    ctx.ellipse(0, RY * 0.22, RX, RY, 0, 0, Math.PI);
-    ctx.lineTo(-RX, 0);
-    ctx.closePath();
-    ctx.fillStyle = "#0e0e11";
-    ctx.fill();
-    ctx.strokeStyle = hexToRgba(color, 0.2 + 0.4 * intensity);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  } else {
-    // 鼓腔侧面：强纵向明暗 + 部件色淡染
-    const depth = RY * 0.9;
-    const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
-    side.addColorStop(0, "#232329");
-    side.addColorStop(1, "#0a0a0d");
-    ctx.beginPath();
-    ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI);
-    ctx.lineTo(-RX, depth);
-    ctx.ellipse(0, depth, RX, RY, 0, Math.PI, 0, true);
-    ctx.closePath();
-    ctx.fillStyle = side;
-    ctx.fill();
-    ctx.fillStyle = hexToRgba(color, 0.07 + 0.16 * intensity);
-    ctx.fill();
-    ctx.strokeStyle = hexToRgba(color, 0.25 + 0.5 * intensity);
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
+  // 鼓腔侧面：强纵向明暗 + 部件色淡染
+  const depth = RY * 0.9;
+  const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
+  side.addColorStop(0, "#232329");
+  side.addColorStop(1, "#0a0a0d");
+  ctx.beginPath();
+  ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI);
+  ctx.lineTo(-RX, depth);
+  ctx.ellipse(0, depth, RX, RY, 0, Math.PI, 0, true);
+  ctx.closePath();
+  ctx.fillStyle = side;
+  ctx.fill();
+  ctx.fillStyle = hexToRgba(color, 0.07 + 0.16 * intensity);
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba(color, 0.25 + 0.5 * intensity);
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
-  // 盘面：方向性顶光（左上方来光），镲片比鼓更亮一档
-  const face = isCymbal
-    ? ctx.createRadialGradient(-RX * 0.28, -RY * 0.4, RY * 0.15, 0, 0, RX * 1.05)
-    : ctx.createRadialGradient(0, -RY * 0.45, RY * 0.2, 0, 0, RX);
-  if (isCymbal) {
-    face.addColorStop(0, "#3d3d47");
-    face.addColorStop(0.55, "#232328");
-    face.addColorStop(1, "#111114");
-  } else {
-    face.addColorStop(0, "#2b2b32");
-    face.addColorStop(1, "#121215");
-  }
+  // 盘面：方向性顶光（上方来光）
+  const face = ctx.createRadialGradient(0, -RY * 0.45, RY * 0.2, 0, 0, RX);
+  face.addColorStop(0, "#2b2b32");
+  face.addColorStop(1, "#121215");
   ctx.beginPath();
   ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI * 2);
   ctx.fillStyle = face;
@@ -545,31 +519,16 @@ function drawPad(
   ctx.fillStyle = hexToRgba(color, 0.1 + 0.28 * intensity);
   ctx.fill();
 
-  if (isCymbal) {
-    // 车纹：亮纹 + 紧邻暗纹
-    for (const g of [0.45, 0.62, 0.8]) {
-      ctx.beginPath();
-      ctx.ellipse(0, 0, RX * g, RY * g, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255,255,255,0.06)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(0, 0, RX * (g + 0.045), RY * (g + 0.045), 0, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(0,0,0,0.22)";
-      ctx.stroke();
-    }
-  } else {
-    // 鼓圈（rim）高光：鼓皮内沿一圈亮色金属环
-    ctx.beginPath();
-    ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(255,255,255,0.14)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, Math.PI * 1.15, Math.PI * 1.85);
-    ctx.strokeStyle = "rgba(255,255,255,0.3)";
-    ctx.stroke();
-  }
+  // 鼓圈（rim）高光：鼓皮内沿一圈亮色金属环
+  ctx.beginPath();
+  ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.14)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(0, 0, RX * 0.9, RY * 0.9, 0, Math.PI * 1.15, Math.PI * 1.85);
+  ctx.strokeStyle = "rgba(255,255,255,0.3)";
+  ctx.stroke();
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
@@ -588,30 +547,6 @@ function drawPad(
     ctx.beginPath();
     ctx.ellipse(0, 0, RX + 3, RY + 3, 0, 0, Math.PI * 2);
     ctx.stroke();
-  }
-
-  if (isCymbal) {
-    // Bell 中心拱起：径向渐变圆顶 + 高光点
-    ctx.shadowBlur = 0;
-    const bell = ctx.createRadialGradient(
-      -RX * 0.05,
-      -RY * 0.08,
-      RY * 0.05,
-      0,
-      0,
-      RX * 0.24,
-    );
-    bell.addColorStop(0, "#4c4c57");
-    bell.addColorStop(0.6, "#26262c");
-    bell.addColorStop(1, "#131316");
-    ctx.beginPath();
-    ctx.ellipse(0, 0, RX * 0.24, RY * 0.24, 0, 0, Math.PI * 2);
-    ctx.fillStyle = bell;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(-RX * 0.07, -RY * 0.09, RX * 0.05, RY * 0.05, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    ctx.fill();
   }
 
   ctx.restore();
