@@ -1,22 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
-import { createDemoChart } from "@/shared/taikoChart";
-import { PlayScreen } from "./PlayScreen";
+import { useEffect, useState } from "react";
+import { SongProvider, useSong } from "./songStore";
 import { FallScreen } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
+import { midiManager } from "./midiInput";
 import type { LayoutMode } from "./laneLayouts";
 
 type ScreenKey = "play" | "chart" | "mapping";
-type PlayMode = "fall" | "classic";
 
 interface TaikoSettings {
-  playMode: PlayMode;
   layout: LayoutMode;
   speed: number;
+  midiDeviceId: string | null;
 }
 
-const SETTINGS_KEY = "taiko.settings.v1";
-const DEFAULT_SETTINGS: TaikoSettings = { playMode: "fall", layout: "five", speed: 1 };
+const SETTINGS_KEY = "taiko.settings.v2";
+const DEFAULT_SETTINGS: TaikoSettings = { layout: "five", speed: 1, midiDeviceId: null };
 
 const NAV: { key: ScreenKey; label: string; hint: string }[] = [
   { key: "play", label: "游玩", hint: "PLAY" },
@@ -25,11 +24,19 @@ const NAV: { key: ScreenKey; label: string; hint: string }[] = [
 ];
 
 export function TaikoShell() {
+  return (
+    <SongProvider>
+      <ShellInner />
+    </SongProvider>
+  );
+}
+
+function ShellInner() {
   const [screen, setScreen] = useState<ScreenKey>("play");
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
-  const chart = useMemo(() => createDemoChart(), []);
+  const song = useSong();
 
-  //  hydration 后再读本地设置，避免 SSR 不一致
+  // hydration 后再读本地设置，避免 SSR 不一致
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
@@ -38,6 +45,11 @@ export function TaikoShell() {
       // 忽略损坏的本地设置
     }
   }, []);
+
+  // MIDI 初始化 + 应用已保存的输入设备
+  useEffect(() => {
+    void midiManager.init().then(() => midiManager.select(settings.midiDeviceId));
+  }, [settings.midiDeviceId]);
 
   const updateSettings = (patch: Partial<TaikoSettings>) =>
     setSettings((s) => {
@@ -82,13 +94,22 @@ export function TaikoShell() {
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-baseline gap-6 border-b border-[var(--taiko-line)] px-8 py-4">
-          <h1 className="text-base font-medium">{chart.title}</h1>
-          <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
-            BPM {chart.bpm}
-          </span>
-          <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
-            {chart.timeSignature[0]}/{chart.timeSignature[1]}
-          </span>
+          <h1 className="text-base font-medium">
+            {song.fileName || "未导入歌曲"}
+          </h1>
+          {song.audioBuffer && (
+            <>
+              <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
+                BPM {song.bpm}
+              </span>
+              <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
+                {song.timeSignature[0]}/{song.timeSignature[1]}
+              </span>
+              <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
+                {song.chart ? `${song.chart.notes.length} 音符` : "谱面未生成"}
+              </span>
+            </>
+          )}
           <button
             onClick={() => {
               const el = document.querySelector(".taiko-root");
@@ -103,47 +124,20 @@ export function TaikoShell() {
 
         <div className="flex-1 overflow-auto px-8 py-6">
           {screen === "play" && (
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-2">
-                {(
-                  [
-                    ["fall", "舞台下落"],
-                    ["classic", "经典横向"],
-                  ] as const
-                ).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    onClick={() => updateSettings({ playMode: mode })}
-                    className={`-ml-px border border-[var(--taiko-line)] px-4 py-1.5 text-xs tracking-wide transition-colors first:ml-0 ${
-                      settings.playMode === mode
-                        ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                        : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <span className="ml-auto text-xs text-[var(--taiko-ink)]/45">
-                  模式 / 分区 / 速度为全局设置，自动保存
-                </span>
-              </div>
-              {settings.playMode === "fall" ? (
-                <FallScreen
-                  chart={chart}
-                  layout={settings.layout}
-                  speed={settings.speed}
-                  onLayoutChange={(layout) => updateSettings({ layout })}
-                  onSpeedChange={(speed) => updateSettings({ speed })}
-                />
-              ) : (
-                <PlayScreen chart={chart} />
-              )}
-            </div>
+            <FallScreen
+              layout={settings.layout}
+              speed={settings.speed}
+              onLayoutChange={(layout) => updateSettings({ layout })}
+              onSpeedChange={(speed) => updateSettings({ speed })}
+            />
           )}
-          {screen === "chart" && (
-            <ChartScreen chart={chart} onSeekMeasure={() => setScreen("chart")} />
+          {screen === "chart" && <ChartScreen />}
+          {screen === "mapping" && (
+            <MappingScreen
+              deviceId={settings.midiDeviceId}
+              onDeviceChange={(midiDeviceId) => updateSettings({ midiDeviceId })}
+            />
           )}
-          {screen === "mapping" && <MappingScreen />}
         </div>
       </main>
     </div>

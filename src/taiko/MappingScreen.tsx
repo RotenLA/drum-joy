@@ -1,137 +1,280 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  CHART_NOTES,
-  DRUM_LANE_MAP,
-  getDrumNoteName,
-  type DrumLane,
-} from "@/shared/drumLaneMap";
+  DRUM_PARTS,
+  PART_BY_ID,
+  getMapping,
+  partOfNote,
+  resetMapping,
+  setMapping,
+  type DrumMapping,
+  type PartId,
+} from "./laneLayouts";
+import { partAtPoint, renderPadArray } from "./stageRenderer";
+import { midiManager, type MidiInputInfo } from "./midiInput";
+import { getDrumNoteName } from "@/shared/drumLaneMap";
 
-type LaneSetting = DrumLane | "ignore";
+const ALL_PARTS = DRUM_PARTS.map((p) => p.id);
 
-const ALL_NOTES = [35, 36, 38, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52];
+/**
+ * 映射屏：游玩屏同款扇形鼓阵，点击鼓盘编辑该部件的 MIDI 音符映射；
+ * 顶部选择 MIDI 输入设备；支持 MIDI Learn（选中鼓盘后敲实体鼓即录入）。
+ */
+export function MappingScreen({
+  deviceId,
+  onDeviceChange,
+}: {
+  deviceId: string | null;
+  onDeviceChange: (id: string | null) => void;
+}) {
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const flashesRef = useRef<Record<string, number>>({});
+  const [mappingState, setMappingState] = useState<DrumMapping>(getMapping());
+  const [selected, setSelected] = useState<PartId | null>(null);
+  const [learning, setLearning] = useState(false);
+  const [devices, setDevices] = useState<MidiInputInfo[]>([]);
+  const [midiReady, setMidiReady] = useState<boolean | null>(null);
+  const [lastNote, setLastNote] = useState<number | null>(null);
+  const [noteInput, setNoteInput] = useState("");
 
-function defaultSettings(): Record<number, LaneSetting> {
-  const out: Record<number, LaneSetting> = {};
-  for (const n of ALL_NOTES) out[n] = DRUM_LANE_MAP[n] ?? "ignore";
-  return out;
-}
+  const selectedRef = useRef<PartId | null>(null);
+  const learningRef = useRef(false);
+  selectedRef.current = selected;
+  learningRef.current = learning;
 
-/** 简化俯视鼓组图：每个鼓件的位置与半径 */
-const PIECES: { note: number; x: number; y: number; r: number; label: string }[] = [
-  { note: 49, x: 42, y: 46, r: 26, label: "Crash" },
-  { note: 51, x: 158, y: 46, r: 26, label: "Ride" },
-  { note: 52, x: 100, y: 26, r: 20, label: "China" },
-  { note: 48, x: 78, y: 86, r: 20, label: "T1" },
-  { note: 50, x: 122, y: 86, r: 20, label: "T2" },
-  { note: 42, x: 34, y: 98, r: 20, label: "HH" },
-  { note: 38, x: 62, y: 132, r: 24, label: "Snare" },
-  { note: 43, x: 152, y: 130, r: 26, label: "Floor" },
-  { note: 41, x: 176, y: 96, r: 22, label: "Floor2" },
-  { note: 36, x: 108, y: 146, r: 30, label: "Kick" },
-  { note: 44, x: 30, y: 156, r: 18, label: "Pedal" },
-];
-
-export function MappingScreen() {
-  const [settings, setSettings] = useState<Record<number, LaneSetting>>(defaultSettings);
-
-  const colorOf = (note: number) => {
-    const s = settings[note];
-    if (s === "don") return "var(--taiko-don)";
-    if (s === "ka") return "var(--taiko-ka)";
-    return "var(--taiko-surface)";
+  const apply = (m: DrumMapping) => {
+    setMapping(m);
+    setMappingState({ ...m });
   };
 
+  const addNote = (part: PartId, note: number) => {
+    if (!Number.isInteger(note) || note < 0 || note > 127) return;
+    const m = { ...getMapping() } as Record<PartId, number[]>;
+    for (const p of ALL_PARTS) m[p] = [...(m[p] ?? [])].filter((n) => n !== note);
+    m[part] = [...(m[part] ?? []), note].sort((a, b) => a - b);
+    apply(m as DrumMapping);
+  };
+
+  const removeNote = (part: PartId, note: number) => {
+    const m = { ...getMapping() } as Record<PartId, number[]>;
+    m[part] = (m[part] ?? []).filter((n) => n !== note);
+    apply(m as DrumMapping);
+  };
+
+  // ---- MIDI：初始化 + 设备列表 + note 订阅（闪光 / Learn / 最近音符） ----
+  useEffect(() => {
+    let mounted = true;
+    void midiManager.init().then((ok) => {
+      if (!mounted) return;
+      setMidiReady(ok);
+      setDevices(midiManager.inputs());
+    });
+    const unsubState = midiManager.onState(() => setDevices(midiManager.inputs()));
+    const unsubNote = midiManager.onNote((note) => {
+      setLastNote(note);
+      const part = partOfNote(note);
+      if (part) flashesRef.current[part] = performance.now() + 200;
+      // MIDI Learn：捕获到的音符直接加入选中部件（从其他部件移除），学一次即停
+      if (learningRef.current && selectedRef.current) {
+        addNote(selectedRef.current, note);
+        setLearning(false);
+      }
+    });
+    return () => {
+      mounted = false;
+      unsubState();
+      unsubNote();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 设备选择生效
+  useEffect(() => {
+    void midiManager.init().then(() => midiManager.select(deviceId));
+  }, [deviceId]);
+
+  // ---- 鼓阵渲染循环 ----
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let raf = 0;
+    const resize = () => {
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = wrap.clientWidth * dpr;
+      canvas.height = wrap.clientHeight * dpr;
+      canvas.style.width = `${wrap.clientWidth}px`;
+      canvas.style.height = `${wrap.clientHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(wrap);
+
+    const draw = (now: number) => {
+      renderPadArray(ctx, canvas.clientWidth, canvas.clientHeight, {
+        parts: ALL_PARTS,
+        flashes: flashesRef.current,
+        now,
+        selected: selectedRef.current,
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+    };
+  }, []);
+
+  const onCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const part = partAtPoint(
+      ALL_PARTS,
+      e.clientX - rect.left,
+      e.clientY - rect.top,
+      rect.width,
+      rect.height,
+    );
+    setSelected(part);
+    setLearning(false);
+  };
+
+  const sel = selected ? PART_BY_ID[selected] : null;
+
   return (
-    <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
-      <div className="flex flex-col gap-4">
-        <svg viewBox="0 0 210 185" className="w-full border border-[var(--taiko-line)] p-2">
-          {PIECES.map((p) => (
-            <g key={p.note}>
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={p.r}
-                fill={colorOf(p.note)}
-                stroke="var(--taiko-ink)"
-                strokeOpacity={0.4}
-                strokeWidth={1}
-              />
-              <text
-                x={p.x}
-                y={p.y + 3}
-                textAnchor="middle"
-                fontSize="7"
-                fill="var(--taiko-ink)"
-                opacity={0.75}
-              >
-                {p.note}
-              </text>
-            </g>
-          ))}
-        </svg>
-        <p className="text-xs leading-relaxed text-[var(--taiko-ink)]/55">
-          默认规则：双脚（36 底鼓、44 踩镲踏板）为咚，其余鼓件为嗒。未列出的音符不生成谱面音符。
-        </p>
+    <div className="flex flex-col gap-4">
+      {/* MIDI 设备 */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
+        <span className="text-xs text-[var(--taiko-ink)]/60">MIDI 输入设备</span>
+        {midiReady === false ? (
+          <span className="text-xs text-[var(--taiko-ink)]/45">
+            当前环境不支持 Web MIDI（请在 Chrome / Electron 中使用）
+          </span>
+        ) : (
+          <select
+            value={deviceId ?? ""}
+            onChange={(e) => onDeviceChange(e.target.value || null)}
+            className="border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm text-[var(--taiko-ink)]"
+          >
+            <option value="">全部输入（未指定）</option>
+            {devices.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        )}
+        <span className="text-xs tabular-nums text-[var(--taiko-ink)]/45">
+          {lastNote !== null ? `最近收到音符：${lastNote}（${getDrumNoteName(lastNote)}）` : "等待 MIDI 输入…"}
+        </span>
         <button
-          onClick={() => setSettings(defaultSettings())}
-          className="border border-[var(--taiko-ink)] px-4 py-2 text-sm text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
+          onClick={() => {
+            apply(resetMapping());
+            setLearning(false);
+          }}
+          className="ml-auto border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
         >
-          恢复默认
+          恢复默认映射
         </button>
       </div>
 
-      <div className="border border-[var(--taiko-line)]">
-        <div className="flex items-center gap-3 border-b border-[var(--taiko-line)] px-4 py-2 text-xs uppercase tracking-[0.15em] text-[var(--taiko-ink)]/50">
-          <span className="w-10">音符</span>
-          <span className="flex-1">鼓件</span>
-          <span>分组</span>
+      <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
+        {/* 鼓阵（与游玩屏同款摆位/绘制） */}
+        <div
+          ref={wrapRef}
+          className="w-full overflow-hidden border border-[var(--taiko-line)]"
+          style={{ aspectRatio: "16 / 9", backgroundColor: "#0a0a0c" }}
+        >
+          <canvas ref={canvasRef} className="block h-full w-full cursor-pointer" onClick={onCanvasClick} />
         </div>
-        <ul className="divide-y divide-[var(--taiko-line)]">
-          {ALL_NOTES.map((note) => (
-            <li key={note} className="flex items-center gap-3 px-4 py-2">
-              <span className="w-10 tabular-nums text-sm text-[var(--taiko-ink)]/70">
-                {note}
-              </span>
-              <span className="flex-1 text-sm text-[var(--taiko-ink)]">
-                {getDrumNoteName(note)}
-              </span>
-              <div className="flex">
-                {(["don", "ka", "ignore"] as LaneSetting[]).map((opt) => {
-                  const active = settings[note] === opt;
-                  return (
-                    <button
-                      key={opt}
-                      onClick={() => setSettings((s) => ({ ...s, [note]: opt }))}
-                      className={`-ml-px border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors ${
-                        active
-                          ? "text-[var(--taiko-paper)]"
-                          : "text-[var(--taiko-ink)]/55 hover:text-[var(--taiko-ink)]"
-                      }`}
-                      style={
-                        active
-                          ? {
-                              backgroundColor:
-                                opt === "don"
-                                  ? "var(--taiko-don)"
-                                  : opt === "ka"
-                                    ? "var(--taiko-ka)"
-                                    : "var(--taiko-ink)",
-                              borderColor: "transparent",
-                            }
-                          : undefined
-                      }
-                    >
-                      {opt === "don" ? "咚" : opt === "ka" ? "嗒" : "忽略"}
-                    </button>
-                  );
-                })}
+
+        {/* 选中部件编辑面板 */}
+        <aside className="flex h-fit flex-col gap-3 border border-[var(--taiko-line)] p-4">
+          {sel && selected ? (
+            <>
+              <div className="flex items-center gap-2">
+                <i
+                  className="inline-block h-3 w-3 rounded-full"
+                  style={{ backgroundColor: sel.color }}
+                />
+                <span className="text-sm font-medium">{sel.label}</span>
+                <span className="ml-auto text-xs tabular-nums text-[var(--taiko-ink)]/45">
+                  {mappingState[selected].length} 个音符
+                </span>
               </div>
-            </li>
-          ))}
-        </ul>
-        <p className="border-t border-[var(--taiko-line)] px-4 py-2 text-xs text-[var(--taiko-ink)]/45">
-          共 {CHART_NOTES.length} 个默认参与谱面的音符。本轮修改仅存于内存，不写入配置。
-        </p>
+
+              <div className="flex flex-wrap gap-1.5">
+                {mappingState[selected].length === 0 && (
+                  <span className="text-xs text-[var(--taiko-ink)]/40">未映射任何音符</span>
+                )}
+                {mappingState[selected].map((n) => (
+                  <span
+                    key={n}
+                    className="flex items-center gap-1 border border-[var(--taiko-line)] px-2 py-0.5 text-xs tabular-nums"
+                    title={getDrumNoteName(n)}
+                  >
+                    {n}
+                    <button
+                      onClick={() => removeNote(selected, n)}
+                      className="text-[var(--taiko-ink)]/40 hover:text-[var(--taiko-ink)]"
+                      aria-label={`移除音符 ${n}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={0}
+                  max={127}
+                  value={noteInput}
+                  onChange={(e) => setNoteInput(e.target.value)}
+                  placeholder="音符号 0-127"
+                  className="w-full border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm tabular-nums text-[var(--taiko-ink)]"
+                />
+                <button
+                  onClick={() => {
+                    const v = Number(noteInput);
+                    if (Number.isInteger(v)) {
+                      addNote(selected, v);
+                      setNoteInput("");
+                    }
+                  }}
+                  className="shrink-0 border border-[var(--taiko-ink)] px-3 py-1 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
+                >
+                  添加
+                </button>
+              </div>
+
+              <button
+                onClick={() => setLearning((v) => !v)}
+                className={`border px-3 py-2 text-xs transition-colors ${
+                  learning
+                    ? "animate-pulse border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                    : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+                }`}
+              >
+                {learning ? "敲一下实体鼓…（点击取消）" : "MIDI Learn"}
+              </button>
+              <p className="text-xs leading-relaxed text-[var(--taiko-ink)]/45">
+                音符会同时从其他部件移除（一个音符只归属一个部件）。游玩屏判定与键盘图例即时生效。
+              </p>
+            </>
+          ) : (
+            <p className="text-xs leading-relaxed text-[var(--taiko-ink)]/45">
+              点击左侧鼓盘，编辑该部件映射的 MIDI 音符。敲鼓时对应鼓盘会闪光，可用来验证接线与映射。
+            </p>
+          )}
+        </aside>
       </div>
     </div>
   );
