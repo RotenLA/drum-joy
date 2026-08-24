@@ -9,6 +9,7 @@
  * 命中时鼓盘增亮回弹并喷火花粒子。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
+import stageBgUrl from "@/assets/stage-bg.jpg";
 import {
   DRUM_PARTS,
   PAD_ANCHORS,
@@ -17,6 +18,15 @@ import {
   type PadAnchor,
   type PartId,
 } from "./laneLayouts";
+
+/** 背景图墙/地分界线（归一化 y，相对背景图高度） */
+const BG_SEAM_Y = 0.638;
+/** 分界线在屏幕上的目标位置（顶排鼓与中排鼓之间） */
+const SEAM_SCREEN_Y = 0.72;
+
+/** 录音棚背景图（浏览器侧懒加载；SSR 无 Image，退回纯色舞台） */
+const bgImg = typeof Image !== "undefined" ? new Image() : null;
+if (bgImg) bgImg.src = stageBgUrl;
 
 /** 消失点（顶部中央，归一化坐标） */
 const VP = { x: 0.5, y: 0.13 } as const;
@@ -70,6 +80,23 @@ function padPixels(a: PadAnchor, w: number, h: number) {
 function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0a0a0c";
   ctx.fillRect(0, 0, w, h);
+
+  // 录音棚背景：墙/地分界线对齐到 SEAM_SCREEN_Y（顶排与中排鼓之间）
+  if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
+    const iw = bgImg.naturalWidth;
+    const ih = bgImg.naturalHeight;
+    let s = (SEAM_SCREEN_Y * h) / (BG_SEAM_Y * ih);
+    if (iw * s < w) s = w / iw; // 横向铺满优先
+    if (ih * s < h) s = h / ih; // 纵向铺满兜底
+    let dy = SEAM_SCREEN_Y * h - BG_SEAM_Y * ih * s;
+    dy = Math.min(0, Math.max(h - ih * s, dy));
+    const dx = (w - iw * s) / 2;
+    ctx.drawImage(bgImg, dx, dy, iw * s, ih * s);
+    // 轻微压暗，突出鼓盘与音符
+    ctx.fillStyle = "rgba(6,6,8,0.35)";
+    ctx.fillRect(0, 0, w, h);
+  }
+
   // 顶部聚光灯
   const spot = ctx.createRadialGradient(
     w * 0.5,
