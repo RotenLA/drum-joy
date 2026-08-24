@@ -1,0 +1,65 @@
+# 太鼓模块：真实可用化（音频导入 / 自动分析 / MIDI 判定）
+
+把三个屏从演示骨架升级为真实可用：谱面屏导入歌曲并自动产出谱面，映射屏接管 MIDI 设备与部件映射，游玩屏手动开始 + 倒计时 + 完整判定。删掉经典横向模式。
+
+## 一、去掉经典横向
+
+- `TaikoShell.tsx`：移除「舞台下落 / 经典横向」切换按钮与 `playMode` 设置项，游玩屏直接渲染 FallScreen
+- 删除 `src/taiko/PlayScreen.tsx`；设置 key 升级为 `taiko.settings.v2`（只存分区/速度）
+
+## 二、谱面屏重做（核心）
+
+布局改为三段：顶部导入/歌曲信息条 → 中部「速度拍号 + 节拍器」条 → 下方段落卡片区 + 小节网格（只读）。
+
+1. **导入音频**
+   - 按钮选择 mp3/wav（兼容纳拽到区域），`AudioContext.decodeAudioData` 解码
+   - `audioMeta.ts`：手写轻量 ID3v2 解析，读 TBPM（BPM）/ TSIG（拍号）帧；wav 或无该帧则走自动检测
+2. **自动检测**（`beatDetect.ts`，纯 TS 无依赖）
+   - 频谱通量 onset 包络 + 自相关估 BPM（60–200 范围折半/翻倍校正），同时估首拍偏移 offset
+   - 拍号做 3/4 与 4/4 二分类（按节拍重音周期），置信度低时默认 4/4
+   - 检测结果显示为「BPM 142（自动检测）」；随时可手动改 BPM / 拍号 / 偏移，改动即重算小节网格
+3. **节拍器**
+   - Web Audio 滴答声，每小节首拍重音；可单独试听，也可与歌曲同步播放（播放歌曲时叠节拍器，验证 BPM/偏移对不对）
+4. **鼓节奏分析 → MIDI 段落**（`drumAnalyze.ts`）
+   - 三频带 onset 检测：低频→底鼓、中频→军鼓、高频→踩镲（启发式，界面标注"自动分析仅供参考"）
+   - onset 量化到当前节拍网格，按 1–2 小节聚类出重复出现的节奏型，产出若干「MIDI 段落卡片」：缩略网格预览 + 在曲中出现次数 + 出现位置
+   - 用户勾选卡片后，系统按该节奏型实际出现的小节区域自动铺进谱面（同型区域自动复用）；未勾选不生成
+   - 产出标准 `TaikoChart`（含真实 note 号），供游玩屏消费
+5. **小节网格保留现有样式但只读**：点击小节 = 歌曲跳转到该小节播放（真实 seek）
+
+## 三、映射屏重做
+
+- **部件映射模型反转**：改为「部件 → MIDI 音符列表」（默认 = 现有 DRUM_PARTS 表），存 `taiko.mapping.v1`；`PART_BY_NOTE` 改为由映射派生，游玩屏判定/渲染统一走它
+- **可视化映射**：复用 stageRenderer 的鼓盘绘制代码（抽出共用画 pad 函数），静态渲染游玩屏同款扇形鼓阵（无车道/音符）；点击鼓盘 → 右侧展开该部件的音符列表编辑（增删音符号）
+- **MIDI Learn**：选中鼓盘后敲一下实体鼓，捕获到的 note-on 直接加入该部件映射
+- **MIDI In Device 选择**：`navigator.requestMIDIAccess` 枚举输入设备，下拉选择并存 `taiko.settings.v2`；底部实时显示收到的音符（哪个鼓盘闪），方便验证接线与映射
+- 保留「恢复默认」
+
+## 四、游玩屏（FallScreen）升级
+
+1. **开始流程**：未开始时画布中央「开始」遮罩按钮；点击后按当前 BPM 以四分音符做 4-3-2-1 倒计时（大号数字 + 节拍器声，无视拍号），数完音频从 0 播放、音符开始下落
+2. **时钟改为音频时钟**：`AudioContext.currentTime` 驱动 timeMs（替换 rAF 累加），暂停= suspend，回开头=重建 source；无歌曲时显示「请先到谱面屏导入歌曲」空态
+3. **分区显示规则**
+   - 5分区：只渲染 底鼓、踩镲踏板、开闭镲（hihat）、军鼓、地通 5 个鼓盘；谱面中其他部件的音符**直接丢弃**（按你的选择）
+   - 9分区：渲染全部 9 件
+4. **完整判定**
+   - MIDI note-on（按映射找部件）命中时间窗：Perfect ±50ms / Good ±120ms；超时未击 = Miss，断连击
+   - HUD：左上连击、其下得分，新增 Perfect/Good/Miss 计数与准确率；命中鼓盘闪光+粒子（复用现有），Miss 时该鼓盘暗闪一次
+   - 键盘按键保留为无 MIDI 设备时的调试手段
+
+## 五、状态与文件
+
+- 新增 `src/taiko/songStore.ts`：React context 持有 `{ audioBuffer, fileName, bpm, timeSignature, offsetMs, chart }`，TaikoShell 顶层提供，三屏共享；不持久化歌曲（按你的选择，每次重新导入），仅设置/映射存 localStorage
+- 新增 `src/taiko/audioMeta.ts` / `beatDetect.ts` / `drumAnalyze.ts` / `metronome.ts` / `midiInput.ts`
+- 重写 `ChartScreen.tsx` / `MappingScreen.tsx`，大改 `FallScreen.tsx` / `TaikoShell.tsx`，小改 `laneLayouts.ts`（映射派生 + FIVE_ZONE 显示集），删除 `PlayScreen.tsx`
+- `stageRenderer.ts`：抽出鼓盘绘制供映射屏复用；加 5 分区鼓盘子集渲染与 Miss 暗闪；渲染入口接音频时钟时间
+
+## 技术说明
+
+- 全部纯前端：解码/分析用 Web Audio API（OfflineAudioContext 做频带分析），MIDI 用 Web MIDI API，Electron（Chromium）均原生支持，无原生依赖，bun install 不新增包
+- BPM/拍号/鼓件识别都是启发式：BPM 通常准，拍号只分 3/4·4/4，鼓件分类会受混音影响——所以界面始终允许手动改 BPM/拍号，段落由用户勾选确认后才进谱面
+- 判定窗口常量集中在 `FallScreen` 顶部，方便后续调手感
+
+## 交付方式
+
+所有新增/修改文件打包 zip 放到 /mnt/documents/，附文件清单，你解压进本地工程后跑 bun 三步。
