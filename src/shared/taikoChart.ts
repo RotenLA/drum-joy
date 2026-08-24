@@ -1,4 +1,4 @@
-import { getDrumLane, type DrumLane } from "./drumLaneMap";
+import type { DrumLane } from "./drumLaneMap";
 
 export interface TaikoNote {
   /** 相对曲目起点的毫秒时间 */
@@ -26,53 +26,21 @@ export function measureDurationMs(chart: TaikoChart): number {
   return (60000 / chart.bpm) * num * (4 / den);
 }
 
-/** 按小节切分音符 */
-export function splitByMeasure(chart: TaikoChart): TaikoNote[][] {
+/**
+ * 按小节切分音符。
+ * offsetMs 为首拍偏移（自动检测给出）：小节 i 覆盖
+ * [offsetMs + i*len, offsetMs + (i+1)*len)。
+ */
+export function splitByMeasure(chart: TaikoChart, offsetMs = 0): TaikoNote[][] {
   const len = measureDurationMs(chart);
-  const count = Math.max(1, Math.ceil(chart.durationMs / len));
+  const count = Math.max(1, Math.ceil((chart.durationMs - offsetMs) / len));
   const measures: TaikoNote[][] = Array.from({ length: count }, () => []);
   for (const note of chart.notes) {
-    const idx = Math.min(count - 1, Math.floor(note.timeMs / len));
+    const idx = Math.min(
+      count - 1,
+      Math.max(0, Math.floor((note.timeMs - offsetMs) / len)),
+    );
     measures[idx]?.push(note);
   }
   return measures;
-}
-
-/** 演示用假谱面：4/4、140 BPM、16 小节，使用真实 GM 鼓件音符 */
-export function createDemoChart(): TaikoChart {
-  const bpm = 140;
-  const beatMs = 60000 / bpm;
-  const measures = 16;
-  const notes: TaikoNote[] = [];
-  const push = (timeMs: number, note: number, big = false) => {
-    const lane = getDrumLane(note);
-    if (!lane) return;
-    notes.push({ timeMs, lane, note, big });
-  };
-
-  for (let m = 0; m < measures; m++) {
-    for (let b = 0; b < 4; b++) {
-      const base = (m * 4 + b) * beatMs;
-      if (b === 0 || b === 2) push(base, 36); // 底鼓：1、3 拍
-      if (b === 1 || b === 3) push(base, 38); // 军鼓：2、4 拍
-      if (b === 0 && m % 4 === 0) push(base, 49, true); // 每 4 小节吊镲重击
-      // 8 分踩镲，每 4 小节末拍开镲
-      push(base + beatMs / 2, m % 4 === 3 && b === 3 ? 46 : 42);
-      // 奇数小节反拍叮叮镲
-      if (m % 2 === 1 && (b === 1 || b === 3)) push(base + beatMs / 2, 51);
-    }
-  }
-
-  // 末小节通鼓加花：高通 → 中通 → 低通 → 地通
-  const fill = (measures - 1) * 4 * beatMs;
-  [50, 47, 45, 41].forEach((n, i) => push(fill + i * beatMs + beatMs / 2, n));
-
-  notes.sort((a, b) => a.timeMs - b.timeMs);
-  return {
-    title: "Neon Demo",
-    bpm,
-    timeSignature: [4, 4],
-    durationMs: measures * 4 * beatMs,
-    notes,
-  };
 }

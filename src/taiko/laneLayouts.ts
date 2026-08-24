@@ -1,10 +1,10 @@
 /**
- * 下落式模式：鼓件色板 / 分区布局 / 键盘映射 / 扇形鼓盘锚点
+ * 下落式模式：鼓件色板 / 扇形鼓盘锚点 / 分区显示集 / 键盘调试映射，
+ * 以及「部件 → MIDI 音符」映射（映射屏可改，localStorage 持久化）。
  *
  * 色值取自 AeroBand 鼓位图（两个踏板为补充定义，集中在此可改）。
- * 舞台下落式（stageRenderer）：9 个鼓盘按 PAD_ANCHORS 扇形排布，
- * 音符从顶部消失点沿辐射车道滑向鼓盘，鼓盘即判定落点。
- * Zone 的 x0/x1/t0/t1 地面矩形为旧渲染器遗留，当前仅分区/键盘映射在用。
+ * 舞台下落式（stageRenderer）：鼓盘按 PAD_ANCHORS 扇形排布，
+ * 音符从顶部收束段沿车道滑向鼓盘，鼓盘即判定落点。
  */
 
 export type PartId =
@@ -21,6 +21,7 @@ export type PartId =
 export interface DrumPart {
   id: PartId;
   label: string;
+  /** 默认映射的 MIDI 音符（映射屏修改后以 localStorage 为准） */
   notes: readonly number[];
   color: string;
 }
@@ -41,9 +42,70 @@ export const PART_BY_ID = Object.fromEntries(
   DRUM_PARTS.map((p) => [p.id, p]),
 ) as Record<PartId, DrumPart>;
 
-export const PART_BY_NOTE: Readonly<Record<number, PartId>> = Object.fromEntries(
-  DRUM_PARTS.flatMap((p) => p.notes.map((n) => [n, p.id])),
-);
+// ================= 部件映射（note → part） =================
+
+export type DrumMapping = Record<PartId, readonly number[]>;
+
+const MAPPING_KEY = "taiko.mapping.v1";
+
+export function defaultMapping(): DrumMapping {
+  return Object.fromEntries(
+    DRUM_PARTS.map((p) => [p.id, [...p.notes]]),
+  ) as DrumMapping;
+}
+
+function loadMapping(): DrumMapping {
+  if (typeof localStorage === "undefined") return defaultMapping();
+  try {
+    const raw = localStorage.getItem(MAPPING_KEY);
+    if (!raw) return defaultMapping();
+    const parsed = JSON.parse(raw) as Partial<Record<PartId, unknown>>;
+    const base = defaultMapping() as Record<PartId, number[]>;
+    for (const p of DRUM_PARTS) {
+      const v = parsed[p.id];
+      if (Array.isArray(v)) {
+        base[p.id] = v.filter(
+          (n): n is number =>
+            Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 127,
+        );
+      }
+    }
+    return base;
+  } catch {
+    return defaultMapping();
+  }
+}
+
+let currentMapping: DrumMapping = loadMapping();
+
+export function getMapping(): DrumMapping {
+  return currentMapping;
+}
+
+export function setMapping(m: DrumMapping): void {
+  currentMapping = m;
+  try {
+    localStorage.setItem(MAPPING_KEY, JSON.stringify(m));
+  } catch {
+    // 存储不可用时仅保留内存态
+  }
+}
+
+export function resetMapping(): DrumMapping {
+  const m = defaultMapping();
+  setMapping(m);
+  return m;
+}
+
+/** 音符 → 部件（按当前映射；未映射返回 null） */
+export function partOfNote(note: number): PartId | null {
+  for (const p of DRUM_PARTS) {
+    if (currentMapping[p.id].includes(note)) return p.id;
+  }
+  return null;
+}
+
+// ================= 鼓盘摆位 =================
 
 export type PadKind = "drum" | "cymbal" | "pedal";
 
@@ -62,13 +124,6 @@ export interface PadAnchor {
   square?: boolean;
 }
 
-/**
- * 鼓盘阵（AeroBand 鼓位图布局）：
- * 上排 4 件 + 中排 3 件统一为同尺寸圆柱鼓（r = 0.048w，与中通一致，仅靠颜色区分），
- * 下排 2 个方形踏板。上排旋转后顶缘 ≈ 屏高 1/2（即鼓阵最高点），
- * 三排纵向拉开、车道按排独立收束（stageRenderer 的 ROW_GATES）。
- * 摆位/大小要调整只改这张表。
- */
 /** 上排中心高度：按 ~16:9 画布标定，旋转后顶缘（鼓阵最高点）落在屏高 1/2 处，微调只改这个数 */
 const TOP_ROW_CY = 0.568;
 /** 中排中心高度（与上排保持 0.16 排距，整体随之上移） */
@@ -91,75 +146,39 @@ export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
   kick: { cx: 0.65, cy: 0.92, r: 0.045, kind: "drum", square: true, row: 2 },
 };
 
+// ================= 分区显示集 =================
+
 export type LayoutMode = "five" | "nine";
 
-export interface Zone {
-  id: string;
-  label: string;
-  parts: readonly PartId[];
-  notes: readonly number[];
-  /** 分区描边 / 辉光代表色 */
-  color: string;
-  pedal: boolean;
-  /** 地面归一化矩形 */
-  x0: number;
-  x1: number;
-  t0: number;
-  t1: number;
-  /** 键盘模拟按键（KeyboardEvent.key 小写） */
-  key: string;
-  keyLabel: string;
-}
+/**
+ * 各分区模式显示的鼓盘：
+ * 5 分区只显示 底鼓 / 踩镲踏板 / 开闭镲 / 军鼓 / 地通 5 件，
+ * 谱面中其他部件的音符直接丢弃；9 分区显示全部。
+ */
+export const VISIBLE_PARTS: Record<LayoutMode, readonly PartId[]> = {
+  five: ["hihat", "snare", "floorTom", "pedalHat", "kick"],
+  nine: [
+    "pedalHat",
+    "kick",
+    "hihat",
+    "crash",
+    "snare",
+    "highTom",
+    "midTom",
+    "floorTom",
+    "ride",
+  ],
+};
 
-function makeZone(
-  id: string,
-  label: string,
-  parts: readonly PartId[],
-  rect: { x0: number; x1: number; t0: number; t1: number },
-  key: string,
-  keyLabel: string,
-  color?: string,
-): Zone {
-  return {
-    id,
-    label,
-    parts,
-    notes: parts.flatMap((p) => PART_BY_ID[p].notes),
-    color: color ?? PART_BY_ID[parts[0]!].color,
-    pedal: parts.every((p) => p === "pedalHat" || p === "kick"),
-    key,
-    keyLabel,
-    ...rect,
-  };
-}
-
-/** 手区纵深（上半区） */
-const HAND_T = { t0: 0.3, t1: 0.62 } as const;
-/** 踏板纵深（更靠近玩家的低位横条） */
-const PEDAL_T = { t0: 0.66, t1: 0.93 } as const;
-
-/** 5 分区（默认，易上手）：下 2 踏板 + 上 3 手区 */
-export const FIVE_ZONES: readonly Zone[] = [
-  makeZone("left", "左区·镲", ["hihat", "crash"], { x0: 0.08, x1: 0.34, ...HAND_T }, "a", "A"),
-  makeZone("mid", "中区·鼓", ["snare", "highTom", "midTom"], { x0: 0.37, x1: 0.63, ...HAND_T }, "s", "S"),
-  makeZone("right", "右区·镲/地通", ["ride", "floorTom"], { x0: 0.66, x1: 0.92, ...HAND_T }, "d", "D"),
-  makeZone("pedalL", "左踏板", ["pedalHat"], { x0: 0.18, x1: 0.45, ...PEDAL_T }, "f", "F"),
-  makeZone("pedalR", "右踏板", ["kick"], { x0: 0.55, x1: 0.82, ...PEDAL_T }, "j", "J"),
-];
-
-/** 9 分区（进阶）：9 个部件各自独立，按鼓手视角排布 */
-export const NINE_ZONES: readonly Zone[] = [
-  makeZone("hihat", "踩镲", ["hihat"], { x0: 0.05, x1: 0.17, ...HAND_T }, "1", "1"),
-  makeZone("crash", "吊镲", ["crash"], { x0: 0.18, x1: 0.3, ...HAND_T }, "2", "2"),
-  makeZone("highTom", "高通", ["highTom"], { x0: 0.31, x1: 0.43, ...HAND_T }, "3", "3"),
-  makeZone("snare", "军鼓", ["snare"], { x0: 0.44, x1: 0.56, ...HAND_T }, "4", "4"),
-  makeZone("midTom", "中通", ["midTom"], { x0: 0.57, x1: 0.69, ...HAND_T }, "5", "5"),
-  makeZone("floorTom", "地通", ["floorTom"], { x0: 0.7, x1: 0.82, ...HAND_T }, "6", "6"),
-  makeZone("ride", "叮叮镲", ["ride"], { x0: 0.83, x1: 0.95, ...HAND_T }, "7", "7"),
-  makeZone("pedalL", "踩镲踏板", ["pedalHat"], { x0: 0.18, x1: 0.45, ...PEDAL_T }, "f", "F"),
-  makeZone("pedalR", "底鼓", ["kick"], { x0: 0.55, x1: 0.82, ...PEDAL_T }, "j", "J"),
-];
-
-export function zonesFor(mode: LayoutMode): readonly Zone[] {
-  return mode === "five" ? FIVE_ZONES : NINE_ZONES;
-}
+/** 键盘调试按键（无 MIDI 设备时模拟击打；两模式一致） */
+export const KEY_BY_PART: Record<PartId, { key: string; label: string }> = {
+  crash: { key: "q", label: "Q" },
+  highTom: { key: "w", label: "W" },
+  midTom: { key: "e", label: "E" },
+  ride: { key: "r", label: "R" },
+  hihat: { key: "a", label: "A" },
+  snare: { key: "s", label: "S" },
+  floorTom: { key: "d", label: "D" },
+  pedalHat: { key: "f", label: "F" },
+  kick: { key: "j", label: "J" },
+};
