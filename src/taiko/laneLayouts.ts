@@ -59,20 +59,24 @@ export interface PadAnchor {
 }
 
 /**
- * 扇形鼓盘阵（鼓手视角，无遮挡 3D 透视）：
- * 镲片在弧线两端偏高偏远，鼓居中，底鼓中央最前最大，踏板靠前。
+ * 鼓盘阵（AeroBand 鼓位图布局，压缩在屏幕下 1/3）：
+ * 上排 4 件（镲片两端 + 高/中通居中，偏远偏小）、
+ * 中排 3 件（踩镲/军鼓/地通）、下排 2 踏板（最近最大）。
  * 摆位/大小要调整只改这张表。
  */
 export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
-  crash: { cx: 0.1, cy: 0.58, r: 0.058, kind: "cymbal" },
-  hihat: { cx: 0.21, cy: 0.635, r: 0.052, kind: "cymbal" },
-  pedalHat: { cx: 0.3, cy: 0.8, r: 0.048, kind: "pedal" },
-  snare: { cx: 0.35, cy: 0.7, r: 0.058, kind: "drum" },
-  highTom: { cx: 0.44, cy: 0.615, r: 0.052, kind: "drum" },
-  midTom: { cx: 0.56, cy: 0.615, r: 0.052, kind: "drum" },
-  kick: { cx: 0.5, cy: 0.845, r: 0.082, kind: "drum" },
-  floorTom: { cx: 0.74, cy: 0.68, r: 0.058, kind: "drum" },
-  ride: { cx: 0.9, cy: 0.58, r: 0.058, kind: "cymbal" },
+  // 上排（偏远偏小）
+  crash: { cx: 0.16, cy: 0.66, r: 0.05, kind: "cymbal" },
+  highTom: { cx: 0.38, cy: 0.66, r: 0.048, kind: "drum" },
+  midTom: { cx: 0.62, cy: 0.66, r: 0.048, kind: "drum" },
+  ride: { cx: 0.84, cy: 0.66, r: 0.05, kind: "cymbal" },
+  // 中排
+  hihat: { cx: 0.2, cy: 0.79, r: 0.056, kind: "cymbal" },
+  snare: { cx: 0.5, cy: 0.79, r: 0.06, kind: "drum" },
+  floorTom: { cx: 0.8, cy: 0.79, r: 0.06, kind: "drum" },
+  // 下排（最近最大）
+  pedalHat: { cx: 0.35, cy: 0.91, r: 0.062, kind: "pedal" },
+  kick: { cx: 0.65, cy: 0.91, r: 0.078, kind: "drum" },
 };
 
 export type LayoutMode = "five" | "nine";

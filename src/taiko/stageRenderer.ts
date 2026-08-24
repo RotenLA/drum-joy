@@ -319,19 +319,19 @@ function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFr
   ctx.font = "600 11px system-ui, sans-serif";
   ctx.fillText(`BPM ${f.chart.bpm}`, w - 28, 50);
 
-  // 连击（中上方悬浮，大号斜体）
+  // 连击（左上角，分数下方，大号斜体）
   if (f.combo > 0) {
-    const size = Math.round(h * 0.085);
-    ctx.textAlign = "center";
+    const size = Math.round(h * 0.062);
+    ctx.textAlign = "left";
     ctx.shadowColor = "rgba(255,255,255,0.4)";
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 16;
     ctx.fillStyle = "#ffffff";
     ctx.font = `italic 900 ${size}px system-ui, sans-serif`;
-    ctx.fillText(String(f.combo), w * 0.5, h * 0.3);
+    ctx.fillText(String(f.combo), 28, 58 + size + 10);
     ctx.shadowBlur = 0;
     ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.font = "700 11px system-ui, sans-serif";
-    ctx.fillText("C O M B O", w * 0.5, h * 0.3 + 18);
+    ctx.font = "700 10px system-ui, sans-serif";
+    ctx.fillText("C O M B O", 28, 58 + size + 28);
   }
 
   ctx.restore();
