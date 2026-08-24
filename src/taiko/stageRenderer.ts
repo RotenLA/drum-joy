@@ -23,10 +23,10 @@ import {
 
 /**
  * 墙/地分界线在屏幕上的位置。
- * 顶排镲（cy=0.66）后缘 y≈0.634，分界线在其上方 ~0.034 屏高处，
+ * 顶排鼓（cy=0.545）旋转后顶缘 ≈0.50（屏高 1/2），分界线贴在其上方，
  * 让顶排鼓站在墙根前的地板上，墙根暗色读作鼓的后阴影。
  */
-const SEAM_SCREEN_Y = 0.6;
+const SEAM_SCREEN_Y = 0.49;
 
 /** 专辑封面墙（浏览器侧懒加载；SSR 无 Image，退回纯色舞台） */
 const wallImg = typeof Image !== "undefined" ? new Image() : null;
@@ -89,21 +89,18 @@ function hexToRgba(hex: string, a: number): string {
 /** 鼓盘锚点 → 像素几何 */
 function padPixels(a: PadAnchor, w: number, h: number) {
   const rx = a.r * w;
-  // 同一地板视角：鼓面与平放的踏板共享压扁比 0.42；
-  // 镲片略平（0.3）表现微微倾向演奏者的倾角。
-  const ratio = a.kind === "cymbal" ? 0.3 : 0.42;
-  return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * ratio };
+  // 同一地板视角：鼓面与平放的踏板共享压扁比 0.42
+  return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * 0.42 };
 }
 
 /**
  * 各部件的地面接触线（相对鼓盘中心 cy 的向下偏移）。
- * 鼓 = 鼓腔底缘（侧深 0.9ry + 底椭圆 ry）；镲 = 镲片底缘（边带在 0.22ry 处）；
+ * 鼓 = 鼓腔底缘（侧深 0.9ry + 底椭圆 ry）；
  * 踏板 = 立方体盒底（旋转后顶面最大纵偏 ~1.19ry + 厚度 1.0ry）。
  * 接触阴影锚在这里，部件才不悬浮。
  */
 function groundOffset(a: PadAnchor, ry: number): number {
   if (a.square) return ry * 2.2;
-  if (a.kind === "cymbal") return ry * 1.22;
   return ry * 1.9;
 }
 
@@ -116,7 +113,7 @@ function gatePoint(anchor: PadAnchor, w: number, h: number) {
 
 /**
  * 鼓盘随车道旋转角（相对垂直方向的偏角）：长轴垂直于车道，与飞来音符同向，
- * 扇形鼓阵「面向消失点」。中间列 ≈0°，外侧镲片约 ±36°，左右镜像对称。
+ * 扇形鼓阵「面向消失点」。中间列 ≈0°，最外侧（吊镲/叮叮镲）约 ±41°，左右镜像对称。
  * 踏板不适用（保持外八斜放）。
  */
 function padRotation(anchor: PadAnchor, w: number, h: number): number {

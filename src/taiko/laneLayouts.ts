@@ -63,23 +63,30 @@ export interface PadAnchor {
 }
 
 /**
- * 鼓盘阵（AeroBand 鼓位图布局，压缩在屏幕下 1/3）：
- * 上排 4 件（镲片两端 + 高/中通居中，偏远偏小）、
- * 中排 3 件（踩镲/军鼓/地通）、下排 2 踏板（最近最大）。
+ * 鼓盘阵（AeroBand 鼓位图布局）：
+ * 上排 4 件 + 中排 3 件统一为同尺寸圆柱鼓（r = 0.048w，与中通一致，仅靠颜色区分），
+ * 下排 2 个方形踏板。上排旋转后顶缘 ≈ 屏高 1/2（即鼓阵最高点），
  * 三排纵向拉开、车道按排独立收束（stageRenderer 的 ROW_GATES）。
  * 摆位/大小要调整只改这张表。
  */
+/** 上排中心高度：旋转后顶缘（鼓阵最高点）落在屏高 1/2 处，微调只改这个数 */
+const TOP_ROW_CY = 0.545;
+/** 中排中心高度（与上排保持 0.16 排距，整体随之上移） */
+const MID_ROW_CY = 0.705;
+/** 上排横坐标：中排踩镲/地通的车道端点取相邻上排两端点的正中 */
+const TOP_CX = { crash: 0.16, highTom: 0.38, midTom: 0.62, ride: 0.84 } as const;
+
 export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
-  // 上排（row 0，偏远偏小）
-  crash: { cx: 0.16, cy: 0.64, r: 0.05, kind: "cymbal", row: 0 },
-  highTom: { cx: 0.38, cy: 0.64, r: 0.048, kind: "drum", row: 0 },
-  midTom: { cx: 0.62, cy: 0.64, r: 0.048, kind: "drum", row: 0 },
-  ride: { cx: 0.84, cy: 0.64, r: 0.05, kind: "cymbal", row: 0 },
-  // 中排（row 1，踩镲/地通内收，分别处于吊镲·高通与中通·叮叮镲的中下方）
-  hihat: { cx: 0.27, cy: 0.8, r: 0.056, kind: "cymbal", row: 1 },
-  snare: { cx: 0.5, cy: 0.8, r: 0.06, kind: "drum", row: 1 },
-  floorTom: { cx: 0.73, cy: 0.8, r: 0.06, kind: "drum", row: 1 },
-  // 下排（row 2，方形踏板与手击鼓盘区分，两踏板等大，明显小于军鼓）
+  // 上排（row 0，全员圆柱同尺寸）
+  crash: { cx: TOP_CX.crash, cy: TOP_ROW_CY, r: 0.048, kind: "drum", row: 0 },
+  highTom: { cx: TOP_CX.highTom, cy: TOP_ROW_CY, r: 0.048, kind: "drum", row: 0 },
+  midTom: { cx: TOP_CX.midTom, cy: TOP_ROW_CY, r: 0.048, kind: "drum", row: 0 },
+  ride: { cx: TOP_CX.ride, cy: TOP_ROW_CY, r: 0.048, kind: "drum", row: 0 },
+  // 中排（row 1，车道端点分别处于吊镲/高通与中通/叮叮镲端点的正中）
+  hihat: { cx: (TOP_CX.crash + TOP_CX.highTom) / 2, cy: MID_ROW_CY, r: 0.048, kind: "drum", row: 1 },
+  snare: { cx: 0.5, cy: MID_ROW_CY, r: 0.048, kind: "drum", row: 1 },
+  floorTom: { cx: (TOP_CX.midTom + TOP_CX.ride) / 2, cy: MID_ROW_CY, r: 0.048, kind: "drum", row: 1 },
+  // 下排（row 2，方形踏板与手击鼓盘区分，两踏板等大）
   pedalHat: { cx: 0.35, cy: 0.92, r: 0.045, kind: "pedal", square: true, row: 2 },
   kick: { cx: 0.65, cy: 0.92, r: 0.045, kind: "drum", square: true, row: 2 },
 };
