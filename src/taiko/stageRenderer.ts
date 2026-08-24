@@ -492,6 +492,8 @@ function drawPad(
 
   ctx.save();
   ctx.translate(p.cx, p.cy);
+  // 鼓盘整体随车道旋转：鼓腔/盘面/描边/命中闪一起转，等效鼓面朝向来球方向倾斜
+  ctx.rotate(padRotation(anchor, w, h));
 
   if (isCymbal) {
     // 镲片边缘厚度：下方露出的暗色边带
