@@ -459,7 +459,6 @@ function drawZones(
       ctx.fill();
       ctx.restore();
     }
-    void approachMs;
   }
 }
 
@@ -480,10 +479,11 @@ function drawNotes(ctx: CanvasRenderingContext2D, cam: Cam, p: FallRenderParams)
 
     const span = zone.x1 - zone.x0;
     const zoneNearPx = span * 2 * cam.nearHalf;
-    const widthRatio = zone.parts.length > 1 ? 0.72 / zone.parts.length : 0.52;
+    const widthRatio =
+      zone.parts.length > 1 ? 0.72 / zone.parts.length : zone.pedal ? 0.38 : 0.52;
     let cw = zoneNearPx * pos.scale * widthRatio;
     if (n.big) cw *= 1.35;
-    const ch = cw * 0.55;
+    const ch = cw * (zone.pedal ? 0.42 : 0.55);
     cw = Math.max(4, cw);
 
     let alpha = 1;
