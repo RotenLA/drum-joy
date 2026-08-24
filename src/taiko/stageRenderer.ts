@@ -4,11 +4,10 @@
  * 纯 Canvas 2D 伪 3D，与 React 解耦。鼓盘摆位/颜色全部来自
  * laneLayouts 的 PAD_ANCHORS / DRUM_PARTS，本文件只负责绘制。
  *
- * 场景：专辑封面墙（压灰压暗）+ 深色镜面地板（墙面翻转倒影，随深度渐隐），
+ * 场景：专辑封面全幅铺底（压灰压暗 + 全屏纵向遮罩），无地板/倒影/接触阴影，
  * 9 条细光车道按「三排独立收束段」辐射到各排鼓盘（宽约一个通鼓，非单点），
  * 音符由小变大滑向鼓盘，鼓盘即判定落点，命中时鼓盘增亮回弹并喷火花粒子。
- * 接触阴影锚在各部件的地面接触线上，压扁比统一 = 同一地板视角；
- * 踏板为斜放的立方体（顶面旋转后按 0.42 均匀压扁，与鼓同一仿射地板）。
+ * 踏板为斜放的立方体（顶面旋转后按 0.42 均匀压扁，与鼓面椭圆同一压扁比）。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
 import stageWallUrl from "@/assets/stage-wall.jpg";
@@ -21,14 +20,7 @@ import {
   type PartId,
 } from "./laneLayouts";
 
-/**
- * 墙/地分界线在屏幕上的位置。
- * 顶排鼓（cy=0.568）旋转后顶缘 ≈0.50（屏高 1/2），分界线贴在其上方，
- * 让顶排鼓站在墙根前的地板上，墙根暗色读作鼓的后阴影。
- */
-const SEAM_SCREEN_Y = 0.49;
-
-/** 专辑封面墙（浏览器侧懒加载；SSR 无 Image，退回纯色舞台） */
+/** 专辑封面背景（浏览器侧懒加载；SSR 无 Image，退回纯色背景） */
 const wallImg = typeof Image !== "undefined" ? new Image() : null;
 if (wallImg) wallImg.src = stageWallUrl;
 
@@ -93,16 +85,6 @@ function padPixels(a: PadAnchor, w: number, h: number) {
   return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * 0.42 };
 }
 
-/**
- * 各部件的地面接触线（相对鼓盘中心 cy 的向下偏移）。
- * 鼓 = 鼓腔底缘（侧深 0.9ry + 底椭圆 ry）；
- * 踏板 = 立方体盒底（旋转后顶面最大纵偏 ~1.19ry + 厚度 1.0ry）。
- * 接触阴影锚在这里，部件才不悬浮。
- */
-function groundOffset(a: PadAnchor, ry: number): number {
-  if (a.square) return ry * 2.2;
-  return ry * 1.9;
-}
 
 /** 车道起点（本排收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
 function gatePoint(anchor: PadAnchor, w: number, h: number) {
@@ -131,54 +113,27 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0a0a0c";
   ctx.fillRect(0, 0, w, h);
 
-  const seamY = SEAM_SCREEN_Y * h;
   if (wallImg && wallImg.complete && wallImg.naturalWidth > 0) {
     const iw = wallImg.naturalWidth;
     const ih = wallImg.naturalHeight;
-    // 墙面：cover 铺满墙带，图底缘对齐墙根
-    const s = Math.max(w / iw, seamY / ih);
+    // 专辑封面全幅铺底：cover 铺满整个画布，居中裁剪
+    const s = Math.max(w / iw, h / ih);
     const dw = iw * s;
     const dh = ih * s;
     const dx = (w - dw) / 2;
-    const dy = seamY - dh;
+    const dy = (h - dh) / 2;
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, w, seamY);
-    ctx.clip();
     // 压灰压暗（「灰一点点」）
     ctx.filter = "saturate(0.55) brightness(0.65)";
     ctx.drawImage(wallImg, dx, dy, dw, dh);
     ctx.filter = "none";
-    // 顶部渐变再压一层，保证车道与音符可读
-    const veil = ctx.createLinearGradient(0, 0, 0, seamY);
+    // 全屏纵向遮罩：顶部压暗保 HUD/车道可读，中段最浅展示封面，底部略压暗衬托鼓盘泛光
+    const veil = ctx.createLinearGradient(0, 0, 0, h);
     veil.addColorStop(0, "rgba(6,6,8,0.55)");
-    veil.addColorStop(0.55, "rgba(6,6,8,0.18)");
-    veil.addColorStop(1, "rgba(6,6,8,0.32)");
+    veil.addColorStop(0.45, "rgba(6,6,8,0.18)");
+    veil.addColorStop(1, "rgba(6,6,8,0.4)");
     ctx.fillStyle = veil;
-    ctx.fillRect(0, 0, w, seamY);
-    ctx.restore();
-
-    // 镜面地板：墙面翻转倒影（低透明 + 轻模糊），再盖渐隐遮罩
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, seamY, w, h - seamY);
-    ctx.clip();
-    ctx.translate(0, seamY * 2);
-    ctx.scale(1, -1);
-    ctx.globalAlpha = 0.5;
-    ctx.filter = "saturate(0.55) brightness(0.6) blur(2px)";
-    ctx.drawImage(wallImg, dx, dy, dw, dh);
-    ctx.restore();
-    const fade = ctx.createLinearGradient(0, seamY, 0, h);
-    fade.addColorStop(0, "rgba(10,10,12,0.05)");
-    fade.addColorStop(1, "rgba(10,10,12,0.92)");
-    ctx.fillStyle = fade;
-    ctx.fillRect(0, seamY, w, h - seamY);
-
-    // 墙根镜面高光缝
-    ctx.fillStyle = "rgba(255,255,255,0.08)";
-    ctx.fillRect(0, seamY - 1, w, 2);
+    ctx.fillRect(0, 0, w, h);
   }
 
   // 顶部聚光灯
@@ -321,23 +276,6 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
   ctx.restore();
 }
 
-/** 地面接触阴影：锚在部件的地面接触线上，把部件「钉」在地板上 */
-function drawContactShadow(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  groundY: number,
-  rx: number,
-) {
-  ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  ctx.shadowColor = "rgba(0,0,0,0.8)";
-  ctx.shadowBlur = 26;
-  ctx.beginPath();
-  ctx.ellipse(cx, groundY, rx * 1.15, rx * 0.24, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
 /**
  * 方形踏板鼓盘（底鼓/踩镲踏板）：斜放的立方体。
  * 顶面 = 旋转 ±PEDAL_TILT 的正方形按 0.42 均匀压扁（与鼓同一仿射地板，
@@ -472,9 +410,6 @@ function drawPad(
   const anchor = PAD_ANCHORS[partId];
   const color = PART_BY_ID[partId].color;
   const p = padPixels(anchor, w, h);
-
-  // 接触阴影锚在地面接触线上，不随命中回弹缩放
-  drawContactShadow(ctx, p.cx, p.cy + groundOffset(anchor, p.ry), p.rx);
 
   if (anchor.square) {
     // 左右踏板镜像「外八」斜放
