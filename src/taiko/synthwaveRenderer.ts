@@ -267,16 +267,16 @@ function drawSun(
   ctx.stroke();
   ctx.restore();
 
-  // 连击数落在落日中心
+  // 连击数落在落日中心（避开地平线以下的遮挡区）
   ctx.save();
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = COLORS.hudInk;
-  ctx.font = `800 ${Math.round(sunR * 0.58)}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-  ctx.fillText(String(p.combo), cam.cx, sunCY - sunR * 0.1);
-  ctx.font = `600 ${Math.max(9, Math.round(sunR * 0.13))}px ui-monospace, monospace`;
-  ctx.globalAlpha = 0.75;
-  ctx.fillText("COMBO", cam.cx, sunCY + sunR * 0.32);
+  ctx.font = `800 ${Math.round(sunR * 0.52)}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+  ctx.fillText(String(p.combo), cam.cx, sunCY - sunR * 0.22);
+  ctx.font = `600 ${Math.max(9, Math.round(sunR * 0.12))}px ui-monospace, monospace`;
+  ctx.globalAlpha = 0.7;
+  ctx.fillText("COMBO", cam.cx, sunCY + sunR * 0.14);
   ctx.restore();
 }
 
@@ -375,8 +375,19 @@ export function zoneNoteX(zone: Zone, note: number): number {
   return zone.x0 + (span * (idx + 0.5)) / zone.parts.length;
 }
 
-function drawZones(ctx: CanvasRenderingContext2D, cam: Cam, p: FallRenderParams) {
-  const approachMs = BASE_APPROACH_MS / p.speed;
+interface ZoneLabel {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+}
+
+function drawZones(
+  ctx: CanvasRenderingContext2D,
+  cam: Cam,
+  p: FallRenderParams,
+  labels: ZoneLabel[],
+) {
   for (const z of p.zones) {
     const c00 = project(cam, z.x0, z.t0);
     const c10 = project(cam, z.x1, z.t0);
