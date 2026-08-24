@@ -235,6 +235,70 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
   ctx.restore();
 }
 
+/** 方形踏板鼓盘（底鼓/踩镲踏板）：圆角矩形面板 + 侧沿厚度 */
+function drawSquarePad(
+  ctx: CanvasRenderingContext2D,
+  color: string,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  intensity: number,
+) {
+  const s = 1 + 0.1 * intensity; // 命中回弹
+  const RX = rx * s;
+  const RY = ry * s;
+  const rr = Math.min(RY * 0.45, 10);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  // 侧沿厚度（向后下方延伸的暗色底座）
+  const depth = RY * 1.1;
+  const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
+  side.addColorStop(0, "#1b1b20");
+  side.addColorStop(1, "#0c0c0f");
+  ctx.beginPath();
+  ctx.roundRect(-RX, -RY + depth, RX * 2, RY * 2, rr);
+  ctx.fillStyle = side;
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba(color, 0.25 + 0.5 * intensity);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 面板：深灰金属 + 部件色淡染
+  const face = ctx.createRadialGradient(0, -RY * 0.4, RY * 0.2, 0, 0, RX);
+  face.addColorStop(0, "#26262c");
+  face.addColorStop(1, "#131316");
+  ctx.beginPath();
+  ctx.roundRect(-RX, -RY, RX * 2, RY * 2, rr);
+  ctx.fillStyle = face;
+  ctx.fill();
+  ctx.fillStyle = hexToRgba(color, 0.1 + 0.28 * intensity);
+  ctx.fill();
+
+  // 描边 + 泛光（命中时增亮）
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 12 + 26 * intensity;
+  ctx.strokeStyle = hexToRgba(color, 0.85);
+  ctx.lineWidth = 2.5 + 2.5 * intensity;
+  ctx.beginPath();
+  ctx.roundRect(-RX, -RY, RX * 2, RY * 2, rr);
+  ctx.stroke();
+
+  // 命中白闪
+  if (intensity > 0) {
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = `rgba(255,255,255,${0.7 * intensity})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-RX - 3, -RY - 3, RX * 2 + 6, RY * 2 + 6, rr + 3);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawPad(
   ctx: CanvasRenderingContext2D,
   partId: PartId,
@@ -245,6 +309,10 @@ function drawPad(
   const anchor = PAD_ANCHORS[partId];
   const color = PART_BY_ID[partId].color;
   const p = padPixels(anchor, w, h);
+  if (anchor.square) {
+    drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity);
+    return;
+  }
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = p.rx * s;
   const RY = p.ry * s;
