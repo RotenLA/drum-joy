@@ -4,13 +4,14 @@
  * 纯 Canvas 2D 伪 3D，与 React 解耦。鼓盘摆位/颜色全部来自
  * laneLayouts 的 PAD_ANCHORS / DRUM_PARTS，本文件只负责绘制。
  *
- * 场景：录音棚背景（墙/地分界线对齐顶排鼓身后）+ 顶部聚光灯，
+ * 场景：专辑封面墙（压灰压暗）+ 深色镜面地板（墙面翻转倒影，随深度渐隐），
  * 9 条细光车道从顶部「收束段」（宽约一个通鼓，非单点）辐射到各鼓盘，
  * 音符由小变大滑向鼓盘，鼓盘即判定落点，命中时鼓盘增亮回弹并喷火花粒子。
- * 所有部件带地面接触阴影，压扁比统一 = 同一地板视角。
+ * 接触阴影锚在各部件的地面接触线上，压扁比统一 = 同一地板视角；
+ * 踏板为后缘收窄的透视楔块，与鼓共享俯视相机。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
-import stageBgUrl from "@/assets/stage-bg.jpg";
+import stageWallUrl from "@/assets/stage-wall.jpg";
 import {
   DRUM_PARTS,
   PAD_ANCHORS,
@@ -20,18 +21,16 @@ import {
   type PartId,
 } from "./laneLayouts";
 
-/** 背景图墙/地分界线（归一化 y，相对背景图高度） */
-const BG_SEAM_Y = 0.638;
 /**
- * 分界线在屏幕上的目标位置。
- * 推算：顶排镲（cy=0.66）后缘 y≈0.634，分界线放在其上方 ~0.034 屏高处，
+ * 墙/地分界线在屏幕上的位置。
+ * 顶排镲（cy=0.66）后缘 y≈0.634，分界线在其上方 ~0.034 屏高处，
  * 让顶排鼓站在墙根前的地板上，墙根暗色读作鼓的后阴影。
  */
 const SEAM_SCREEN_Y = 0.6;
 
-/** 录音棚背景图（浏览器侧懒加载；SSR 无 Image，退回纯色舞台） */
-const bgImg = typeof Image !== "undefined" ? new Image() : null;
-if (bgImg) bgImg.src = stageBgUrl;
+/** 专辑封面墙（浏览器侧懒加载；SSR 无 Image，退回纯色舞台） */
+const wallImg = typeof Image !== "undefined" ? new Image() : null;
+if (wallImg) wallImg.src = stageWallUrl;
 
 /**
  * 车道收束段（顶部中央）：y 归一化，半宽 0.05 → 总宽 0.10w，
@@ -89,6 +88,17 @@ function padPixels(a: PadAnchor, w: number, h: number) {
   return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * ratio };
 }
 
+/**
+ * 各部件的地面接触线（相对鼓盘中心 cy 的向下偏移）。
+ * 鼓 = 鼓腔底缘（侧深 0.9ry + 底椭圆 ry）；镲 = 镲片底缘（边带在 0.22ry 处）；
+ * 踏板 = 楔块底边（ry + 侧沿 0.45ry）。接触阴影锚在这里，部件才不悬浮。
+ */
+function groundOffset(a: PadAnchor, ry: number): number {
+  if (a.square) return ry * 1.45;
+  if (a.kind === "cymbal") return ry * 1.22;
+  return ry * 1.9;
+}
+
 /** 车道起点（收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
 function gatePoint(padCx: number, w: number, h: number) {
   const x = (0.5 + (padCx - 0.5) * (GATE.halfW / PAD_SPREAD)) * w;
@@ -99,20 +109,54 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0a0a0c";
   ctx.fillRect(0, 0, w, h);
 
-  // 录音棚背景：墙/地分界线对齐到 SEAM_SCREEN_Y（顶排鼓身后墙根）
-  if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
-    const iw = bgImg.naturalWidth;
-    const ih = bgImg.naturalHeight;
-    let s = (SEAM_SCREEN_Y * h) / (BG_SEAM_Y * ih);
-    if (iw * s < w) s = w / iw; // 横向铺满优先
-    if (ih * s < h) s = h / ih; // 纵向铺满兜底
-    let dy = SEAM_SCREEN_Y * h - BG_SEAM_Y * ih * s;
-    dy = Math.min(0, Math.max(h - ih * s, dy));
-    const dx = (w - iw * s) / 2;
-    ctx.drawImage(bgImg, dx, dy, iw * s, ih * s);
-    // 轻微压暗，突出鼓盘与音符
-    ctx.fillStyle = "rgba(6,6,8,0.35)";
-    ctx.fillRect(0, 0, w, h);
+  const seamY = SEAM_SCREEN_Y * h;
+  if (wallImg && wallImg.complete && wallImg.naturalWidth > 0) {
+    const iw = wallImg.naturalWidth;
+    const ih = wallImg.naturalHeight;
+    // 墙面：cover 铺满墙带，图底缘对齐墙根
+    const s = Math.max(w / iw, seamY / ih);
+    const dw = iw * s;
+    const dh = ih * s;
+    const dx = (w - dw) / 2;
+    const dy = seamY - dh;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, w, seamY);
+    ctx.clip();
+    // 压灰压暗（「灰一点点」）
+    ctx.filter = "saturate(0.55) brightness(0.65)";
+    ctx.drawImage(wallImg, dx, dy, dw, dh);
+    ctx.filter = "none";
+    // 顶部渐变再压一层，保证车道与音符可读
+    const veil = ctx.createLinearGradient(0, 0, 0, seamY);
+    veil.addColorStop(0, "rgba(6,6,8,0.55)");
+    veil.addColorStop(0.55, "rgba(6,6,8,0.18)");
+    veil.addColorStop(1, "rgba(6,6,8,0.32)");
+    ctx.fillStyle = veil;
+    ctx.fillRect(0, 0, w, seamY);
+    ctx.restore();
+
+    // 镜面地板：墙面翻转倒影（低透明 + 轻模糊），再盖渐隐遮罩
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, seamY, w, h - seamY);
+    ctx.clip();
+    ctx.translate(0, seamY * 2);
+    ctx.scale(1, -1);
+    ctx.globalAlpha = 0.5;
+    ctx.filter = "saturate(0.55) brightness(0.6) blur(2px)";
+    ctx.drawImage(wallImg, dx, dy, dw, dh);
+    ctx.restore();
+    const fade = ctx.createLinearGradient(0, seamY, 0, h);
+    fade.addColorStop(0, "rgba(10,10,12,0.05)");
+    fade.addColorStop(1, "rgba(10,10,12,0.92)");
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, seamY, w, h - seamY);
+
+    // 墙根镜面高光缝
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(0, seamY - 1, w, 2);
   }
 
   // 顶部聚光灯
@@ -251,25 +295,24 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
   ctx.restore();
 }
 
-/** 地面接触阴影：把部件「钉」在地板上，统一视角的关键 */
+/** 地面接触阴影：锚在部件的地面接触线上，把部件「钉」在地板上 */
 function drawContactShadow(
   ctx: CanvasRenderingContext2D,
   cx: number,
-  cy: number,
+  groundY: number,
   rx: number,
-  ry: number,
 ) {
   ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.shadowColor = "rgba(0,0,0,0.9)";
-  ctx.shadowBlur = 18;
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.shadowColor = "rgba(0,0,0,0.8)";
+  ctx.shadowBlur = 26;
   ctx.beginPath();
-  ctx.ellipse(cx, cy + ry * 0.85, rx * 1.12, ry * 0.55, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, groundY, rx * 1.15, rx * 0.24, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
 
-/** 方形踏板鼓盘（底鼓/踩镲踏板）：低趴圆角矩形踏板 + 薄侧沿 */
+/** 方形踏板鼓盘（底鼓/踩镲踏板）：后缘收窄的透视楔块 + 薄侧沿 */
 function drawSquarePad(
   ctx: CanvasRenderingContext2D,
   color: string,
@@ -282,52 +325,72 @@ function drawSquarePad(
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = rx * s;
   const RY = ry * s;
-  const rr = Math.min(RY * 0.4, 8);
+  const back = RX * 0.72; // 后缘收窄（远小近大，与鼓同一俯视相机）
+  const backY = -RY * 0.85; // 后缘上移
+  const depth = RY * 0.45; // 低趴侧沿厚度
+
+  const topPath = () => {
+    ctx.beginPath();
+    ctx.moveTo(-back, backY);
+    ctx.lineTo(back, backY);
+    ctx.lineTo(RX, RY);
+    ctx.lineTo(-RX, RY);
+    ctx.closePath();
+  };
 
   ctx.save();
   ctx.translate(cx, cy);
+  ctx.lineJoin = "round";
 
-  // 薄侧沿（低趴楔块，不再像立起来的盒子）
-  const depth = RY * 0.45;
-  const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
+  // 侧沿（前缘露出的低趴厚度）
+  const side = ctx.createLinearGradient(0, RY, 0, RY + depth);
   side.addColorStop(0, "#1e1e24");
   side.addColorStop(1, "#0a0a0d");
   ctx.beginPath();
-  ctx.roundRect(-RX, -RY + depth, RX * 2, RY * 2, rr);
+  ctx.moveTo(-RX, RY);
+  ctx.lineTo(RX, RY);
+  ctx.lineTo(RX * 0.98, RY + depth);
+  ctx.lineTo(-RX * 0.98, RY + depth);
+  ctx.closePath();
   ctx.fillStyle = side;
   ctx.fill();
-  ctx.strokeStyle = hexToRgba(color, 0.25 + 0.5 * intensity);
-  ctx.lineWidth = 1;
-  ctx.stroke();
 
-  // 面板：深灰金属 + 部件色淡染
-  const face = ctx.createRadialGradient(0, -RY * 0.4, RY * 0.2, 0, 0, RX);
-  face.addColorStop(0, "#28282f");
-  face.addColorStop(1, "#131316");
-  ctx.beginPath();
-  ctx.roundRect(-RX, -RY, RX * 2, RY * 2, rr);
+  // 踏板顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染
+  const face = ctx.createLinearGradient(0, backY, 0, RY);
+  face.addColorStop(0, "#17171b");
+  face.addColorStop(1, "#2b2b33");
+  topPath();
   ctx.fillStyle = face;
   ctx.fill();
   ctx.fillStyle = hexToRgba(color, 0.1 + 0.28 * intensity);
   ctx.fill();
+
+  // 前沿金属亮边
+  ctx.beginPath();
+  ctx.moveTo(-RX, RY);
+  ctx.lineTo(RX, RY);
+  ctx.strokeStyle = "rgba(255,255,255,0.18)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
   ctx.shadowBlur = 12 + 26 * intensity;
   ctx.strokeStyle = hexToRgba(color, 0.85);
   ctx.lineWidth = 2.5 + 2.5 * intensity;
-  ctx.beginPath();
-  ctx.roundRect(-RX, -RY, RX * 2, RY * 2, rr);
+  topPath();
   ctx.stroke();
 
-  // 命中白闪
+  // 命中白闪（外扩一圈）
   if (intensity > 0) {
     ctx.shadowBlur = 0;
     ctx.strokeStyle = `rgba(255,255,255,${0.7 * intensity})`;
     ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(-RX - 3, -RY - 3, RX * 2 + 6, RY * 2 + 6, rr + 3);
+    ctx.save();
+    ctx.scale(1.05, 1.1);
+    topPath();
     ctx.stroke();
+    ctx.restore();
   }
 
   ctx.restore();
@@ -344,8 +407,8 @@ function drawPad(
   const color = PART_BY_ID[partId].color;
   const p = padPixels(anchor, w, h);
 
-  // 接触阴影不随命中回弹缩放
-  drawContactShadow(ctx, p.cx, p.cy, p.rx, p.ry);
+  // 接触阴影锚在地面接触线上，不随命中回弹缩放
+  drawContactShadow(ctx, p.cx, p.cy + groundOffset(anchor, p.ry), p.rx);
 
   if (anchor.square) {
     drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity);
