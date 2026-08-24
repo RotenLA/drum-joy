@@ -144,13 +144,13 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
     ctx.clip();
     ctx.translate(0, seamY * 2);
     ctx.scale(1, -1);
-    ctx.globalAlpha = 0.35;
-    ctx.filter = "saturate(0.5) brightness(0.5) blur(3px)";
+    ctx.globalAlpha = 0.5;
+    ctx.filter = "saturate(0.55) brightness(0.6) blur(2px)";
     ctx.drawImage(wallImg, dx, dy, dw, dh);
     ctx.restore();
     const fade = ctx.createLinearGradient(0, seamY, 0, h);
-    fade.addColorStop(0, "rgba(10,10,12,0.15)");
-    fade.addColorStop(1, "rgba(10,10,12,0.96)");
+    fade.addColorStop(0, "rgba(10,10,12,0.05)");
+    fade.addColorStop(1, "rgba(10,10,12,0.92)");
     ctx.fillStyle = fade;
     ctx.fillRect(0, seamY, w, h - seamY);
 
