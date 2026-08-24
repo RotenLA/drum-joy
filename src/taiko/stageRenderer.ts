@@ -549,30 +549,6 @@ function drawPad(
     ctx.stroke();
   }
 
-  if (isCymbal) {
-    // Bell 中心拱起：径向渐变圆顶 + 高光点
-    ctx.shadowBlur = 0;
-    const bell = ctx.createRadialGradient(
-      -RX * 0.05,
-      -RY * 0.08,
-      RY * 0.05,
-      0,
-      0,
-      RX * 0.24,
-    );
-    bell.addColorStop(0, "#4c4c57");
-    bell.addColorStop(0.6, "#26262c");
-    bell.addColorStop(1, "#131316");
-    ctx.beginPath();
-    ctx.ellipse(0, 0, RX * 0.24, RY * 0.24, 0, 0, Math.PI * 2);
-    ctx.fillStyle = bell;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(-RX * 0.07, -RY * 0.09, RX * 0.05, RY * 0.05, 0, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.28)";
-    ctx.fill();
-  }
-
   ctx.restore();
 }
 
