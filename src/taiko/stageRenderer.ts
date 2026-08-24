@@ -15,7 +15,7 @@ import {
   DRUM_PARTS,
   PAD_ANCHORS,
   PART_BY_ID,
-  PART_BY_NOTE,
+  partOfNote,
   type PadAnchor,
   type PartId,
 } from "./laneLayouts";
@@ -51,10 +51,20 @@ export interface StageFrame {
   speed: number;
   /** performance.now()，驱动动画与粒子 */
   now: number;
-  /** partId -> 闪光截止时间戳（performance.now() 基准） */
+  /** partId -> 命中闪光截止时间戳（performance.now() 基准） */
   flashes: Record<string, number>;
+  /** partId -> Miss 暗闪截止时间戳 */
+  missFlashes?: Record<string, number>;
   combo: number;
   score: number;
+  /** 参与渲染的鼓盘（默认全部 9 件；5 分区模式只传 5 件） */
+  parts?: readonly PartId[];
+  /** 判定浮字（Perfect/Good/Miss），until 后消失 */
+  judgement?: { text: string; color: string; until: number } | null;
+  /** 倒计时大号数字（4/3/2/1），null 不显示 */
+  countText?: string | null;
+  /** 判定统计（HUD 显示 P/G/M 与准确率） */
+  stats?: { perfect: number; good: number; miss: number } | null;
 }
 
 interface Particle {
@@ -159,11 +169,16 @@ function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillRect(0, h * 0.72, w, h * 0.28);
 }
 
-function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number) {
+function drawLanes(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  parts: readonly PartId[],
+) {
   ctx.save();
   ctx.lineWidth = 1.5;
-  for (const part of DRUM_PARTS) {
-    const anchor = PAD_ANCHORS[part.id];
+  for (const id of parts) {
+    const anchor = PAD_ANCHORS[id];
     const p = padPixels(anchor, w, h);
     const g0 = gatePoint(anchor, w, h);
     const g = ctx.createLinearGradient(g0.x, g0.y, p.cx, p.cy);
@@ -187,7 +202,7 @@ function drawNotes(
   const visible: { part: PartId; t: number; big: boolean }[] = [];
   for (const n of f.chart.notes) {
     if (n.note === undefined) continue;
-    const part = PART_BY_NOTE[n.note];
+    const part = partOfNote(n.note);
     if (!part) continue;
     // t: 0 = 收束段，1 = 鼓盘（到达即命中，不再绘制）
     const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
@@ -290,6 +305,7 @@ function drawSquarePad(
   ry: number,
   intensity: number,
   mirror: boolean,
+  miss = 0,
 ) {
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = rx * s;
@@ -397,6 +413,18 @@ function drawSquarePad(
     ctx.restore();
   }
 
+  // Miss 暗闪：顶面压暗 + 红色描边
+  if (miss > 0) {
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(8,8,10,${0.55 * miss})`;
+    topPath();
+    ctx.fill();
+    ctx.strokeStyle = `rgba(248,113,113,${0.65 * miss})`;
+    ctx.lineWidth = 2;
+    topPath();
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -406,6 +434,7 @@ function drawPad(
   intensity: number,
   w: number,
   h: number,
+  miss = 0,
 ) {
   const anchor = PAD_ANCHORS[partId];
   const color = PART_BY_ID[partId].color;
@@ -413,7 +442,7 @@ function drawPad(
 
   if (anchor.square) {
     // 左右踏板镜像「外八」斜放
-    drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity, partId === "kick");
+    drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity, partId === "kick", miss);
     return;
   }
 
@@ -484,6 +513,18 @@ function drawPad(
     ctx.stroke();
   }
 
+  // Miss 暗闪：盘面压暗 + 红色描边
+  if (miss > 0) {
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(8,8,10,${0.55 * miss})`;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(248,113,113,${0.65 * miss})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
   ctx.restore();
 }
 
@@ -536,6 +577,46 @@ function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFr
     ctx.fillText("C O M B O", 28, 58 + size + 28);
   }
 
+  // 判定统计 + 准确率（连击下方）
+  if (f.stats) {
+    const judged = f.stats.perfect + f.stats.good + f.stats.miss;
+    if (judged > 0) {
+      const acc = ((f.stats.perfect + f.stats.good * 0.5) / judged) * 100;
+      const y = f.combo > 0 ? 58 + Math.round(h * 0.062) + 52 : 82;
+      ctx.textAlign = "left";
+      ctx.font = "600 11px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillText(`P ${f.stats.perfect} · G ${f.stats.good} · M ${f.stats.miss}`, 28, y);
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillText(`ACC ${acc.toFixed(1)}%`, 28, y + 18);
+    }
+  }
+
+  // 判定浮字（屏幕中上部居中，淡出）
+  if (f.judgement && f.judgement.until > f.now) {
+    const a = Math.min(1, (f.judgement.until - f.now) / 300);
+    ctx.textAlign = "center";
+    ctx.globalAlpha = a;
+    ctx.shadowColor = f.judgement.color;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = f.judgement.color;
+    ctx.font = `800 ${Math.round(h * 0.045)}px system-ui, sans-serif`;
+    ctx.fillText(f.judgement.text, w / 2, h * 0.3);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  // 倒计时大号数字
+  if (f.countText) {
+    ctx.textAlign = "center";
+    ctx.shadowColor = "rgba(255,255,255,0.5)";
+    ctx.shadowBlur = 30;
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `900 ${Math.round(h * 0.22)}px system-ui, sans-serif`;
+    ctx.fillText(f.countText, w / 2, h * 0.45);
+    ctx.shadowBlur = 0;
+  }
+
   ctx.restore();
 }
 
@@ -546,24 +627,94 @@ export function renderStage(
   f: StageFrame,
 ) {
   drawBackground(ctx, w, h);
-  drawLanes(ctx, w, h);
+  const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
+  drawLanes(ctx, w, h, parts);
   drawNotes(ctx, w, h, f);
 
   // 远的鼓盘先画，近的压上层（无遮挡摆位下主要是保险）
-  const parts = [...DRUM_PARTS].sort(
-    (a, b) => PAD_ANCHORS[a.id].cy - PAD_ANCHORS[b.id].cy,
-  );
-  for (const part of parts) {
-    const expiry = f.flashes[part.id] ?? 0;
+  const sorted = [...parts].sort((a, b) => PAD_ANCHORS[a].cy - PAD_ANCHORS[b].cy);
+  for (const id of sorted) {
+    const expiry = f.flashes[id] ?? 0;
     const intensity = Math.max(0, Math.min(1, (expiry - f.now) / FLASH_MS));
-    if (expiry > (lastFlash[part.id] ?? 0)) {
-      spawnSparks(PAD_ANCHORS[part.id], part.color, w, h, f.now);
-      lastFlash[part.id] = expiry;
+    if (expiry > (lastFlash[id] ?? 0)) {
+      spawnSparks(PAD_ANCHORS[id], PART_BY_ID[id].color, w, h, f.now);
+      lastFlash[id] = expiry;
     }
-    drawPad(ctx, part.id, intensity, w, h);
+    const missExpiry = f.missFlashes?.[id] ?? 0;
+    const miss = Math.max(0, Math.min(1, (missExpiry - f.now) / 240));
+    drawPad(ctx, id, intensity, w, h, miss);
   }
 
   drawParticles(ctx, f.now);
   drawVignette(ctx, w, h);
   drawHud(ctx, w, h, f);
+}
+
+// ================= 映射屏复用：静态鼓盘阵 =================
+
+export interface PadArrayOptions {
+  parts: readonly PartId[];
+  flashes: Record<string, number>;
+  now: number;
+  /** 当前选中编辑的鼓盘（白色虚线圈高亮） */
+  selected?: PartId | null;
+}
+
+/** 静态鼓盘阵（无车道/音符/HUD），与游玩屏同一套摆位与绘制 */
+export function renderPadArray(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  opts: PadArrayOptions,
+) {
+  drawBackground(ctx, w, h);
+  const sorted = [...opts.parts].sort(
+    (a, b) => PAD_ANCHORS[a].cy - PAD_ANCHORS[b].cy,
+  );
+  for (const id of sorted) {
+    const expiry = opts.flashes[id] ?? 0;
+    const intensity = Math.max(0, Math.min(1, (expiry - opts.now) / FLASH_MS));
+    drawPad(ctx, id, intensity, w, h);
+    if (opts.selected === id) {
+      const a = PAD_ANCHORS[id];
+      const p = padPixels(a, w, h);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.ellipse(
+        p.cx,
+        p.cy,
+        p.rx + 8,
+        (a.square ? p.rx : p.ry) + 8,
+        0,
+        0,
+        Math.PI * 2,
+      );
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+  drawVignette(ctx, w, h);
+}
+
+/** 点击命中测试：返回命中的鼓盘（近处优先） */
+export function partAtPoint(
+  parts: readonly PartId[],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): PartId | null {
+  const sorted = [...parts].sort((a, b) => PAD_ANCHORS[b].cy - PAD_ANCHORS[a].cy);
+  for (const id of sorted) {
+    const a = PAD_ANCHORS[id];
+    const p = padPixels(a, w, h);
+    const ry = a.square ? p.rx : p.ry; // 方形踏板纵向按全半径判定
+    const dx = (x - p.cx) / (p.rx * 1.15);
+    const dy = (y - p.cy) / (ry * 1.6);
+    if (dx * dx + dy * dy <= 1) return id;
+  }
+  return null;
 }
