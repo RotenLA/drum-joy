@@ -56,6 +56,8 @@ export interface PadAnchor {
   /** 横向半径（相对画布宽）；纵向半径按 kind 比例推算 */
   r: number;
   kind: PadKind;
+  /** 方形鼓盘（脚踏板用，便于与手击鼓盘区分） */
+  square?: boolean;
 }
 
 /**
@@ -70,13 +72,13 @@ export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
   highTom: { cx: 0.38, cy: 0.66, r: 0.048, kind: "drum" },
   midTom: { cx: 0.62, cy: 0.66, r: 0.048, kind: "drum" },
   ride: { cx: 0.84, cy: 0.66, r: 0.05, kind: "cymbal" },
-  // 中排
-  hihat: { cx: 0.2, cy: 0.79, r: 0.056, kind: "cymbal" },
+  // 中排（踩镲/地通内收，分别处于吊镲·高通与中通·叮叮镲的中下方）
+  hihat: { cx: 0.27, cy: 0.79, r: 0.056, kind: "cymbal" },
   snare: { cx: 0.5, cy: 0.79, r: 0.06, kind: "drum" },
-  floorTom: { cx: 0.8, cy: 0.79, r: 0.06, kind: "drum" },
-  // 下排（最近最大）
-  pedalHat: { cx: 0.35, cy: 0.91, r: 0.062, kind: "pedal" },
-  kick: { cx: 0.65, cy: 0.91, r: 0.078, kind: "drum" },
+  floorTom: { cx: 0.73, cy: 0.79, r: 0.06, kind: "drum" },
+  // 下排（最近最大，方形踏板与手击鼓盘区分）
+  pedalHat: { cx: 0.35, cy: 0.91, r: 0.062, kind: "pedal", square: true },
+  kick: { cx: 0.65, cy: 0.91, r: 0.078, kind: "drum", square: true },
 };
 
 export type LayoutMode = "five" | "nine";
