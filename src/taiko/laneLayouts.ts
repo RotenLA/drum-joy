@@ -44,14 +44,14 @@ export const PART_BY_ID = Object.fromEntries(
 
 // ================= 部件映射（note → part） =================
 
-export type DrumMapping = Record<PartId, readonly number[]>;
+export type DrumMapping = Record<PartId, number[]>;
 
 const MAPPING_KEY = "taiko.mapping.v1";
 
 export function defaultMapping(): DrumMapping {
-  return Object.fromEntries(
-    DRUM_PARTS.map((p) => [p.id, [...p.notes]]),
-  ) as DrumMapping;
+  const m = {} as Record<PartId, number[]>;
+  for (const p of DRUM_PARTS) m[p.id] = [...p.notes];
+  return m;
 }
 
 function loadMapping(): DrumMapping {
