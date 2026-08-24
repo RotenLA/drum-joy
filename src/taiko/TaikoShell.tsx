@@ -107,7 +107,7 @@ export function TaikoShell() {
               <div className="flex items-center gap-2">
                 {(
                   [
-                    ["fall", "霓虹下落"],
+                    ["fall", "舞台下落"],
                     ["classic", "经典横向"],
                   ] as const
                 ).map(([mode, label]) => (
