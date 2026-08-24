@@ -89,7 +89,7 @@ function makeZone(
 /** 手区纵深（上半区） */
 const HAND_T = { t0: 0.3, t1: 0.62 } as const;
 /** 踏板纵深（更靠近玩家的低位横条） */
-const PEDAL_T = { t0: 0.68, t1: 0.93 } as const;
+const PEDAL_T = { t0: 0.66, t1: 0.93 } as const;
 
 /** 5 分区（默认，易上手）：下 2 踏板 + 上 3 手区 */
 export const FIVE_ZONES: readonly Zone[] = [

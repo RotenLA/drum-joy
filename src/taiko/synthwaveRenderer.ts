@@ -35,8 +35,8 @@ const COLORS = {
   horizonGlow: "rgba(255, 78, 138, 0.30)",
   groundFar: "#1c0a38",
   groundNear: "#05020c",
-  gridV: "rgba(86, 240, 255, 0.13)",
-  gridH: "rgba(255, 79, 216, 0.11)",
+  gridV: "rgba(86, 240, 255, 0.18)",
+  gridH: "rgba(255, 79, 216, 0.14)",
   sunTop: "#ffd23f",
   sunMid: "#ff9e3f",
   sunBottom: "#ff4e8a",
@@ -527,6 +527,21 @@ function drawCornerHud(
   ctx.restore();
 }
 
+/** 分区标签最后绘制，保证不被音符遮住 */
+function drawZoneLabels(ctx: CanvasRenderingContext2D, labels: readonly ZoneLabel[]) {
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.font = "10px ui-monospace, monospace";
+  for (const l of labels) {
+    ctx.shadowColor = "rgba(5, 2, 12, 0.9)";
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = rgba(l.color, 0.9);
+    ctx.fillText(l.text, l.x, l.y);
+  }
+  ctx.restore();
+}
+
 export function renderScene(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -534,12 +549,14 @@ export function renderScene(
   p: FallRenderParams,
 ) {
   const cam = makeCam(w, h);
+  const labels: ZoneLabel[] = [];
   drawBackdrop(ctx, w, h, p);
   drawSky(ctx, w, h, cam, p.now);
   drawSun(ctx, w, h, cam, p);
   drawMountains(ctx, w, h, cam);
   drawGround(ctx, w, h, cam);
-  drawZones(ctx, cam, p);
+  drawZones(ctx, cam, p, labels);
   drawNotes(ctx, cam, p);
+  drawZoneLabels(ctx, labels);
   drawCornerHud(ctx, w, p);
 }
