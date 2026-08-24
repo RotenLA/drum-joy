@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import coverUrl from "@/assets/synthwave-cover.jpg";
 import type { TaikoChart } from "@/shared/taikoChart";
-import { zonesFor, type LayoutMode, type Zone } from "./laneLayouts";
-import {
-  prepareBackdrop,
-  renderScene,
-  type Backdrop,
-} from "./synthwaveRenderer";
+import { PART_BY_NOTE, zonesFor, type LayoutMode } from "./laneLayouts";
+import { renderStage } from "./stageRenderer";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
@@ -28,31 +23,19 @@ export function FallScreen({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [playing, setPlaying] = useState(true);
   const timeRef = useRef(0);
+  /** partId -> 闪光截止时间戳 */
   const flashesRef = useRef<Record<string, number>>({});
-  const backdropRef = useRef<Backdrop | null>(null);
 
   const zones = useMemo(() => zonesFor(layout), [layout]);
-  const zoneByNote = useMemo(() => {
-    const m: Record<number, Zone> = {};
-    for (const z of zones) for (const n of z.notes) m[n] = z;
-    return m;
-  }, [zones]);
 
-  // 封面底图预处理一次（压暗 + 模糊）
-  useEffect(() => {
-    const img = new Image();
-    img.src = coverUrl;
-    img.onload = () => {
-      backdropRef.current = prepareBackdrop(img);
-    };
-  }, []);
-
-  // 键盘模拟击打（真实 MIDI 判定下一轮接入）
+  // 键盘模拟击打：点亮该分区包含的全部鼓盘（真实 MIDI 判定下一轮接入）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
       const z = zones.find((z) => z.key === e.key.toLowerCase());
-      if (z) flashesRef.current[z.id] = performance.now() + FLASH_MS;
+      if (!z) return;
+      const until = performance.now() + FLASH_MS;
+      for (const p of z.parts) flashesRef.current[p] = until;
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -88,7 +71,7 @@ export function FallScreen({
       const prev = timeRef.current;
       const t = playing ? (prev + dt) % chart.durationMs : prev;
 
-      // 自动演奏闪光：音符越过判定沿时点亮分区（未接判定前的观感验证）
+      // 自动演奏：音符到达鼓盘时点亮对应鼓盘（未接判定前的观感验证）
       if (playing) {
         for (const n of chart.notes) {
           if (n.note === undefined) continue;
@@ -97,23 +80,20 @@ export function FallScreen({
               ? n.timeMs > prev && n.timeMs <= t
               : n.timeMs > prev || n.timeMs <= t; // 循环回卷
           if (crossed) {
-            const z = zoneByNote[n.note];
-            if (z) flashesRef.current[z.id] = now + FLASH_MS;
+            const part = PART_BY_NOTE[n.note];
+            if (part) flashesRef.current[part] = now + FLASH_MS;
           }
         }
       }
       timeRef.current = t;
 
       const passed = chart.notes.filter((n) => n.timeMs <= t).length;
-      renderScene(ctx, canvas.clientWidth, canvas.clientHeight, {
+      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, {
         chart,
-        zones,
-        zoneByNote,
         timeMs: t,
         speed,
         now,
         flashes: flashesRef.current,
-        backdrop: backdropRef.current,
         combo: passed,
         score: passed * 120,
       });
@@ -125,7 +105,7 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [chart, playing, zones, zoneByNote, speed]);
+  }, [chart, playing, speed]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -135,7 +115,7 @@ export function FallScreen({
         style={{
           height: "min(64vh, 660px)",
           minHeight: 420,
-          backgroundColor: "#05020c",
+          backgroundColor: "#0a0a0c",
         }}
       >
         <canvas ref={canvasRef} className="block h-full w-full" />

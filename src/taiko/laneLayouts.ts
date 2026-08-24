@@ -1,9 +1,10 @@
 /**
- * 下落式模式：鼓件色板 / 分区布局 / 键盘映射
+ * 下落式模式：鼓件色板 / 分区布局 / 键盘映射 / 扇形鼓盘锚点
  *
  * 色值取自 AeroBand 鼓位图（两个踏板为补充定义，集中在此可改）。
- * 分区用「地面归一化坐标」定义：x ∈ [0,1] 横向，t ∈ [0,1] 纵深
- * （0 = 远/消失点，1 = 近/玩家），透视投影由 synthwaveRenderer 负责。
+ * 舞台下落式（stageRenderer）：9 个鼓盘按 PAD_ANCHORS 扇形排布，
+ * 音符从顶部消失点沿辐射车道滑向鼓盘，鼓盘即判定落点。
+ * Zone 的 x0/x1/t0/t1 地面矩形为旧渲染器遗留，当前仅分区/键盘映射在用。
  */
 
 export type PartId =
@@ -43,6 +44,36 @@ export const PART_BY_ID = Object.fromEntries(
 export const PART_BY_NOTE: Readonly<Record<number, PartId>> = Object.fromEntries(
   DRUM_PARTS.flatMap((p) => p.notes.map((n) => [n, p.id])),
 );
+
+export type PadKind = "drum" | "cymbal" | "pedal";
+
+/** 鼓盘在舞台上的摆位（归一化坐标，相对画布宽/高） */
+export interface PadAnchor {
+  /** 中心 x（0-1，相对画布宽） */
+  cx: number;
+  /** 中心 y（0-1，相对画布高，越大越靠近玩家） */
+  cy: number;
+  /** 横向半径（相对画布宽）；纵向半径按 kind 比例推算 */
+  r: number;
+  kind: PadKind;
+}
+
+/**
+ * 扇形鼓盘阵（鼓手视角，无遮挡 3D 透视）：
+ * 镲片在弧线两端偏高偏远，鼓居中，底鼓中央最前最大，踏板靠前。
+ * 摆位/大小要调整只改这张表。
+ */
+export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
+  crash: { cx: 0.1, cy: 0.58, r: 0.058, kind: "cymbal" },
+  hihat: { cx: 0.21, cy: 0.635, r: 0.052, kind: "cymbal" },
+  pedalHat: { cx: 0.3, cy: 0.8, r: 0.048, kind: "pedal" },
+  snare: { cx: 0.35, cy: 0.7, r: 0.058, kind: "drum" },
+  highTom: { cx: 0.44, cy: 0.615, r: 0.052, kind: "drum" },
+  midTom: { cx: 0.56, cy: 0.615, r: 0.052, kind: "drum" },
+  kick: { cx: 0.5, cy: 0.845, r: 0.082, kind: "drum" },
+  floorTom: { cx: 0.74, cy: 0.68, r: 0.058, kind: "drum" },
+  ride: { cx: 0.9, cy: 0.58, r: 0.058, kind: "cymbal" },
+};
 
 export type LayoutMode = "five" | "nine";
 
