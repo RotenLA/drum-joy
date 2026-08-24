@@ -1,46 +1,225 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { TaikoChart } from "@/shared/taikoChart";
-import { PART_BY_NOTE, zonesFor, type LayoutMode } from "./laneLayouts";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  KEY_BY_PART,
+  PART_BY_ID,
+  VISIBLE_PARTS,
+  partOfNote,
+  type LayoutMode,
+  type PartId,
+} from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
+import { useSong } from "./songStore";
+import { songPlayer } from "./player";
+import { midiManager } from "./midiInput";
+import { click as metronomeClick } from "./metronome";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
+/** 判定窗口：Perfect ±50ms / Good ±120ms，超时未击为 Miss（调手感改这里） */
+const PERFECT_MS = 50;
+const GOOD_MS = 120;
+/** 倒计时拍数（四分音符，无视拍号） */
+const COUNT_IN_BEATS = 4;
+
+type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
 export function FallScreen({
-  chart,
   layout,
   speed,
   onLayoutChange,
   onSpeedChange,
 }: {
-  chart: TaikoChart;
   layout: LayoutMode;
   speed: number;
   onLayoutChange: (m: LayoutMode) => void;
   onSpeedChange: (s: number) => void;
 }) {
+  const { audioBuffer, chart } = useSong();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [playing, setPlaying] = useState(true);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const phaseRef = useRef<Phase>("idle");
   const timeRef = useRef(0);
-  /** partId -> 闪光截止时间戳 */
   const flashesRef = useRef<Record<string, number>>({});
+  const missFlashesRef = useRef<Record<string, number>>({});
+  const judgementRef = useRef<{ text: string; color: string; until: number } | null>(null);
+  /** 0 未判定 / 1 命中 / 2 Miss */
+  const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
+  const statsRef = useRef({ perfect: 0, good: 0, miss: 0 });
+  const comboRef = useRef(0);
+  const maxComboRef = useRef(0);
+  const scoreRef = useRef(0);
+  const missCursorRef = useRef(0);
+  const timersRef = useRef<number[]>([]);
+  const countdownStartRef = useRef(0);
+  const countdownMsRef = useRef(0);
+  const beatMsRef = useRef(500);
 
-  const zones = useMemo(() => zonesFor(layout), [layout]);
+  const parts = VISIBLE_PARTS[layout];
 
-  // 键盘模拟击打：点亮该分区包含的全部鼓盘（真实 MIDI 判定下一轮接入）
+  /** 5 分区模式丢弃不可见部件的音符 */
+  const playChart = useMemo(() => {
+    if (!chart) return null;
+    const visible = new Set<PartId>(parts);
+    return {
+      ...chart,
+      notes: chart.notes.filter((n) => {
+        if (n.note === undefined) return false;
+        const p = partOfNote(n.note);
+        return p !== null && visible.has(p);
+      }),
+    };
+  }, [chart, parts]);
+
+  const setPhaseBoth = useCallback((p: Phase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  }, []);
+
+  const resetRun = useCallback(() => {
+    judgedRef.current = new Uint8Array(playChart?.notes.length ?? 0);
+    statsRef.current = { perfect: 0, good: 0, miss: 0 };
+    comboRef.current = 0;
+    maxComboRef.current = 0;
+    scoreRef.current = 0;
+    missCursorRef.current = 0;
+    flashesRef.current = {};
+    missFlashesRef.current = {};
+    judgementRef.current = null;
+  }, [playChart]);
+
+  // 音频装载 / 卸载
+  useEffect(() => {
+    songPlayer.load(audioBuffer);
+    setPhaseBoth("idle");
+    return () => songPlayer.stop();
+  }, [audioBuffer, setPhaseBoth]);
+
+  useEffect(() => {
+    songPlayer.setOnEnded(() => setPhaseBoth("ended"));
+    return () => songPlayer.setOnEnded(null);
+  }, [setPhaseBoth]);
+
+  useEffect(() => {
+    return () => {
+      timersRef.current.forEach((t) => window.clearTimeout(t));
+    };
+  }, []);
+
+  // 击打：闪光 + 命中判定（空击只闪光不惩罚）
+  const hitPart = useCallback(
+    (part: PartId) => {
+      const now = performance.now();
+      flashesRef.current[part] = now + FLASH_MS;
+      if (phaseRef.current !== "playing" || !playChart) return;
+      const t = timeRef.current;
+      const notes = playChart.notes;
+      let best = -1;
+      let bestDiff = Infinity;
+      for (let i = 0; i < notes.length; i++) {
+        if (judgedRef.current[i]) continue;
+        const n = notes[i]!;
+        if (n.note === undefined || partOfNote(n.note) !== part) continue;
+        const diff = Math.abs(n.timeMs - t);
+        if (diff <= GOOD_MS && diff < bestDiff) {
+          best = i;
+          bestDiff = diff;
+        }
+      }
+      if (best < 0) return;
+      judgedRef.current[best] = 1;
+      const perfect = bestDiff <= PERFECT_MS;
+      statsRef.current[perfect ? "perfect" : "good"]++;
+      comboRef.current++;
+      maxComboRef.current = Math.max(maxComboRef.current, comboRef.current);
+      scoreRef.current += perfect ? 300 : 100;
+      judgementRef.current = {
+        text: perfect ? "PERFECT" : "GOOD",
+        color: perfect ? "#ffd75e" : "#7dd3fc",
+        until: now + 500,
+      };
+    },
+    [playChart],
+  );
+
+  // MIDI 击打
+  useEffect(() => {
+    void midiManager.init();
+    return midiManager.onNote((note) => {
+      const part = partOfNote(note);
+      if (part && parts.includes(part)) hitPart(part);
+    });
+  }, [hitPart, parts]);
+
+  // 键盘调试（无 MIDI 设备时）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
-      const z = zones.find((z) => z.key === e.key.toLowerCase());
-      if (!z) return;
-      const until = performance.now() + FLASH_MS;
-      for (const p of z.parts) flashesRef.current[p] = until;
+      const k = e.key.toLowerCase();
+      for (const [part, v] of Object.entries(KEY_BY_PART) as [PartId, { key: string }][]) {
+        if (v.key === k && parts.includes(part)) {
+          hitPart(part);
+          return;
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zones]);
+  }, [hitPart, parts]);
 
+  // 手动开始 → 4 拍倒计时（四分音符）→ 播放
+  const start = useCallback(() => {
+    if (!audioBuffer || !playChart || playChart.notes.length === 0) return;
+    timersRef.current.forEach((t) => window.clearTimeout(t));
+    timersRef.current = [];
+    resetRun();
+    const beatMs = 60000 / playChart.bpm;
+    beatMsRef.current = beatMs;
+    countdownMsRef.current = COUNT_IN_BEATS * beatMs;
+    countdownStartRef.current = performance.now();
+    timeRef.current = -countdownMsRef.current;
+    setPhaseBoth("countdown");
+    for (let i = 0; i < COUNT_IN_BEATS; i++) {
+      timersRef.current.push(
+        window.setTimeout(() => metronomeClick(i === 0), i * beatMs),
+      );
+    }
+    timersRef.current.push(
+      window.setTimeout(() => {
+        songPlayer.play(0);
+        setPhaseBoth("playing");
+      }, COUNT_IN_BEATS * beatMs),
+    );
+  }, [audioBuffer, playChart, resetRun, setPhaseBoth]);
+
+  const togglePause = useCallback(() => {
+    if (phaseRef.current === "playing") {
+      songPlayer.pause();
+      setPhaseBoth("paused");
+    } else if (phaseRef.current === "paused") {
+      songPlayer.play();
+      setPhaseBoth("playing");
+    }
+  }, [setPhaseBoth]);
+
+  // 空格暂停/继续，回车开始
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === " " && (phaseRef.current === "playing" || phaseRef.current === "paused")) {
+        e.preventDefault();
+        togglePause();
+      } else if (
+        e.key === "Enter" &&
+        (phaseRef.current === "idle" || phaseRef.current === "ended")
+      ) {
+        start();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [togglePause, start]);
+
+  // 渲染循环
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
@@ -49,16 +228,12 @@ export function FallScreen({
     if (!ctx) return;
 
     let raf = 0;
-    let last = performance.now();
-
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
-      const w = wrap.clientWidth;
-      const h = wrap.clientHeight;
-      canvas.width = w * dpr;
-      canvas.height = h * dpr;
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
+      canvas.width = wrap.clientWidth * dpr;
+      canvas.height = wrap.clientHeight * dpr;
+      canvas.style.width = `${wrap.clientWidth}px`;
+      canvas.style.height = `${wrap.clientHeight}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
@@ -66,36 +241,64 @@ export function FallScreen({
     ro.observe(wrap);
 
     const draw = (now: number) => {
-      const dt = now - last;
-      last = now;
-      const prev = timeRef.current;
-      const t = playing ? (prev + dt) % chart.durationMs : prev;
-
-      // 自动演奏：音符到达鼓盘时点亮对应鼓盘（未接判定前的观感验证）
-      if (playing) {
-        for (const n of chart.notes) {
-          if (n.note === undefined) continue;
-          const crossed =
-            t >= prev
-              ? n.timeMs > prev && n.timeMs <= t
-              : n.timeMs > prev || n.timeMs <= t; // 循环回卷
-          if (crossed) {
-            const part = PART_BY_NOTE[n.note];
-            if (part) flashesRef.current[part] = now + FLASH_MS;
-          }
-        }
-      }
+      const ph = phaseRef.current;
+      let t = timeRef.current;
+      if (ph === "playing") t = songPlayer.timeMs();
+      else if (ph === "countdown") t = now - countdownStartRef.current - countdownMsRef.current;
+      else if (ph === "idle") t = 0;
+      // paused / ended：冻结
       timeRef.current = t;
 
-      const passed = chart.notes.filter((n) => n.timeMs <= t).length;
+      // Miss 检测：超过 Good 窗未击
+      if (ph === "playing" && playChart) {
+        const notes = playChart.notes;
+        let c = missCursorRef.current;
+        while (c < notes.length && notes[c]!.timeMs < t - GOOD_MS) {
+          if (!judgedRef.current[c]) {
+            judgedRef.current[c] = 2;
+            statsRef.current.miss++;
+            comboRef.current = 0;
+            const note = notes[c]!.note;
+            const p = note !== undefined ? partOfNote(note) : null;
+            if (p) missFlashesRef.current[p] = now + 240;
+            judgementRef.current = { text: "MISS", color: "#f87171", until: now + 500 };
+          }
+          c++;
+        }
+        missCursorRef.current = c;
+      }
+
+      const frameChart =
+        playChart ?? {
+          title: "",
+          bpm: 120,
+          timeSignature: [4, 4] as [number, number],
+          durationMs: 1,
+          notes: [],
+        };
+      const countText =
+        ph === "countdown"
+          ? String(
+              Math.max(
+                1,
+                Math.ceil((countdownMsRef.current - (now - countdownStartRef.current)) / beatMsRef.current),
+              ),
+            )
+          : null;
+
       renderStage(ctx, canvas.clientWidth, canvas.clientHeight, {
-        chart,
+        chart: frameChart,
         timeMs: t,
         speed,
         now,
         flashes: flashesRef.current,
-        combo: passed,
-        score: passed * 120,
+        missFlashes: missFlashesRef.current,
+        combo: comboRef.current,
+        score: scoreRef.current,
+        parts,
+        judgement: judgementRef.current,
+        countText,
+        stats: statsRef.current,
       });
       raf = requestAnimationFrame(draw);
     };
@@ -105,13 +308,17 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [chart, playing, speed]);
+  }, [playChart, speed, parts]);
+
+  const judged = statsRef.current;
+  const totalJudged = judged.perfect + judged.good + judged.miss;
+  const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
 
   return (
     <div className="flex flex-col gap-4">
       <div
         ref={wrapRef}
-        className="w-full overflow-hidden border border-[var(--taiko-line)]"
+        className="relative w-full overflow-hidden border border-[var(--taiko-line)]"
         style={{
           height: "min(64vh, 660px)",
           minHeight: 420,
@@ -119,22 +326,79 @@ export function FallScreen({
         }}
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
+
+        {/* 空态 / 开始 / 暂停 / 结算遮罩 */}
+        {!audioBuffer && (
+          <Overlay>
+            <p className="text-sm text-white/80">还没有歌曲</p>
+            <p className="text-xs text-white/50">请先到「谱面」屏导入 mp3 / wav 并生成谱面</p>
+          </Overlay>
+        )}
+        {audioBuffer && (!playChart || playChart.notes.length === 0) && (
+          <Overlay>
+            <p className="text-sm text-white/80">谱面为空</p>
+            <p className="text-xs text-white/50">请到「谱面」屏勾选至少一个节奏段落</p>
+          </Overlay>
+        )}
+        {audioBuffer && playChart && playChart.notes.length > 0 && phase === "idle" && (
+          <Overlay>
+            <button
+              onClick={start}
+              className="border border-white/70 px-10 py-3 text-base tracking-[0.3em] text-white transition-colors hover:bg-white hover:text-black"
+            >
+              开始
+            </button>
+            <p className="text-xs text-white/40">回车也可开始 · 空格暂停</p>
+          </Overlay>
+        )}
+        {phase === "paused" && (
+          <Overlay>
+            <p className="text-lg tracking-[0.3em] text-white">已暂停</p>
+            <div className="flex gap-3">
+              <button
+                onClick={togglePause}
+                className="border border-white/70 px-6 py-2 text-sm text-white transition-colors hover:bg-white hover:text-black"
+              >
+                继续
+              </button>
+              <button
+                onClick={start}
+                className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
+              >
+                重新开始
+              </button>
+            </div>
+          </Overlay>
+        )}
+        {phase === "ended" && (
+          <Overlay>
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Result</p>
+            <p className="text-3xl font-bold tabular-nums text-white">
+              {String(scoreRef.current).padStart(7, "0")}
+            </p>
+            <p className="text-sm tabular-nums text-white/75">
+              最大连击 {maxComboRef.current} · 准确率 {acc.toFixed(1)}%
+            </p>
+            <p className="text-xs tabular-nums text-white/50">
+              Perfect {judged.perfect} · Good {judged.good} · Miss {judged.miss}
+            </p>
+            <button
+              onClick={start}
+              className="mt-2 border border-white/70 px-8 py-2 text-sm tracking-[0.2em] text-white transition-colors hover:bg-white hover:text-black"
+            >
+              再来一次
+            </button>
+          </Overlay>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <button
-          onClick={() => setPlaying((p) => !p)}
-          className="border border-[var(--taiko-ink)] px-5 py-2 text-sm tracking-wide text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
+          onClick={togglePause}
+          disabled={phase !== "playing" && phase !== "paused"}
+          className="border border-[var(--taiko-ink)] px-5 py-2 text-sm tracking-wide text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:cursor-not-allowed disabled:opacity-30"
         >
-          {playing ? "暂停" : "播放"}
-        </button>
-        <button
-          onClick={() => {
-            timeRef.current = 0;
-          }}
-          className="border border-[var(--taiko-line)] px-5 py-2 text-sm tracking-wide text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-        >
-          回到开头
+          {phase === "paused" ? "继续" : "暂停"}
         </button>
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
@@ -175,20 +439,28 @@ export function FallScreen({
         ))}
 
         <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55">
-          {zones.map((z) => (
-            <span key={z.id} className="flex items-center gap-1.5">
+          {parts.map((p) => (
+            <span key={p} className="flex items-center gap-1.5">
               <kbd className="border border-[var(--taiko-line)] px-1.5 py-0.5 font-mono text-[10px]">
-                {z.keyLabel}
+                {KEY_BY_PART[p].label}
               </kbd>
               <i
                 className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: z.color }}
+                style={{ backgroundColor: PART_BY_ID[p].color }}
               />
-              {z.label}
+              {PART_BY_ID[p].label}
             </span>
           ))}
         </span>
       </div>
+    </div>
+  );
+}
+
+function Overlay({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/55">
+      {children}
     </div>
   );
 }
