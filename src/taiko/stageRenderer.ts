@@ -114,6 +114,22 @@ function gatePoint(anchor: PadAnchor, w: number, h: number) {
   return { x, y: g.y * h };
 }
 
+/**
+ * 鼓盘随车道旋转角（相对垂直方向的偏角）：长轴垂直于车道，与飞来音符同向，
+ * 扇形鼓阵「面向消失点」。中间列 ≈0°，外侧镲片约 ±36°，左右镜像对称。
+ * 踏板不适用（保持外八斜放）。
+ */
+function padRotation(anchor: PadAnchor, w: number, h: number): number {
+  const g = gatePoint(anchor, w, h);
+  return Math.atan2(anchor.cy * h - g.y, anchor.cx * w - g.x) - Math.PI / 2;
+}
+
+/** 踏板音符倾角：与踏板顶面 x 轴棱线平行（符号与各自踏板的镜像外八一致） */
+function pedalNoteAngle(part: PartId): number {
+  const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
+  return Math.atan2(Math.sin(th) * 0.42, Math.cos(th));
+}
+
 function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0a0a0c";
   ctx.fillRect(0, 0, w, h);
@@ -239,8 +255,10 @@ function drawNotes(
     const scale = (0.18 + 0.82 * p) * (big ? 1.35 : 1);
     const nw = Math.max(6, pad.rx * 0.8 * scale);
     const nh = Math.max(3, nw * 0.34);
-    // 芯片长边垂直于车道方向
-    const ang = Math.atan2(pad.cy - g0.y, pad.cx - g0.x) + Math.PI / 2;
+    // 芯片长边垂直于车道方向；踏板音符与踏板顶面棱线平行（踏板不随车道旋转）
+    const ang = anchor.square
+      ? pedalNoteAngle(part)
+      : Math.atan2(pad.cy - g0.y, pad.cx - g0.x) + Math.PI / 2;
     const color = PART_BY_ID[part].color;
     // 出生淡入：中/下排收束段在屏幕中段，避免音符凭空冒出
     const fadeIn = Math.min(1, t / 0.1);
@@ -474,6 +492,8 @@ function drawPad(
 
   ctx.save();
   ctx.translate(p.cx, p.cy);
+  // 鼓盘整体随车道旋转：鼓腔/盘面/描边/命中闪一起转，等效鼓面朝向来球方向倾斜
+  ctx.rotate(padRotation(anchor, w, h));
 
   if (isCymbal) {
     // 镲片边缘厚度：下方露出的暗色边带
