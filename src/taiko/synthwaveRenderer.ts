@@ -370,7 +370,7 @@ function drawGround(
 export function zoneNoteX(zone: Zone, note: number): number {
   const span = zone.x1 - zone.x0;
   if (zone.parts.length <= 1) return zone.x0 + span / 2;
-  const part = PART_BY_NOTE[note];
+  const part = PART_BY_NOTE[note] ?? zone.parts[0]!;
   const idx = Math.max(0, zone.parts.indexOf(part));
   return zone.x0 + (span * (idx + 0.5)) / zone.parts.length;
 }
