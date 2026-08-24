@@ -5,10 +5,10 @@
  * laneLayouts 的 PAD_ANCHORS / DRUM_PARTS，本文件只负责绘制。
  *
  * 场景：专辑封面墙（压灰压暗）+ 深色镜面地板（墙面翻转倒影，随深度渐隐），
- * 9 条细光车道从顶部「收束段」（宽约一个通鼓，非单点）辐射到各鼓盘，
+ * 9 条细光车道按「三排独立收束段」辐射到各排鼓盘（宽约一个通鼓，非单点），
  * 音符由小变大滑向鼓盘，鼓盘即判定落点，命中时鼓盘增亮回弹并喷火花粒子。
  * 接触阴影锚在各部件的地面接触线上，压扁比统一 = 同一地板视角；
- * 踏板为后缘收窄的透视楔块，与鼓共享俯视相机。
+ * 踏板为斜放的立方体（顶面旋转后按 0.42 均匀压扁，与鼓同一仿射地板）。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
 import stageWallUrl from "@/assets/stage-wall.jpg";
@@ -33,10 +33,15 @@ const wallImg = typeof Image !== "undefined" ? new Image() : null;
 if (wallImg) wallImg.src = stageWallUrl;
 
 /**
- * 车道收束段（顶部中央）：y 归一化，半宽 0.05 → 总宽 0.10w，
- * ≈ 高通/中通鼓面宽度（2×0.048w），避免所有车道挤成一个点。
+ * 车道收束段：三排（上/中/下）各自独立，横向半宽 0.05 → 总宽 0.10w
+ * ≈ 高通/中通鼓面宽度（2×0.048w）。分层后各排车道在屏幕上按高度分开，
+ * 不再长距离重叠；同列部件（高通↔踩镲踏板、中通↔底鼓）的车道接近平行。
  */
-const GATE = { y: 0.13, halfW: 0.05 } as const;
+const ROW_GATES = [
+  { y: 0.13, halfW: 0.05 },
+  { y: 0.3, halfW: 0.05 },
+  { y: 0.46, halfW: 0.05 },
+] as const;
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
@@ -45,6 +50,8 @@ const LEAD_MS = 2400;
 const EASE = 1.55;
 /** 命中闪光时长（与 FallScreen 的 FLASH_MS 对应） */
 const FLASH_MS = 200;
+/** 踏板斜放角：左右镜像「外八」，顶面正方形旋转后再按 0.42 压扁 */
+const PEDAL_TILT = (12 * Math.PI) / 180;
 
 export interface StageFrame {
   chart: TaikoChart;
@@ -91,18 +98,20 @@ function padPixels(a: PadAnchor, w: number, h: number) {
 /**
  * 各部件的地面接触线（相对鼓盘中心 cy 的向下偏移）。
  * 鼓 = 鼓腔底缘（侧深 0.9ry + 底椭圆 ry）；镲 = 镲片底缘（边带在 0.22ry 处）；
- * 踏板 = 楔块底边（ry + 侧沿 0.45ry）。接触阴影锚在这里，部件才不悬浮。
+ * 踏板 = 立方体盒底（旋转后顶面最大纵偏 ~1.19ry + 厚度 1.0ry）。
+ * 接触阴影锚在这里，部件才不悬浮。
  */
 function groundOffset(a: PadAnchor, ry: number): number {
-  if (a.square) return ry * 1.45;
+  if (a.square) return ry * 2.2;
   if (a.kind === "cymbal") return ry * 1.22;
   return ry * 1.9;
 }
 
-/** 车道起点（收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
-function gatePoint(padCx: number, w: number, h: number) {
-  const x = (0.5 + (padCx - 0.5) * (GATE.halfW / PAD_SPREAD)) * w;
-  return { x, y: GATE.y * h };
+/** 车道起点（本排收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
+function gatePoint(anchor: PadAnchor, w: number, h: number) {
+  const g = ROW_GATES[anchor.row];
+  const x = (0.5 + (anchor.cx - 0.5) * (g.halfW / PAD_SPREAD)) * w;
+  return { x, y: g.y * h };
 }
 
 function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -188,7 +197,7 @@ function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number) {
   for (const part of DRUM_PARTS) {
     const anchor = PAD_ANCHORS[part.id];
     const p = padPixels(anchor, w, h);
-    const g0 = gatePoint(anchor.cx, w, h);
+    const g0 = gatePoint(anchor, w, h);
     const g = ctx.createLinearGradient(g0.x, g0.y, p.cx, p.cy);
     g.addColorStop(0, "rgba(255,255,255,0)");
     g.addColorStop(1, "rgba(255,255,255,0.2)");
@@ -223,7 +232,7 @@ function drawNotes(
   for (const { part, t, big } of visible) {
     const anchor = PAD_ANCHORS[part];
     const pad = padPixels(anchor, w, h);
-    const g0 = gatePoint(anchor.cx, w, h);
+    const g0 = gatePoint(anchor, w, h);
     const p = Math.pow(t, EASE);
     const x = g0.x + (pad.cx - g0.x) * p;
     const y = g0.y + (pad.cy - g0.y) * p;
@@ -233,11 +242,13 @@ function drawNotes(
     // 芯片长边垂直于车道方向
     const ang = Math.atan2(pad.cy - g0.y, pad.cx - g0.x) + Math.PI / 2;
     const color = PART_BY_ID[part].color;
+    // 出生淡入：中/下排收束段在屏幕中段，避免音符凭空冒出
+    const fadeIn = Math.min(1, t / 0.1);
 
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(ang);
-    ctx.globalAlpha = 0.25 + 0.75 * p;
+    ctx.globalAlpha = (0.25 + 0.75 * p) * fadeIn;
     ctx.shadowColor = color;
     ctx.shadowBlur = 16 * scale;
     ctx.fillStyle = color;

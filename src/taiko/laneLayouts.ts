@@ -56,6 +56,8 @@ export interface PadAnchor {
   /** 横向半径（相对画布宽）；纵向半径按 kind 比例推算 */
   r: number;
   kind: PadKind;
+  /** 所属排（0=上排 1=中排 2=踏板排）：车道收束段按排独立计算，同列车道接近平行 */
+  row: 0 | 1 | 2;
   /** 方形鼓盘（脚踏板用，便于与手击鼓盘区分） */
   square?: boolean;
 }
@@ -64,21 +66,22 @@ export interface PadAnchor {
  * 鼓盘阵（AeroBand 鼓位图布局，压缩在屏幕下 1/3）：
  * 上排 4 件（镲片两端 + 高/中通居中，偏远偏小）、
  * 中排 3 件（踩镲/军鼓/地通）、下排 2 踏板（最近最大）。
+ * 三排纵向拉开、车道按排独立收束（stageRenderer 的 ROW_GATES）。
  * 摆位/大小要调整只改这张表。
  */
 export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
-  // 上排（偏远偏小）
-  crash: { cx: 0.16, cy: 0.66, r: 0.05, kind: "cymbal" },
-  highTom: { cx: 0.38, cy: 0.66, r: 0.048, kind: "drum" },
-  midTom: { cx: 0.62, cy: 0.66, r: 0.048, kind: "drum" },
-  ride: { cx: 0.84, cy: 0.66, r: 0.05, kind: "cymbal" },
-  // 中排（踩镲/地通内收，分别处于吊镲·高通与中通·叮叮镲的中下方）
-  hihat: { cx: 0.27, cy: 0.79, r: 0.056, kind: "cymbal" },
-  snare: { cx: 0.5, cy: 0.79, r: 0.06, kind: "drum" },
-  floorTom: { cx: 0.73, cy: 0.79, r: 0.06, kind: "drum" },
-  // 下排（最近一排，方形低趴踏板与手击鼓盘区分，两踏板等大，明显小于军鼓）
-  pedalHat: { cx: 0.35, cy: 0.91, r: 0.045, kind: "pedal", square: true },
-  kick: { cx: 0.65, cy: 0.91, r: 0.045, kind: "drum", square: true },
+  // 上排（row 0，偏远偏小）
+  crash: { cx: 0.16, cy: 0.64, r: 0.05, kind: "cymbal", row: 0 },
+  highTom: { cx: 0.38, cy: 0.64, r: 0.048, kind: "drum", row: 0 },
+  midTom: { cx: 0.62, cy: 0.64, r: 0.048, kind: "drum", row: 0 },
+  ride: { cx: 0.84, cy: 0.64, r: 0.05, kind: "cymbal", row: 0 },
+  // 中排（row 1，踩镲/地通内收，分别处于吊镲·高通与中通·叮叮镲的中下方）
+  hihat: { cx: 0.27, cy: 0.8, r: 0.056, kind: "cymbal", row: 1 },
+  snare: { cx: 0.5, cy: 0.8, r: 0.06, kind: "drum", row: 1 },
+  floorTom: { cx: 0.73, cy: 0.8, r: 0.06, kind: "drum", row: 1 },
+  // 下排（row 2，方形踏板与手击鼓盘区分，两踏板等大，明显小于军鼓）
+  pedalHat: { cx: 0.35, cy: 0.92, r: 0.045, kind: "pedal", square: true, row: 2 },
+  kick: { cx: 0.65, cy: 0.92, r: 0.045, kind: "drum", square: true, row: 2 },
 };
 
 export type LayoutMode = "five" | "nine";
