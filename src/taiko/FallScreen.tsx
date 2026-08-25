@@ -13,7 +13,12 @@ import { songPlayer } from "./player";
 import { midiManager } from "./midiInput";
 import { click as metronomeClick } from "./metronome";
 import { arrangeChart } from "./arrange";
-import { GROOVE_BY_ID } from "./groovePatterns";
+import {
+  GROOVE_BY_ID,
+  customIsEmpty,
+  patternFromCustom,
+  resizeCustom,
+} from "./groovePatterns";
 import { matchGroove } from "./grooveMatch";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
