@@ -20,8 +20,11 @@ export interface SongState {
   chart: TaikoChart | null;
   /** 鼓节奏分析段落（重新导入时清空） */
   segments: DrumSegment[];
-  /** 勾选的段落 id */
-  selectedSegmentIds: string[];
+  /** 单选的主体段落 id */
+  primarySegmentId: string | null;
+  /** 每小节鼓声活跃度（0–1）与稳定鼓声区间 */
+  barActivity: number[];
+  activeRange: [number, number] | null;
   metaSource: MetaSource | null;
 }
 
@@ -40,7 +43,9 @@ export function SongProvider({ children }: { children: ReactNode }) {
     offsetMs: 0,
     chart: null,
     segments: [],
-    selectedSegmentIds: [],
+    primarySegmentId: null,
+    barActivity: [],
+    activeRange: null,
     metaSource: null,
   });
 

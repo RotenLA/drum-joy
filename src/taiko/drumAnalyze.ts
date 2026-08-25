@@ -7,6 +7,7 @@
  */
 import { getDrumLane } from "@/shared/drumLaneMap";
 import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
+import type { LayoutMode, PartId } from "./laneLayouts";
 
 export type DrumBand = "kick" | "snare" | "hihat";
 
@@ -32,6 +33,14 @@ export interface DrumSegment {
   bars: number[];
   /** 检测时的每小节拍数（分段网格按它计算，改拍号后点「重新分析」重排） */
   beatsPerBar: number;
+}
+
+export interface DrumAnalysis {
+  segments: DrumSegment[];
+  /** 每小节鼓声活跃度，已归一化到 0–1 */
+  barActivity: number[];
+  /** 稳定鼓声开始/结束小节（均包含）；无有效鼓段时为 null */
+  activeRange: [number, number] | null;
 }
 
 const ANALYSIS_SR = 8000;
@@ -184,7 +193,7 @@ export async function analyzeDrums(
   bpm: number,
   offsetMs: number,
   timeSignature: [number, number],
-): Promise<DrumSegment[]> {
+): Promise<DrumAnalysis> {
   const beatMs = 60000 / bpm;
   const beatsPerBar = timeSignature[0] * (4 / timeSignature[1]);
   const bands: DrumBand[] = ["kick", "snare", "hihat"];
@@ -259,16 +268,91 @@ export async function analyzeDrums(
     };
   });
 
-  return segments
+  const rankedSegments = segments
     .filter((s) => s.notes.length > 0)
     .sort((a, b) => b.bars.length - a.bars.length || b.notes.length - a.notes.length)
     .slice(0, 12);
+
+  const barCount = Math.max(1, Math.ceil((buffer.duration * 1000 - offsetMs) / (beatMs * beatsPerBar)));
+  const rawActivity = Array.from({ length: barCount }, (_, bar) => {
+    const pattern = perBar.get(bar);
+    if (!pattern) return 0;
+    let score = 0;
+    for (const band of bands) {
+      const weight = band === "hihat" ? 0.55 : 1;
+      for (const hit of pattern.bm[band]) score += hit ? weight : 0;
+    }
+    return score;
+  });
+  const maxActivity = Math.max(0, ...rawActivity);
+  const barActivity = rawActivity.map((v) => (maxActivity > 0 ? v / maxActivity : 0));
+  const activeThreshold = 0.12;
+  const stableAt = (bar: number) => {
+    let active = 0;
+    for (let i = bar; i < Math.min(barCount, bar + 3); i++) {
+      if ((barActivity[i] ?? 0) >= activeThreshold) active++;
+    }
+    return active >= 2;
+  };
+  let activeStart = -1;
+  for (let bar = 0; bar < barCount; bar++) {
+    if (stableAt(bar)) {
+      activeStart = bar;
+      break;
+    }
+  }
+  let activeEnd = -1;
+  for (let bar = barCount - 1; bar >= 0; bar--) {
+    let active = 0;
+    for (let i = Math.max(0, bar - 2); i <= bar; i++) {
+      if ((barActivity[i] ?? 0) >= activeThreshold) active++;
+    }
+    if (active >= 2) {
+      activeEnd = bar;
+      break;
+    }
+  }
+  const detectedBars = [...perBar.keys()].sort((a, b) => a - b);
+  const fallbackRange: [number, number] | null = detectedBars.length
+    ? [detectedBars[0] ?? 0, detectedBars[detectedBars.length - 1] ?? 0]
+    : null;
+
+  return {
+    segments: rankedSegments,
+    barActivity,
+    activeRange:
+      activeStart >= 0 && activeEnd >= activeStart ? [activeStart, activeEnd] : fallbackRange,
+  };
 }
 
-/** 由勾选段落生成谱面（多段落重叠区域同键近邻去重） */
+const PART_NOTE: Record<PartId, number> = {
+  pedalHat: 44,
+  kick: 36,
+  hihat: 42,
+  crash: 49,
+  snare: 38,
+  highTom: 48,
+  midTom: 47,
+  floorTom: 43,
+  ride: 51,
+};
+
+function stableUnit(seed: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
+}
+
+/** 由单一主体生成整段谱面；同参数输出始终一致。 */
 export function buildChart(opts: {
   segments: DrumSegment[];
-  selectedIds: ReadonlySet<string>;
+  primarySegmentId: string | null;
+  barActivity: readonly number[];
+  activeRange: [number, number] | null;
+  layout: LayoutMode;
   bpm: number;
   offsetMs: number;
   timeSignature: [number, number];
@@ -277,16 +361,58 @@ export function buildChart(opts: {
 }): TaikoChart {
   const beatMs = 60000 / opts.bpm;
   const out: TaikoNote[] = [];
-  for (const seg of opts.segments) {
-    if (!opts.selectedIds.has(seg.id)) continue;
-    for (const bar of seg.bars) {
-      for (const n of seg.notes) {
-        const timeMs = opts.offsetMs + (bar * seg.beatsPerBar + n.beat) * beatMs;
-        if (timeMs < 0 || timeMs > opts.durationMs) continue;
-        const midi = BAND_NOTE[n.band];
-        const lane = getDrumLane(midi);
-        if (!lane) continue;
-        out.push({ timeMs, lane, note: midi });
+  const primary = opts.segments.find((s) => s.id === opts.primarySegmentId);
+  const range = opts.activeRange;
+
+  const add = (bar: number, beat: number, part: PartId) => {
+    if (!primary || beat < 0 || beat >= primary.beatsPerBar) return;
+    const timeMs = opts.offsetMs + (bar * primary.beatsPerBar + beat) * beatMs;
+    if (timeMs < 0 || timeMs > opts.durationMs) return;
+    const midi = PART_NOTE[part];
+    const lane = getDrumLane(midi);
+    if (lane) out.push({ timeMs, lane, note: midi });
+  };
+
+  if (primary && range) {
+    for (let bar = range[0]; bar <= range[1]; bar++) {
+      const activity = opts.barActivity[bar] ?? 0;
+      const prevActivity = opts.barActivity[bar - 1] ?? activity;
+      const phraseStart = bar === range[0] || bar % 8 === 0;
+      const phraseEnd = bar === range[1] || (bar + 1) % 4 === 0;
+      const rising = activity - prevActivity > 0.18;
+      const seed = `${opts.title}|${opts.primarySegmentId}|${opts.layout}|${bar}`;
+
+      // 主体骨架贯穿有效区间；极安静小节只保留底鼓/军鼓，形成自然呼吸。
+      for (const note of primary.notes) {
+        if (activity < 0.08 && note.band === "hihat") continue;
+        const part: PartId = note.band === "kick" ? "kick" : note.band === "snare" ? "snare" : "hihat";
+        add(bar, note.beat, part);
+      }
+
+      const strong = activity >= 0.55;
+      const veryStrong = activity >= 0.75;
+      if (phraseStart && (strong || rising)) add(bar, 0, "crash");
+
+      if (opts.layout === "five") {
+        if (phraseEnd && strong && stableUnit(`${seed}|floor`) < 0.62) {
+          add(bar, primary.beatsPerBar - 0.5, "floorTom");
+        }
+        if (veryStrong && stableUnit(`${seed}|pedal`) < 0.28) {
+          add(bar, Math.max(0, primary.beatsPerBar - 1), "pedalHat");
+        }
+      } else {
+        if (phraseEnd && strong) {
+          add(bar, primary.beatsPerBar - 0.75, "highTom");
+          if (stableUnit(`${seed}|mid`) < 0.72) add(bar, primary.beatsPerBar - 0.5, "midTom");
+          if (veryStrong) add(bar, primary.beatsPerBar - 0.25, "floorTom");
+        }
+        if (strong && stableUnit(`${seed}|tom`) < 0.2) {
+          add(bar, Math.max(0, primary.beatsPerBar / 2), "highTom");
+        }
+        if (veryStrong && stableUnit(`${seed}|ride`) < 0.14) add(bar, 0, "ride");
+        if (veryStrong && stableUnit(`${seed}|pedal`) < 0.1) {
+          add(bar, Math.max(0, primary.beatsPerBar - 1), "pedalHat");
+        }
       }
     }
   }
