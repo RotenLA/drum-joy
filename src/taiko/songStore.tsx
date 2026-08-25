@@ -81,12 +81,15 @@ export function SongProvider({ children }: { children: ReactNode }) {
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const patch: Partial<SongState> = {};
-      if (parsed.density === "easy" || parsed.density === "normal" || parsed.density === "raw") {
-        patch.density = parsed.density as Density;
+      const d = parsed["density"];
+      if (d === "easy" || d === "normal" || d === "raw") {
+        patch.density = d as Density;
       }
-      if (isStyleId(parsed.style)) patch.style = parsed.style;
-      if (typeof parsed.useCustom === "boolean") patch.useCustom = parsed.useCustom;
-      const cp = parsed.customPattern as Partial<CustomPattern> | undefined;
+      const st = parsed["style"];
+      if (isStyleId(st)) patch.style = st;
+      const uc = parsed["useCustom"];
+      if (typeof uc === "boolean") patch.useCustom = uc;
+      const cp = parsed["customPattern"] as Partial<CustomPattern> | undefined;
       if (cp && Array.isArray(cp.kick) && Array.isArray(cp.snare) && Array.isArray(cp.hihat)) {
         patch.customPattern = {
           kick: cp.kick.map(Boolean),
