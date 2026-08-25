@@ -22,15 +22,14 @@ const TIME_SIGS: readonly [number, number][] = [
   [6, 8],
 ];
 
-type MetaSource = "metadata" | "detect" | "manual";
-
 export function ChartScreen() {
   const song = useSong();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [metaSource, setMetaSource] = useState<MetaSource | null>(null);
-  const [segments, setSegments] = useState<DrumSegment[]>([]);
-  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  // 段落 / 勾选 / 来源标签存于 songStore：切屏卸载组件后不丢失
+  const segments = song.segments;
+  const selected = useMemo(() => new Set(song.selectedSegmentIds), [song.selectedSegmentIds]);
+  const metaSource = song.metaSource;
   const [playing, setPlaying] = useState(false);
   const [posMs, setPosMs] = useState(0);
   const [metroOn, setMetroOn] = useState(false);
@@ -52,19 +51,32 @@ export function ChartScreen() {
       setMetroOn(false);
       setSelMeasure(0);
       const fileName = meta.title || file.name.replace(/\.[^.]+$/, "");
-      song.setSong({ audioBuffer, fileName, chart: null });
+      song.setSong({
+        audioBuffer,
+        fileName,
+        chart: null,
+        segments: [],
+        selectedSegmentIds: [],
+        metaSource: null,
+      });
 
       setBusy("检测速度与拍号…");
       const det = await detectBeat(audioBuffer);
       const bpm = meta.bpm ?? det.bpm;
       const timeSignature = meta.timeSignature ?? det.timeSignature;
-      setMetaSource(meta.bpm || meta.timeSignature ? "metadata" : "detect");
-      song.setSong({ bpm, timeSignature, offsetMs: det.offsetMs });
+      song.setSong({
+        bpm,
+        timeSignature,
+        offsetMs: det.offsetMs,
+        metaSource: meta.bpm || meta.timeSignature ? "metadata" : "detect",
+      });
 
       setBusy("分析鼓节奏…");
       const segs = await analyzeDrums(audioBuffer, bpm, det.offsetMs, timeSignature);
-      setSegments(segs);
-      setSelected(new Set(segs.slice(0, 3).map((s) => s.id)));
+      song.setSong({
+        segments: segs,
+        selectedSegmentIds: segs.slice(0, 3).map((s) => s.id),
+      });
     } catch (err) {
       console.error(err);
       window.alert("导入失败：无法解码该音频文件");
@@ -78,8 +90,10 @@ export function ChartScreen() {
     setBusy("按当前 BPM/拍号重新分析…");
     try {
       const segs = await analyzeDrums(song.audioBuffer, song.bpm, song.offsetMs, song.timeSignature);
-      setSegments(segs);
-      setSelected(new Set(segs.slice(0, 3).map((s) => s.id)));
+      song.setSong({
+        segments: segs,
+        selectedSegmentIds: segs.slice(0, 3).map((s) => s.id),
+      });
     } finally {
       setBusy(null);
     }
@@ -136,13 +150,12 @@ export function ChartScreen() {
     return () => m.stop();
   }, [metroOn, song.bpm, song.timeSignature, song.offsetMs, song.audioBuffer]);
 
-  const toggleSegment = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleSegment = (id: string) => {
+    const next = new Set(song.selectedSegmentIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    song.setSong({ selectedSegmentIds: [...next] });
+  };
 
   const measures = useMemo(
     () => (chart ? splitByMeasure(chart, song.offsetMs) : []),
@@ -161,7 +174,9 @@ export function ChartScreen() {
     return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   };
 
-  const markManual = () => setMetaSource((s) => (s ? "manual" : s));
+  const markManual = () => {
+    if (song.metaSource) song.setSong({ metaSource: "manual" });
+  };
 
   // ---- 未导入：拖放区 ----
   if (!song.audioBuffer) {
@@ -337,13 +352,13 @@ export function ChartScreen() {
           </span>
           <span className="ml-auto flex gap-2">
             <button
-              onClick={() => setSelected(new Set(segments.map((s) => s.id)))}
+              onClick={() => song.setSong({ selectedSegmentIds: segments.map((s) => s.id) })}
               className="text-xs text-[var(--taiko-ink)]/60 underline-offset-2 hover:underline"
             >
               全选
             </button>
             <button
-              onClick={() => setSelected(new Set())}
+              onClick={() => song.setSong({ selectedSegmentIds: [] })}
               className="text-xs text-[var(--taiko-ink)]/60 underline-offset-2 hover:underline"
             >
               全不选

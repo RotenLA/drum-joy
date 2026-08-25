@@ -142,7 +142,66 @@ export async function detectBeat(buffer: AudioBuffer): Promise<BeatDetectResult>
   let bpm = 60000 / (bestLag * hopMs);
   while (bpm < 80) bpm *= 2;
   while (bpm > 180) bpm /= 2;
-  bpm = Math.round(bpm * 10) / 10;
+
+  // 3b. 精修 tempo：包络自相关在离散栅格上会「锁格」（整数 lag 总是
+  // 与自身完全对齐），无法突破帧分辨率（46ms → 128BPM 处 ±1% 误差，
+  // 60s 后网格漂移可达数百毫秒）。改用 onset 时刻做周期回归：
+  // 先抛物线插值出亚帧精度的 onset 峰值，再扫描使 onset 相位最集中
+  // （Rayleigh 统计量）的 lag，数百个 onset 平均后误差 ~0.01%。
+  const onsetFrames: number[] = [];
+  const onsetWeight: number[] = [];
+  {
+    let m = 0;
+    for (let i = 0; i < frameCount; i++) m += env[i]!;
+    m /= frameCount;
+    let sd = 0;
+    for (let i = 0; i < frameCount; i++) sd += (env[i]! - m) ** 2;
+    sd = Math.sqrt(sd / frameCount);
+    let thr = m + sd;
+    // 峰值过多时抬阈值（保留最强的 ~3000 个，控制扫描成本）
+    for (let attempt = 0; attempt < 6; attempt++) {
+      onsetFrames.length = 0;
+      onsetWeight.length = 0;
+      for (let i = 1; i < frameCount - 1; i++) {
+        const v = env[i]!;
+        if (v > thr && v >= env[i - 1]! && v >= env[i + 1]!) {
+          const a = env[i - 1]!;
+          const b2 = env[i + 1]!;
+          const d = a - 2 * v + b2;
+          const shift = d !== 0 ? (0.5 * (a - b2)) / d : 0;
+          onsetFrames.push(i + Math.max(-0.5, Math.min(0.5, shift)));
+          onsetWeight.push(v);
+        }
+      }
+      if (onsetFrames.length <= 3000) break;
+      thr *= 1.3;
+    }
+  }
+  if (onsetFrames.length >= 8) {
+    const lo = bestLag * (1 - 0.015);
+    const hi = bestLag * (1 + 0.015);
+    let fineLag = bestLag;
+    let fineScore = -1;
+    for (let lag = lo; lag <= hi; lag += 0.001) {
+      let rr = 0;
+      let ri = 0;
+      for (let k = 0; k < onsetFrames.length; k++) {
+        const ph = (onsetFrames[k]! / lag) % 1;
+        const ang = ph * 2 * Math.PI;
+        rr += onsetWeight[k]! * Math.cos(ang);
+        ri += onsetWeight[k]! * Math.sin(ang);
+      }
+      const s = rr * rr + ri * ri;
+      if (s > fineScore) {
+        fineScore = s;
+        fineLag = lag;
+      }
+    }
+    bpm = 60000 / (fineLag * hopMs);
+    while (bpm < 80) bpm *= 2;
+    while (bpm > 180) bpm /= 2;
+  }
+  bpm = Math.round(bpm * 100) / 100;
 
   // 4. 相位扫描估首拍偏移（只扫前 30 秒加速）
   const beatMs = 60000 / bpm;
@@ -206,9 +265,18 @@ export async function detectBeat(buffer: AudioBuffer): Promise<BeatDetectResult>
     { ts: [6, 8], score: score68() },
   ];
   candidates.sort((a, b) => b.score - a.score);
-  const top = candidates[0]!;
+  // 非 4/4 强保守化：流行/摇滚的「底鼓-军鼓」背拍结构没有传统意义的
+  // 强拍，重音周期法对 4/4 系统性低估、对 6/8 系统性假阳性；而拍号错
+  // 会让小节网格错位、节奏聚类碎片化。非 4/4 候选需领先 4/4 ≥60%
+  // （真正的 3/4、6/8 重音结构非常显著）才采纳，否则回退 4/4。
+  const c44 = candidates.find((c) => c.ts[0] === 4 && c.ts[1] === 4)!;
+  let top = candidates[0]!;
+  if (top !== c44) {
+    const margin = top.score > 0 ? (top.score - c44.score) / top.score : 0;
+    if (margin < 0.6) top = c44;
+  }
   // 置信度：与次优者的相对差距；过低默认 4/4
-  const second = candidates[1]!;
+  const second = candidates.find((c) => c !== top)!;
   const confidence =
     top.score > 0 ? Math.max(0, Math.min(1, (top.score - second.score) / top.score + 0.3)) : 0;
   const timeSignature: [number, number] =
