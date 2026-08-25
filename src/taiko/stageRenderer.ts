@@ -642,7 +642,6 @@ export function renderStage(
   drawBackground(ctx, w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
   drawLanes(ctx, w, h, parts);
-  drawNotes(ctx, w, h, f);
 
   // 远的鼓盘先画，近的压上层（无遮挡摆位下主要是保险）
   const sorted = [...parts].sort((a, b) => PAD_ANCHORS[a].cy - PAD_ANCHORS[b].cy);
@@ -657,6 +656,10 @@ export function renderStage(
     const miss = Math.max(0, Math.min(1, (missExpiry - f.now) / 240));
     drawPad(ctx, id, intensity, w, h, miss);
   }
+
+  // 音符画在鼓盘上层：靠近判定点不再被鼓面遮挡
+  drawNotes(ctx, w, h, f);
+
 
   drawParticles(ctx, f.now);
   drawVignette(ctx, w, h);
