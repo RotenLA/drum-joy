@@ -220,7 +220,7 @@ async function detectHits(buffer: AudioBuffer): Promise<Hit[]> {
     const handHit = f.high >= thrHigh || f.mid >= thrMid;
     if (handHit) {
       const snareLike =
-        brightness(f) <= brightMed * 0.95 && f.body >= Math.max(thrBody * 0.8, bodyMed * 0.55);
+        brightness(f) <= brightMed * 0.72 && f.body >= Math.max(thrBody, bodyMed * 0.95);
       bands.push(snareLike ? "snare" : "hihat");
     }
     if (bands.length === 0) continue;
