@@ -206,9 +206,17 @@ export async function detectBeat(buffer: AudioBuffer): Promise<BeatDetectResult>
     { ts: [6, 8], score: score68() },
   ];
   candidates.sort((a, b) => b.score - a.score);
-  const top = candidates[0]!;
+  // 6/8 保守化：16 分踩镲易造成假阳性，需明显领先（≥35%）才采纳，
+  // 否则在非 6/8 候选中重选（拍号错会让小节网格错位、节奏聚类碎片化）
+  let pool = candidates;
+  const first = candidates[0]!;
+  if (first.ts[0] === 6 && first.ts[1] === 8) {
+    const margin = first.score > 0 ? (first.score - candidates[1]!.score) / first.score : 0;
+    if (margin < 0.35) pool = candidates.filter((c) => c.ts[1] !== 8);
+  }
+  const top = pool[0]!;
   // 置信度：与次优者的相对差距；过低默认 4/4
-  const second = candidates[1]!;
+  const second = pool[1]!;
   const confidence =
     top.score > 0 ? Math.max(0, Math.min(1, (top.score - second.score) / top.score + 0.3)) : 0;
   const timeSignature: [number, number] =
