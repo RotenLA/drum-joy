@@ -188,24 +188,6 @@ async function detectHits(buffer: AudioBuffer): Promise<Hit[]> {
     }
     return m;
   };
-  const decayMs = (i: number) => {
-    const total = (j: number) =>
-      (env.low[j] ?? 0) * 0.5 + (env.body[j] ?? 0) + (env.mid[j] ?? 0) + (env.high[j] ?? 0);
-    let peakFrame = i;
-    let peakVal = total(i);
-    for (let j = i; j <= Math.min(frameCount - 1, i + 4); j++) {
-      const v = total(j);
-      if (v > peakVal) {
-        peakVal = v;
-        peakFrame = j;
-      }
-    }
-    if (peakVal <= 0) return 0;
-    for (let j = peakFrame + 1; j <= Math.min(frameCount - 1, peakFrame + 20); j++) {
-      if (total(j) < peakVal * 0.25) return (j - peakFrame) * HOP_MS;
-    }
-    return 20 * HOP_MS;
-  };
 
   const feats = peaks.map((i) => ({
     frame: i,
@@ -213,7 +195,6 @@ async function detectHits(buffer: AudioBuffer): Promise<Hit[]> {
     body: peakOf("body", i),
     mid: peakOf("mid", i),
     high: peakOf("high", i),
-    decay: decayMs(i),
   }));
 
   // ---- 自适应阈值（整曲分位数）----
