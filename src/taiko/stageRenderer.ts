@@ -113,11 +113,6 @@ function padRotation(anchor: PadAnchor, w: number, h: number): number {
   return Math.atan2(anchor.cy * h - g.y, anchor.cx * w - g.x) - Math.PI / 2;
 }
 
-/** 踏板音符倾角：与踏板顶面 x 轴棱线平行（符号与各自踏板的镜像外八一致） */
-function pedalNoteAngle(part: PartId): number {
-  const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
-  return Math.atan2(Math.sin(th) * 0.42, Math.cos(th));
-}
 
 function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0a0a0c";
