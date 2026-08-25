@@ -23,8 +23,8 @@ interface DensityRule {
 }
 
 export const DENSITY_RULES: Record<Density, DensityRule> = {
-  easy: { hatDiv: 1, maxPerBar: 6, minGapMs: 160 },
-  normal: { hatDiv: 2, maxPerBar: 10, minGapMs: 110 },
+  easy: { hatDiv: 1, maxPerBar: 9, minGapMs: 160 },
+  normal: { hatDiv: 2, maxPerBar: 14, minGapMs: 110 },
   raw: { hatDiv: 4, maxPerBar: Infinity, minGapMs: 0 },
 };
 
