@@ -224,6 +224,13 @@ async function detectHits(buffer: AudioBuffer): Promise<Hit[]> {
   const thrMid = thr("mid", 0.55, 0.05);
   const thrHigh = thr("high", 0.5, 0.04);
 
+  // 手击（军鼓 / 镲）用「亮度」相对判定：镲的 8k+ 能量相对 2–6k + 军鼓体感更突出。
+  // 注意：不能用衰减时间，密集混音里整体包络几乎不会掉到峰值 25% 以下。
+  const brightness = (f: (typeof feats)[number]) => f.high / (f.mid + f.body * 0.6 + 1e-6);
+  const handFeats = feats.filter((f) => f.high >= thrHigh || f.mid >= thrMid);
+  const brightMed = quantile(handFeats.map(brightness), 0.5) || 1;
+  const bodyMed = quantile(handFeats.map((f) => f.body), 0.5) || 1;
+
   const hits: Hit[] = [];
   for (const f of feats) {
     const bands: DrumBand[] = [];
@@ -232,7 +239,7 @@ async function detectHits(buffer: AudioBuffer): Promise<Hit[]> {
     const handHit = f.high >= thrHigh || f.mid >= thrMid;
     if (handHit) {
       const snareLike =
-        f.body >= thrBody && f.mid >= thrMid && f.decay <= 150 && f.high <= f.mid * 1.7;
+        brightness(f) <= brightMed * 0.95 && f.body >= Math.max(thrBody * 0.8, bodyMed * 0.55);
       bands.push(snareLike ? "snare" : "hihat");
     }
     if (bands.length === 0) continue;
