@@ -244,16 +244,8 @@ function drawNotes(
     }
     ctx.fill();
     ctx.stroke();
-
-    // 顶部高光弧
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = alpha * 0.6;
-    ctx.strokeStyle = "rgba(255,255,255,0.75)";
-    ctx.lineWidth = Math.max(1, rx * 0.1);
-    ctx.beginPath();
-    ctx.ellipse(0, -rx * 0.06, rx * 0.62, rx * 0.26, 0, Math.PI * 1.15, Math.PI * 1.85);
-    ctx.stroke();
     ctx.restore();
+
   }
 }
 
