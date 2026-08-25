@@ -398,7 +398,7 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         <div className="flex items-baseline gap-3">
           <h2 className="text-sm font-medium">鼓节奏段落</h2>
           <span className="text-xs text-[var(--taiko-ink)]/45">
-            选择一个主体节奏 · 将按歌曲强弱生成整段谱面
+            选择一个主体节奏 · 自动匹配基础节奏型后生成整段谱面
           </span>
         </div>
         {segments.length === 0 ? (
@@ -412,12 +412,66 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
                 key={seg.id}
                 seg={seg}
                 checked={song.primarySegmentId === seg.id}
-                onToggle={() => song.setSong({ primarySegmentId: seg.id })}
+                onToggle={() =>
+                  song.setSong({
+                    primarySegmentId: seg.id,
+                    grooveId: matchGroove(seg, song.bpm).id,
+                  })
+                }
               />
             ))}
           </div>
         )}
       </section>
+
+      {/* 基础节奏型 + 密度档位 */}
+      {segments.length > 0 && (
+        <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h2 className="text-sm font-medium">基础节奏型</h2>
+            <span className="text-xs text-[var(--taiko-ink)]/45">
+              自动匹配「{grooveRanking[0]?.pattern.label ?? "-"}」，可手动改选；
+              游玩谱面以基础型为主，偶尔加变体
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {grooveRanking.map(({ pattern }, i) => (
+              <button
+                key={pattern.id}
+                onClick={() => song.setSong({ grooveId: pattern.id })}
+                className={`border px-3 py-1.5 text-xs transition-colors ${
+                  groove.id === pattern.id
+                    ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                    : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+                }`}
+              >
+                {pattern.label}
+                {i === 0 ? " ·推荐" : ""}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[var(--taiko-ink)]/50">谱面密度</span>
+            {(["easy", "normal", "raw"] as Density[]).map((d) => (
+              <button
+                key={d}
+                onClick={() => song.setSong({ density: d })}
+                className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
+                  song.density === d
+                    ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                    : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+                }`}
+              >
+                {DENSITY_LABEL[d]}
+              </button>
+            ))}
+            <span className="text-xs text-[var(--taiko-ink)]/40">
+              轻松＝每小节最多 6 音、镲只到四分；标准＝最多 10 音、镲到八分
+            </span>
+          </div>
+        </section>
+      )}
+
 
       {/* 小节网格（只读，点击跳转播放） */}
       {chart && (
