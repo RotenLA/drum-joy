@@ -23,8 +23,8 @@ interface DensityRule {
 }
 
 export const DENSITY_RULES: Record<Density, DensityRule> = {
-  easy: { hatDiv: 1, maxPerBar: 6, minGapMs: 160 },
-  normal: { hatDiv: 2, maxPerBar: 10, minGapMs: 110 },
+  easy: { hatDiv: 1, maxPerBar: 9, minGapMs: 160 },
+  normal: { hatDiv: 2, maxPerBar: 14, minGapMs: 110 },
   raw: { hatDiv: 4, maxPerBar: Infinity, minGapMs: 0 },
 };
 
@@ -56,42 +56,68 @@ export function simplifyChart(
 
   let notes = [...chart.notes].sort((a, b) => a.timeMs - b.timeMs);
 
-  // 1) 镲细分降级：只保留落在允许网格上的镲
+  // 1) 镲细分降级：把镲吸附到允许网格（正拍优先），而不是整条丢弃
   if (rule.hatDiv < 4) {
     const gridBeats = 1 / rule.hatDiv;
-    notes = notes.filter((n) => {
-      if (partOf(n) !== "hihat") return true;
-      const b = beatInBar(n.timeMs);
-      const snapped = Math.round(b / gridBeats) * gridBeats;
-      return Math.abs(b - snapped) < 0.06;
-    });
-  }
-
-  // 2) 同一时刻多件同响 → 只保留优先级最高的一件
-  const collapsed: TaikoNote[] = [];
-  for (const n of notes) {
-    const last = collapsed[collapsed.length - 1];
-    if (last && Math.abs(last.timeMs - n.timeMs) < 40) {
-      if (PRIORITY[partOf(n)] < PRIORITY[partOf(last)]) collapsed[collapsed.length - 1] = n;
-      continue;
-    }
-    collapsed.push(n);
-  }
-  notes = collapsed;
-
-  // 3) 最小间隔：低优先级的那一个先让位
-  if (rule.minGapMs > 0) {
-    const gapped: TaikoNote[] = [];
+    const seen = new Set<string>();
+    const snappedNotes: TaikoNote[] = [];
     for (const n of notes) {
-      const last = gapped[gapped.length - 1];
-      if (last && n.timeMs - last.timeMs < rule.minGapMs) {
-        if (PRIORITY[partOf(n)] < PRIORITY[partOf(last)]) gapped[gapped.length - 1] = n;
+      if (partOf(n) !== "hihat" && partOf(n) !== "ride") {
+        snappedNotes.push(n);
         continue;
       }
-      gapped.push(n);
+      const b = beatInBar(n.timeMs);
+      const bar = barOf(n.timeMs);
+      const snapped = Math.round(b / gridBeats) * gridBeats;
+      if (snapped < 0 || snapped >= opts.beatsPerBar) continue;
+      const key = `${bar}|${snapped.toFixed(3)}|${n.note}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const timeMs = opts.offsetMs + (bar * opts.beatsPerBar + snapped) * beatMs;
+      snappedNotes.push({ ...n, timeMs });
     }
-    notes = gapped;
+    notes = snappedNotes.sort((a, b) => a.timeMs - b.timeMs);
   }
+  // 2) 同一时刻按肢体分组：脚（底鼓/踩镲踏板）与手各留优先级最高的一件
+  //    （底鼓 + 镲同拍是最自然的鼓型，不应被合并掉）
+  const clusters: TaikoNote[][] = [];
+  for (const n of notes) {
+    const last = clusters[clusters.length - 1];
+    if (last && Math.abs(last[0]!.timeMs - n.timeMs) < 40) last.push(n);
+    else clusters.push([n]);
+  }
+  const isFoot = (n: TaikoNote) => {
+    const p = partOf(n);
+    return p === "kick" || p === "pedalHat";
+  };
+  const reduced: TaikoNote[][] = clusters.map((group) => {
+    const pick = (list: TaikoNote[]) =>
+      list.length === 0
+        ? null
+        : list.reduce((a, b) => (PRIORITY[partOf(b)] < PRIORITY[partOf(a)] ? b : a));
+    const foot = pick(group.filter(isFoot));
+    const hand = pick(group.filter((n) => !isFoot(n)));
+    return [foot, hand].filter((n): n is TaikoNote => n !== null);
+  });
+
+  // 3) 最小间隔：整簇之间保持间隔，低优先级的簇先让位
+  let kept = reduced;
+  if (rule.minGapMs > 0) {
+    const gapped: TaikoNote[][] = [];
+    for (const group of kept) {
+      const last = gapped[gapped.length - 1];
+      if (last && group[0]!.timeMs - last[0]!.timeMs < rule.minGapMs) {
+        const bestNew = Math.min(...group.map((n) => PRIORITY[partOf(n)]));
+        const bestOld = Math.min(...last.map((n) => PRIORITY[partOf(n)]));
+        if (bestNew < bestOld) gapped[gapped.length - 1] = group;
+        continue;
+      }
+      gapped.push(group);
+    }
+    kept = gapped;
+  }
+  notes = kept.flat();
+
 
   // 4) 每小节上限：离强拍越远越先丢
   if (Number.isFinite(rule.maxPerBar)) {

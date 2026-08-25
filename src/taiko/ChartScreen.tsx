@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { measureDurationMs, splitByMeasure } from "@/shared/taikoChart";
 import { useSong } from "./songStore";
 import { parseAudioMeta } from "./audioMeta";
 import { detectBeat } from "./beatDetect";
@@ -11,9 +10,18 @@ import {
   type DrumSegment,
 } from "./drumAnalyze";
 import { arrangeChart } from "./arrange";
-import { GROOVE_BY_ID, GROOVE_PATTERNS } from "./groovePatterns";
+import {
+  GROOVE_BY_ID,
+  GROOVE_PATTERNS,
+  customIsEmpty,
+  emptyCustom,
+  patternFromCustom,
+  resizeCustom,
+  type CustomPattern,
+} from "./groovePatterns";
 import { matchGroove, scoreGrooves } from "./grooveMatch";
 import { DENSITY_LABEL, type Density } from "./chartSimplify";
+import { GROOVE_STYLES } from "./grooveStyles";
 import { PART_BY_ID } from "./laneLayouts";
 import type { LayoutMode } from "./laneLayouts";
 import { songPlayer } from "./player";
@@ -36,7 +44,6 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
   const [playing, setPlaying] = useState(false);
   const [posMs, setPosMs] = useState(0);
   const [metroOn, setMetroOn] = useState(false);
-  const [selMeasure, setSelMeasure] = useState(0);
   const [dragOver, setDragOver] = useState(false);
 
   const chart = song.chart;
@@ -52,7 +59,6 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
       setPlaying(false);
       setPosMs(0);
       setMetroOn(false);
-      setSelMeasure(0);
       const fileName = meta.title || file.name.replace(/\.[^.]+$/, "");
       song.setSong({
         audioBuffer,
@@ -126,19 +132,30 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     () => segments.find((s) => s.id === song.primarySegmentId) ?? null,
     [segments, song.primarySegmentId],
   );
-  /** 主体段落 → 基础节奏型排序（前几名给出推荐标记） */
+  /** 主体段落 → 基础节奏型排序（后台匹配，界面不再手动改选） */
   const grooveRanking = useMemo(
     () => scoreGrooves(primarySegment, song.bpm),
     [primarySegment, song.bpm],
   );
-  const groove =
-    (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ??
-    grooveRanking[0]?.pattern ??
-    GROOVE_PATTERNS[0]!;
+  const beatsPerBar = song.timeSignature[0] * (4 / song.timeSignature[1]);
+  const customCells = useMemo(
+    () => resizeCustom(song.customPattern, beatsPerBar),
+    [song.customPattern, beatsPerBar],
+  );
+  const customReady = song.useCustom && !customIsEmpty(customCells);
+  const groove = useMemo(() => {
+    if (customReady) return patternFromCustom(customCells, beatsPerBar, song.bpm);
+    return (
+      (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ??
+      grooveRanking[0]?.pattern ??
+      GROOVE_PATTERNS[0]!
+    );
+  }, [customReady, customCells, beatsPerBar, song.bpm, song.grooveId, grooveRanking]);
 
-  /** 选主体 / 改基础型 / 改档位 / 改速度拍号 / 改分区 → 重建预览谱面 */
+  /** 改主体 / 自定义节奏 / 难度 / 风格 / 速度拍号 / 分区 → 重建预览谱面 */
   useEffect(() => {
-    if (!song.audioBuffer || segments.length === 0) return;
+    if (!song.audioBuffer) return;
+    if (segments.length === 0 && !customReady) return;
     const next = arrangeChart({
       groove,
       barActivity: song.barActivity,
@@ -146,6 +163,7 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
       activeRange: song.activeRange,
       layout,
       density: song.density,
+      style: song.style,
       bpm: song.bpm,
       offsetMs: song.offsetMs,
       timeSignature: song.timeSignature,
@@ -157,12 +175,15 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
   }, [
     segments,
     groove,
+    customReady,
     song.density,
+    song.style,
     song.barActivity,
     song.barBands,
     song.activeRange,
     song.bpm,
     song.timeSignature,
+
     song.offsetMs,
     song.audioBuffer,
     song.fileName,
@@ -203,18 +224,6 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     });
     return () => m.stop();
   }, [metroOn, song.bpm, song.timeSignature, song.offsetMs, song.audioBuffer]);
-
-  const measures = useMemo(
-    () => (chart ? splitByMeasure(chart, song.offsetMs) : []),
-    [chart, song.offsetMs],
-  );
-  const measureMs = chart ? measureDurationMs(chart) : 0;
-
-  const seekMeasure = (i: number) => {
-    setSelMeasure(i);
-    songPlayer.seek(song.offsetMs + i * measureMs);
-    if (!songPlayer.playing) setPosMs(song.offsetMs + i * measureMs);
-  };
 
   const fmtTime = (ms: number) => {
     const s = Math.max(0, Math.floor(ms / 1000));
@@ -393,12 +402,12 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         </button>
       </div>
 
-      {/* 节奏段落卡片 */}
+      {/* 歌曲段落分析 */}
       <section className="flex flex-col gap-2">
         <div className="flex items-baseline gap-3">
-          <h2 className="text-sm font-medium">鼓节奏段落</h2>
+          <h2 className="text-sm font-medium">歌曲段落分析</h2>
           <span className="text-xs text-[var(--taiko-ink)]/45">
-            选择一个主体节奏 · 自动匹配基础节奏型后生成整段谱面
+            选择一个主体段落，或在下方自定义节奏中自己写一小节
           </span>
         </div>
         {segments.length === 0 ? (
@@ -411,9 +420,10 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
               <SegmentCard
                 key={seg.id}
                 seg={seg}
-                checked={song.primarySegmentId === seg.id}
+                checked={!song.useCustom && song.primarySegmentId === seg.id}
                 onToggle={() =>
                   song.setSong({
+                    useCustom: false,
                     primarySegmentId: seg.id,
                     grooveId: matchGroove(seg, song.bpm).id,
                   })
@@ -424,129 +434,102 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         )}
       </section>
 
-      {/* 基础节奏型 + 密度档位 */}
-      {segments.length > 0 && (
-        <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
-          <div className="flex flex-wrap items-baseline gap-3">
-            <h2 className="text-sm font-medium">基础节奏型</h2>
-            <span className="text-xs text-[var(--taiko-ink)]/45">
-              自动匹配「{grooveRanking[0]?.pattern.label ?? "-"}」，可手动改选；
-              游玩谱面以基础型为主，偶尔加变体
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {grooveRanking.map(({ pattern }, i) => (
-              <button
-                key={pattern.id}
-                onClick={() => song.setSong({ grooveId: pattern.id })}
-                className={`border px-3 py-1.5 text-xs transition-colors ${
-                  groove.id === pattern.id
-                    ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                    : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-                }`}
-              >
-                {pattern.label}
-                {i === 0 ? " ·推荐" : ""}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-[var(--taiko-ink)]/50">谱面密度</span>
-            {(["easy", "normal", "raw"] as Density[]).map((d) => (
-              <button
-                key={d}
-                onClick={() => song.setSong({ density: d })}
-                className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
-                  song.density === d
-                    ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                    : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-                }`}
-              >
-                {DENSITY_LABEL[d]}
-              </button>
-            ))}
-            <span className="text-xs text-[var(--taiko-ink)]/40">
-              轻松＝每小节最多 6 音、镲只到四分；标准＝最多 10 音、镲到八分
-            </span>
-          </div>
-        </section>
-      )}
-
-
-      {/* 小节网格（只读，点击跳转播放） */}
-      {chart && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_220px]">
-          <div className="flex flex-col divide-y divide-[var(--taiko-line)] border border-[var(--taiko-line)]">
-            {measures.length === 0 || chart.notes.length === 0 ? (
-              <p className="px-4 py-6 text-center text-xs text-[var(--taiko-ink)]/45">
-                谱面为空：请选择上方一个主体节奏
-              </p>
-            ) : (
-              measures.map((m, i) => {
-                const cells = Array.from({ length: 8 }, (_, s) => {
-                  const start = song.offsetMs + i * measureMs + (s * measureMs) / 8;
-                  const end = start + measureMs / 8;
-                  return m.find((n) => n.timeMs >= start && n.timeMs < end) ?? null;
-                });
-                return (
-                  <div
-                    key={i}
-                    onClick={() => seekMeasure(i)}
-                    title="点击从该小节播放"
-                    className={`flex cursor-pointer items-center gap-3 px-3 py-2 ${
-                      selMeasure === i ? "bg-[var(--taiko-ink)]/5" : "hover:bg-[var(--taiko-ink)]/5"
-                    }`}
-                  >
-                    <span className="w-8 shrink-0 text-xs tabular-nums text-[var(--taiko-ink)]/45">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <div className="grid flex-1 grid-cols-8 gap-[3px]">
-                      {cells.map((n, s) => {
-                        const part = n?.note !== undefined ? PART_BY_ID_COLOR(n.note) : null;
-                        return (
-                          <span
-                            key={s}
-                            className="flex h-7 items-center justify-center border border-[var(--taiko-line)]"
-                          >
-                            {n ? (
-                              <i
-                                className="block rounded-full"
-                                style={{
-                                  width: 12,
-                                  height: 12,
-                                  backgroundColor: part ?? "var(--taiko-ka)",
-                                }}
-                              />
-                            ) : null}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <aside className="h-fit border border-[var(--taiko-line)] p-4 text-sm text-[var(--taiko-ink)]">
-            <dl className="flex flex-col gap-3">
-              <Stat label="BPM" value={String(chart.bpm)} />
-              <Stat label="拍号" value={`${chart.timeSignature[0]}/${chart.timeSignature[1]}`} />
-              <Stat label="小节数" value={String(measures.length)} />
-              <Stat label="音符总数" value={String(chart.notes.length)} />
-              <Stat
-                label="主体节奏"
-                value={song.primarySegmentId ? `${segments.findIndex((s) => s.id === song.primarySegmentId) + 1} / ${segments.length}` : "未选择"}
-              />
-              <Stat label="基础型" value={groove.label} />
-              <Stat label="密度" value={DENSITY_LABEL[song.density]} />
-            </dl>
-            <p className="mt-4 text-xs leading-relaxed text-[var(--taiko-ink)]/45">
-              音符颜色对应鼓件颜色（底鼓红 / 军鼓蓝 / 镲橙）。点击小节可跳转试听。
-            </p>
-          </aside>
+      {/* 自定义节奏 */}
+      <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => song.setSong({ useCustom: !song.useCustom })}
+            aria-pressed={song.useCustom}
+            className="flex items-center gap-2 text-sm font-medium"
+          >
+            <i
+              className={`inline-block h-3 w-3 rounded-full border ${
+                song.useCustom
+                  ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]"
+                  : "border-[var(--taiko-line)]"
+              }`}
+            />
+            自定义节奏
+          </button>
+          <span className="text-xs text-[var(--taiko-ink)]/45">
+            一小节 · 16 分音符 · 勾选后以这一小节为骨架（与上方段落互斥）
+          </span>
+          <button
+            onClick={() =>
+              song.setSong({ customPattern: emptyCustom(beatsPerBar), grooveId: song.grooveId })
+            }
+            className="ml-auto border border-[var(--taiko-line)] px-3 py-1 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+          >
+            清空
+          </button>
+          <button
+            onClick={() => {
+              if (!primarySegment) return;
+              const next = emptyCustom(beatsPerBar);
+              for (const n of primarySegment.notes) {
+                const idx = Math.round(n.beat * 4);
+                if (idx < 0 || idx >= next.kick.length) continue;
+                next[n.band][idx] = true;
+              }
+              song.setSong({ customPattern: next });
+            }}
+            disabled={!primarySegment}
+            className="border border-[var(--taiko-line)] px-3 py-1 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
+          >
+            载入当前段落
+          </button>
         </div>
-      )}
+        <CustomRhythmEditor
+          cells={customCells}
+          onChange={(next) => song.setSong({ customPattern: next, useCustom: true })}
+        />
+      </section>
+
+      {/* 谱面难度 + 倾向风格 */}
+      <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-sm font-medium">谱面难度</h2>
+          <span className="text-xs text-[var(--taiko-ink)]/45">
+            轻松＝每小节最多 6 音、镲只在正拍；标准＝最多 10 音、镲到八分；原样＝不限
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-0">
+          {(["easy", "normal", "raw"] as Density[]).map((d) => (
+            <button
+              key={d}
+              onClick={() => song.setSong({ density: d })}
+              className={`-ml-px border border-[var(--taiko-line)] px-4 py-1.5 text-xs transition-colors first:ml-0 ${
+                song.density === d
+                  ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                  : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+              }`}
+            >
+              {DENSITY_LABEL[d]}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-[var(--taiko-ink)]/50">倾向风格</span>
+          {GROOVE_STYLES.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => song.setSong({ style: s.id })}
+              className={`border px-3 py-1.5 text-xs transition-colors ${
+                song.style === s.id
+                  ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                  : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-[var(--taiko-ink)]/40">
+          当前骨架：{groove.label}
+          {chart ? ` · 共 ${chart.notes.length} 音符` : ""}
+        </p>
+      </section>
+
     </div>
   );
 }
@@ -616,19 +599,62 @@ function SegmentCard({
   );
 }
 
-/** 音符 → 鼓件色（经 PART_BY_ID，色号与游玩屏一致） */
-function PART_BY_ID_COLOR(note: number): string | null {
-  for (const p of Object.values(PART_BY_ID)) {
-    if (p.notes.includes(note)) return p.color;
-  }
-  return null;
-}
 
-function Stat({ label, value }: { label: string; value: string }) {
+/** 自定义节奏编辑器：三轨（底鼓/军鼓/镲）× 16 分格子，长度随拍号 */
+function CustomRhythmEditor({
+  cells,
+  onChange,
+}: {
+  cells: CustomPattern;
+  onChange: (next: CustomPattern) => void;
+}) {
+  const tracks: { key: keyof CustomPattern; label: string; part: "kick" | "snare" | "hihat" }[] = [
+    { key: "kick", label: "底鼓", part: "kick" },
+    { key: "snare", label: "军鼓", part: "snare" },
+    { key: "hihat", label: "镲", part: "hihat" },
+  ];
+  const n = cells.kick.length;
   return (
-    <div className="flex items-baseline justify-between border-b border-[var(--taiko-line)] pb-2 last:border-0">
-      <dt className="text-xs uppercase tracking-[0.15em] text-[var(--taiko-ink)]/50">{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
+    <div className="flex flex-col gap-1">
+      {tracks.map((t) => (
+        <div key={t.key} className="flex items-center gap-2">
+          <span className="w-8 shrink-0 text-[10px] text-[var(--taiko-ink)]/45">{t.label}</span>
+          <div className="flex flex-1 gap-[2px]">
+            {cells[t.key].map((on, i) => (
+              <button
+                key={i}
+                aria-label={`${t.label} 第 ${i + 1} 格`}
+                onClick={() => {
+                  const next: CustomPattern = {
+                    kick: [...cells.kick],
+                    snare: [...cells.snare],
+                    hihat: [...cells.hihat],
+                  };
+                  next[t.key][i] = !on;
+                  onChange(next);
+                }}
+                className={`h-7 flex-1 border transition-colors ${
+                  i % 4 === 0 ? "border-l-2 border-l-[var(--taiko-ink)]/30" : ""
+                } ${on ? "border-transparent" : "border-[var(--taiko-line)] hover:bg-[var(--taiko-ink)]/10"}`}
+                style={on ? { backgroundColor: PART_BY_ID[t.part].color } : undefined}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center gap-2">
+        <span className="w-8 shrink-0" />
+        <div className="flex flex-1 gap-[2px]">
+          {Array.from({ length: n }, (_, i) => (
+            <span
+              key={i}
+              className="flex-1 text-center text-[9px] tabular-nums text-[var(--taiko-ink)]/35"
+            >
+              {i % 4 === 0 ? i / 4 + 1 : ""}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -9,6 +9,12 @@ import type { LayoutMode, PartId } from "./laneLayouts";
 import { VISIBLE_PARTS } from "./laneLayouts";
 import { hatBeats, scaleBeats, type GroovePattern } from "./groovePatterns";
 import { simplifyChart, type Density } from "./chartSimplify";
+import {
+  DEFAULT_STYLE,
+  FOUR_ON_FLOOR_STYLES,
+  STYLE_BY_ID,
+  type StyleId,
+} from "./grooveStyles";
 import type { BarBands } from "./drumAnalyze";
 
 const PART_NOTE: Record<PartId, number> = {
@@ -47,6 +53,7 @@ export interface ArrangeOptions {
   activeRange: [number, number] | null;
   layout: LayoutMode;
   density: Density;
+  style: StyleId;
   bpm: number;
   offsetMs: number;
   timeSignature: [number, number];
@@ -58,6 +65,7 @@ export function arrangeChart(opts: ArrangeOptions): TaikoChart {
   const beatMs = 60000 / opts.bpm;
   const beatsPerBar = opts.timeSignature[0] * (4 / opts.timeSignature[1]);
   const groove = opts.groove;
+  const style = STYLE_BY_ID[opts.style] ?? STYLE_BY_ID[DEFAULT_STYLE];
   const visible = new Set<PartId>(VISIBLE_PARTS[opts.layout]);
   const out: TaikoNote[] = [];
 
@@ -78,16 +86,26 @@ export function arrangeChart(opts: ArrangeOptions): TaikoChart {
     if (lane) out.push({ timeMs, lane, note: midi });
   };
 
-  const kickBeats = scaleBeats(groove.kick, groove.beatsPerBar, beatsPerBar);
+  let kickBeats = scaleBeats(groove.kick, groove.beatsPerBar, beatsPerBar);
   const snareBeats = scaleBeats(groove.snare, groove.beatsPerBar, beatsPerBar);
+  if (FOUR_ON_FLOOR_STYLES.has(style.id)) {
+    kickBeats = Array.from({ length: Math.floor(beatsPerBar) }, (_, i) => i);
+  }
   const range = opts.activeRange;
+
+  // 密度档位决定镲的最大细分；风格在此基础上微调，正拍始终保留
+  const densityCap: 1 | 2 | 4 =
+    opts.density === "easy" ? 1 : opts.density === "normal" ? 2 : 4;
+  const biased = Math.min(4, Math.max(1, groove.hatDiv + style.hatDivBias));
+  const hatDivFull = (Math.min(densityCap, biased === 3 ? 2 : biased) as 1 | 2 | 4);
+  const hatSwing = opts.density === "raw" ? (style.swing || groove.hatSwing || 0) : 0;
 
   if (range) {
     for (let bar = range[0]; bar <= range[1]; bar++) {
       const activity = opts.barActivity[bar] ?? 0;
       const prev = opts.barActivity[bar - 1] ?? activity;
       const bands = opts.barBands[bar];
-      const seed = `${opts.title}|${groove.id}|${opts.layout}|${opts.density}|${bar}`;
+      const seed = `${opts.title}|${groove.id}|${opts.layout}|${opts.density}|${style.id}|${bar}`;
       const phraseStart = bar === range[0] || bar % 8 === 0;
       const phraseEnd = bar === range[1] || (bar + 1) % 4 === 0;
       const rising = activity - prev > 0.18;
@@ -99,7 +117,8 @@ export function arrangeChart(opts: ArrangeOptions): TaikoChart {
         // 弱鼓段：只留镲或只留底鼓，按该小节哪一类更强
         const hatLead = (bands?.hihat ?? 0) >= (bands?.kick ?? 0);
         if (hatLead) {
-          for (let beat = 0; beat < beatsPerBar; beat += 1) add(bar, beat, "hihat");
+          const lead = style.rideLead ? "ride" : "hihat";
+          for (let beat = 0; beat < beatsPerBar; beat += 1) add(bar, beat, lead);
         } else {
           add(bar, 0, "kick");
           if (activity >= 0.1) add(bar, Math.floor(beatsPerBar / 2), "kick");
@@ -111,26 +130,44 @@ export function arrangeChart(opts: ArrangeOptions): TaikoChart {
       // 骨架
       for (const b of kickBeats) add(bar, b, "kick");
       for (const b of snareBeats) add(bar, b, "snare");
-      const div = full ? groove.hatDiv : ((Math.max(1, groove.hatDiv / 2) as 1 | 2 | 4));
-      for (const b of hatBeats(groove, beatsPerBar, div)) add(bar, b, "hihat");
+      const div = full ? hatDivFull : ((Math.max(1, hatDivFull / 2) as 1 | 2 | 4));
+      const lead = style.rideLead ? "ride" : "hihat";
+      for (const b of hatBeats(groove, beatsPerBar, div, hatSwing)) add(bar, b, lead);
+      if (style.pedalOnBackbeat && full) {
+        for (const b of snareBeats) add(bar, b, "pedalHat");
+      }
 
       if (!full) continue;
 
-      // 变体 / 装饰
+      // 变体 / 装饰（概率由倾向风格给出）
       const veryStrong = activity >= 0.75;
-      if (phraseStart && (veryStrong || rising)) add(bar, 0, "crash");
-      if (phraseEnd && stableUnit(`${seed}|fill`) < (veryStrong ? 0.7 : 0.4)) {
+      const boost = veryStrong ? 1 : 0.6;
+      if (phraseStart && (veryStrong || rising) && stableUnit(`${seed}|crash`) < style.crashProb) {
+        add(bar, 0, "crash");
+      }
+      if (phraseEnd && stableUnit(`${seed}|fill`) < style.fillProb * boost) {
         for (const hit of groove.fill) add(bar, beatsPerBar + hit.beat, hit.part);
       }
-      if (veryStrong && stableUnit(`${seed}|tom`) < 0.2) {
+      if (stableUnit(`${seed}|tom`) < style.tomProb * boost) {
         add(bar, Math.floor(beatsPerBar / 2) + 0.5, "highTom");
       }
-      if (veryStrong && stableUnit(`${seed}|ride`) < 0.12) add(bar, 0, "ride");
-      if (veryStrong && stableUnit(`${seed}|pedal`) < 0.12) {
+      if (stableUnit(`${seed}|ghost`) < style.ghostProb * boost) {
+        add(bar, Math.max(0, beatsPerBar - 1.5), "snare");
+      }
+      if (stableUnit(`${seed}|ksync`) < style.kickSyncProb * boost) {
+        add(bar, Math.max(0, beatsPerBar - 1.25), "kick");
+      }
+      if (!style.rideLead && veryStrong && stableUnit(`${seed}|ride`) < 0.12) add(bar, 0, "ride");
+      if (
+        !style.pedalOnBackbeat &&
+        veryStrong &&
+        stableUnit(`${seed}|pedal`) < 0.12
+      ) {
         add(bar, Math.max(0, beatsPerBar - 1), "pedalHat");
       }
     }
   }
+
 
   out.sort((a, b) => a.timeMs - b.timeMs);
   const dedup: TaikoNote[] = [];
