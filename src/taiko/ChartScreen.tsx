@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { measureDurationMs, splitByMeasure } from "@/shared/taikoChart";
 import { useSong } from "./songStore";
 import { parseAudioMeta } from "./audioMeta";
 import { detectBeat } from "./beatDetect";
@@ -45,7 +44,6 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
   const [playing, setPlaying] = useState(false);
   const [posMs, setPosMs] = useState(0);
   const [metroOn, setMetroOn] = useState(false);
-  const [selMeasure, setSelMeasure] = useState(0);
   const [dragOver, setDragOver] = useState(false);
 
   const chart = song.chart;
@@ -61,7 +59,6 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
       setPlaying(false);
       setPosMs(0);
       setMetroOn(false);
-      setSelMeasure(0);
       const fileName = meta.title || file.name.replace(/\.[^.]+$/, "");
       song.setSong({
         audioBuffer,
@@ -227,18 +224,6 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     });
     return () => m.stop();
   }, [metroOn, song.bpm, song.timeSignature, song.offsetMs, song.audioBuffer]);
-
-  const measures = useMemo(
-    () => (chart ? splitByMeasure(chart, song.offsetMs) : []),
-    [chart, song.offsetMs],
-  );
-  const measureMs = chart ? measureDurationMs(chart) : 0;
-
-  const seekMeasure = (i: number) => {
-    setSelMeasure(i);
-    songPlayer.seek(song.offsetMs + i * measureMs);
-    if (!songPlayer.playing) setPosMs(song.offsetMs + i * measureMs);
-  };
 
   const fmtTime = (ms: number) => {
     const s = Math.max(0, Math.floor(ms / 1000));
@@ -614,22 +599,6 @@ function SegmentCard({
   );
 }
 
-/** 音符 → 鼓件色（经 PART_BY_ID，色号与游玩屏一致） */
-function PART_BY_ID_COLOR(note: number): string | null {
-  for (const p of Object.values(PART_BY_ID)) {
-    if (p.notes.includes(note)) return p.color;
-  }
-  return null;
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between border-b border-[var(--taiko-line)] pb-2 last:border-0">
-      <dt className="text-xs uppercase tracking-[0.15em] text-[var(--taiko-ink)]/50">{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
-    </div>
-  );
-}
 
 /** 自定义节奏编辑器：三轨（底鼓/军鼓/镲）× 16 分格子，长度随拍号 */
 function CustomRhythmEditor({
