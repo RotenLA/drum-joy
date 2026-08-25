@@ -12,7 +12,9 @@ import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { midiManager } from "./midiInput";
 import { click as metronomeClick } from "./metronome";
-import { buildChart } from "./drumAnalyze";
+import { arrangeChart } from "./arrange";
+import { GROOVE_BY_ID } from "./groovePatterns";
+import { matchGroove } from "./grooveMatch";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
@@ -59,15 +61,19 @@ export function FallScreen({
 
   const parts = VISIBLE_PARTS[layout];
 
-  /** 根据当前分区从同一主体重新编谱，而不是删除另一分区的音符。 */
+  /** 以基础节奏型为骨架，按当前分区/密度档位重新编谱。 */
   const playChart = useMemo(() => {
     if (!audioBuffer || !song.primarySegmentId || song.segments.length === 0) return null;
-    return buildChart({
-      segments: song.segments,
-      primarySegmentId: song.primarySegmentId,
+    const primary = song.segments.find((s) => s.id === song.primarySegmentId) ?? null;
+    const groove =
+      (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ?? matchGroove(primary, song.bpm);
+    return arrangeChart({
+      groove,
       barActivity: song.barActivity,
+      barBands: song.barBands,
       activeRange: song.activeRange,
       layout,
+      density: song.density,
       bpm: song.bpm,
       offsetMs: song.offsetMs,
       timeSignature: song.timeSignature,
@@ -79,8 +85,11 @@ export function FallScreen({
     layout,
     song.activeRange,
     song.barActivity,
+    song.barBands,
     song.bpm,
+    song.density,
     song.fileName,
+    song.grooveId,
     song.offsetMs,
     song.primarySegmentId,
     song.segments,
