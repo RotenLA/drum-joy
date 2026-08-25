@@ -24,6 +24,8 @@ export interface GroovePattern {
   hatDiv: 1 | 2 | 4;
   /** 镲偏移（shuffle 用，占一拍的比例） */
   hatSwing?: number;
+  /** 自定义节奏的镲拍位（存在时优先于 hatDiv 展开） */
+  hatCustom?: number[];
   /** 适用 BPM 区间（软条件，超出只减分） */
   bpm: [number, number];
   /** 强度等级 1 安静 / 2 常规 / 3 激烈 */
