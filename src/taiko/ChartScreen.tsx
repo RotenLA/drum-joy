@@ -126,19 +126,30 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     () => segments.find((s) => s.id === song.primarySegmentId) ?? null,
     [segments, song.primarySegmentId],
   );
-  /** 主体段落 → 基础节奏型排序（前几名给出推荐标记） */
+  /** 主体段落 → 基础节奏型排序（后台匹配，界面不再手动改选） */
   const grooveRanking = useMemo(
     () => scoreGrooves(primarySegment, song.bpm),
     [primarySegment, song.bpm],
   );
-  const groove =
-    (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ??
-    grooveRanking[0]?.pattern ??
-    GROOVE_PATTERNS[0]!;
+  const beatsPerBar = song.timeSignature[0] * (4 / song.timeSignature[1]);
+  const customCells = useMemo(
+    () => resizeCustom(song.customPattern, beatsPerBar),
+    [song.customPattern, beatsPerBar],
+  );
+  const customReady = song.useCustom && !customIsEmpty(customCells);
+  const groove = useMemo(() => {
+    if (customReady) return patternFromCustom(customCells, beatsPerBar, song.bpm);
+    return (
+      (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ??
+      grooveRanking[0]?.pattern ??
+      GROOVE_PATTERNS[0]!
+    );
+  }, [customReady, customCells, beatsPerBar, song.bpm, song.grooveId, grooveRanking]);
 
-  /** 选主体 / 改基础型 / 改档位 / 改速度拍号 / 改分区 → 重建预览谱面 */
+  /** 改主体 / 自定义节奏 / 难度 / 风格 / 速度拍号 / 分区 → 重建预览谱面 */
   useEffect(() => {
-    if (!song.audioBuffer || segments.length === 0) return;
+    if (!song.audioBuffer) return;
+    if (segments.length === 0 && !customReady) return;
     const next = arrangeChart({
       groove,
       barActivity: song.barActivity,
@@ -146,6 +157,7 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
       activeRange: song.activeRange,
       layout,
       density: song.density,
+      style: song.style,
       bpm: song.bpm,
       offsetMs: song.offsetMs,
       timeSignature: song.timeSignature,
@@ -157,12 +169,15 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
   }, [
     segments,
     groove,
+    customReady,
     song.density,
+    song.style,
     song.barActivity,
     song.barBands,
     song.activeRange,
     song.bpm,
     song.timeSignature,
+
     song.offsetMs,
     song.audioBuffer,
     song.fileName,
