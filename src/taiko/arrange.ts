@@ -9,6 +9,12 @@ import type { LayoutMode, PartId } from "./laneLayouts";
 import { VISIBLE_PARTS } from "./laneLayouts";
 import { hatBeats, scaleBeats, type GroovePattern } from "./groovePatterns";
 import { simplifyChart, type Density } from "./chartSimplify";
+import {
+  DEFAULT_STYLE,
+  FOUR_ON_FLOOR_STYLES,
+  STYLE_BY_ID,
+  type StyleId,
+} from "./grooveStyles";
 import type { BarBands } from "./drumAnalyze";
 
 const PART_NOTE: Record<PartId, number> = {
