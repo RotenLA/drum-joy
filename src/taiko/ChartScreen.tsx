@@ -630,3 +630,62 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+/** 自定义节奏编辑器：三轨（底鼓/军鼓/镲）× 16 分格子，长度随拍号 */
+function CustomRhythmEditor({
+  cells,
+  onChange,
+}: {
+  cells: CustomPattern;
+  onChange: (next: CustomPattern) => void;
+}) {
+  const tracks: { key: keyof CustomPattern; label: string; part: "kick" | "snare" | "hihat" }[] = [
+    { key: "kick", label: "底鼓", part: "kick" },
+    { key: "snare", label: "军鼓", part: "snare" },
+    { key: "hihat", label: "镲", part: "hihat" },
+  ];
+  const n = cells.kick.length;
+  return (
+    <div className="flex flex-col gap-1">
+      {tracks.map((t) => (
+        <div key={t.key} className="flex items-center gap-2">
+          <span className="w-8 shrink-0 text-[10px] text-[var(--taiko-ink)]/45">{t.label}</span>
+          <div className="flex flex-1 gap-[2px]">
+            {cells[t.key].map((on, i) => (
+              <button
+                key={i}
+                aria-label={`${t.label} 第 ${i + 1} 格`}
+                onClick={() => {
+                  const next: CustomPattern = {
+                    kick: [...cells.kick],
+                    snare: [...cells.snare],
+                    hihat: [...cells.hihat],
+                  };
+                  next[t.key][i] = !on;
+                  onChange(next);
+                }}
+                className={`h-7 flex-1 border transition-colors ${
+                  i % 4 === 0 ? "border-l-2 border-l-[var(--taiko-ink)]/30" : ""
+                } ${on ? "border-transparent" : "border-[var(--taiko-line)] hover:bg-[var(--taiko-ink)]/10"}`}
+                style={on ? { backgroundColor: PART_BY_ID[t.part].color } : undefined}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center gap-2">
+        <span className="w-8 shrink-0" />
+        <div className="flex flex-1 gap-[2px]">
+          {Array.from({ length: n }, (_, i) => (
+            <span
+              key={i}
+              className="flex-1 text-center text-[9px] tabular-nums text-[var(--taiko-ink)]/35"
+            >
+              {i % 4 === 0 ? i / 4 + 1 : ""}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
