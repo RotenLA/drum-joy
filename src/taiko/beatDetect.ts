@@ -142,7 +142,29 @@ export async function detectBeat(buffer: AudioBuffer): Promise<BeatDetectResult>
   let bpm = 60000 / (bestLag * hopMs);
   while (bpm < 80) bpm *= 2;
   while (bpm > 180) bpm /= 2;
-  bpm = Math.round(bpm * 10) / 10;
+
+  // 3b. 细分自相关精修 tempo：粗估 lag ±1.5% 内按 0.005 帧步进扫描
+  // （线性插值采样包络）。整数帧分辨率带来 ±1% 级误差，反映在 16 分
+  // 网格上是随时间累积的漂移（60s 处可达数百毫秒），必须压到 ~0.05%。
+  {
+    const lo = bestLag * (1 - 0.015);
+    const hi = bestLag * (1 + 0.015);
+    let fineLag = bestLag;
+    let fineScore = -1;
+    for (let lag = lo; lag <= hi; lag += 0.005) {
+      let s = 0;
+      for (let i = 0; i + lag < frameCount; i++) s += env[i]! * sample(env, i + lag);
+      if (s > fineScore) {
+        fineScore = s;
+        fineLag = lag;
+      }
+    }
+    let fineBpm = 60000 / (fineLag * hopMs);
+    while (fineBpm < 80) fineBpm *= 2;
+    while (fineBpm > 180) fineBpm /= 2;
+    bpm = fineBpm;
+  }
+  bpm = Math.round(bpm * 100) / 100;
 
   // 4. 相位扫描估首拍偏移（只扫前 30 秒加速）
   const beatMs = 60000 / bpm;
@@ -206,17 +228,16 @@ export async function detectBeat(buffer: AudioBuffer): Promise<BeatDetectResult>
     { ts: [6, 8], score: score68() },
   ];
   candidates.sort((a, b) => b.score - a.score);
-  // 6/8 保守化：16 分踩镲易造成假阳性，需明显领先（≥35%）才采纳，
-  // 否则在非 6/8 候选中重选（拍号错会让小节网格错位、节奏聚类碎片化）
-  let pool = candidates;
-  const first = candidates[0]!;
-  if (first.ts[0] === 6 && first.ts[1] === 8) {
-    const margin = first.score > 0 ? (first.score - candidates[1]!.score) / first.score : 0;
-    if (margin < 0.35) pool = candidates.filter((c) => c.ts[1] !== 8);
+  // 非 4/4 保守化：流行/摇滚绝大多数是 4/4；拍号错会让小节网格错位、
+  // 节奏聚类碎片化。非 4/4 候选需领先 4/4 ≥35% 才采纳，否则回退 4/4。
+  const c44 = candidates.find((c) => c.ts[0] === 4 && c.ts[1] === 4)!;
+  let top = candidates[0]!;
+  if (top !== c44) {
+    const margin = top.score > 0 ? (top.score - c44.score) / top.score : 0;
+    if (margin < 0.35) top = c44;
   }
-  const top = pool[0]!;
   // 置信度：与次优者的相对差距；过低默认 4/4
-  const second = pool[1]!;
+  const second = candidates.find((c) => c !== top)!;
   const confidence =
     top.score > 0 ? Math.max(0, Math.min(1, (top.score - second.score) / top.score + 0.3)) : 0;
   const timeSignature: [number, number] =
