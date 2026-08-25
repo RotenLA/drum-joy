@@ -391,8 +391,6 @@ export function buildChart(opts: {
 
       const strong = activity >= 0.55;
       const veryStrong = activity >= 0.75;
-      if (phraseStart && (strong || rising)) add(bar, 0, "crash");
-
       if (opts.layout === "five") {
         if (phraseEnd && strong && stableUnit(`${seed}|floor`) < 0.62) {
           add(bar, primary.beatsPerBar - 0.5, "floorTom");
@@ -401,6 +399,7 @@ export function buildChart(opts: {
           add(bar, Math.max(0, primary.beatsPerBar - 1), "pedalHat");
         }
       } else {
+        if (phraseStart && (strong || rising)) add(bar, 0, "crash");
         if (phraseEnd && strong) {
           add(bar, primary.beatsPerBar - 0.75, "highTom");
           if (stableUnit(`${seed}|mid`) < 0.72) add(bar, primary.beatsPerBar - 0.5, "midTom");

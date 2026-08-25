@@ -80,6 +80,7 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         primarySegmentId: analysis.segments[0]?.id ?? null,
         barActivity: analysis.barActivity,
         activeRange: analysis.activeRange,
+        chart: analysis.segments.length === 0 ? null : song.chart,
       });
     } catch (err) {
       console.error(err);
