@@ -110,6 +110,12 @@ export function FallScreen({
     setPhaseBoth("idle");
   }, [playChart, resetRun, setPhaseBoth]);
 
+  useEffect(() => {
+    if (playChart && song.chart !== playChart) song.setSong({ chart: playChart });
+    // playChart 只在编谱输入变化时重建；chart 本身不参与其依赖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playChart]);
+
   // 音频装载 / 卸载
   useEffect(() => {
     songPlayer.load(audioBuffer);
