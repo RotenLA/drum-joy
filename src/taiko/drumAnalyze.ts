@@ -113,9 +113,71 @@ function detectOnsets(pcm: Float32Array, band: DrumBand): number[] {
   return onsets;
 }
 
+// ---- 相似度聚类：真实演奏每小节有微小差异，不能用「完全相同」签名 ----
+
+/** 位图步进：每拍 4 步（16 分网格） */
+const STEPS_PER_BEAT = 4;
+/** 三段频带位图加权 Jaccard ≥ 此值归并为同一段落 */
+const CLUSTER_SIM = 0.7;
+/** 频带权重：底鼓/军鼓是节奏骨架，踩镲装饰性强、容忍差异 */
+const BAND_W: Record<DrumBand, number> = { kick: 1, snare: 1, hihat: 0.6 };
+
+type BandBitmap = Record<DrumBand, Uint8Array>;
+
+interface BarPattern {
+  bar: number;
+  bm: BandBitmap;
+}
+
+function emptyBitmap(steps: number): BandBitmap {
+  return {
+    kick: new Uint8Array(steps),
+    snare: new Uint8Array(steps),
+    hihat: new Uint8Array(steps),
+  };
+}
+
+/** 两小节型的加权 Jaccard 相似度（两空频带视为一致） */
+function bitmapSim(a: BandBitmap, b: BandBitmap, bands: readonly DrumBand[]): number {
+  let num = 0;
+  let den = 0;
+  for (const band of bands) {
+    const w = BAND_W[band];
+    const x = a[band];
+    const y = b[band];
+    let inter = 0;
+    let union = 0;
+    for (let i = 0; i < x.length; i++) {
+      if (x[i] && y[i]) inter++;
+      if (x[i] || y[i]) union++;
+    }
+    num += w * (union === 0 ? 1 : inter / union);
+    den += w;
+  }
+  return den > 0 ? num / den : 0;
+}
+
+/** 簇代表位图：成员多数表决（≥ 半数成员在该步有击则保留） */
+function majorityBitmap(
+  members: readonly BarPattern[],
+  steps: number,
+  bands: readonly DrumBand[],
+): BandBitmap {
+  const rep = emptyBitmap(steps);
+  for (const band of bands) {
+    for (let s = 0; s < steps; s++) {
+      let c = 0;
+      for (const m of members) if (m.bm[band][s]) c++;
+      if (c * 2 >= members.length) rep[band][s] = 1;
+    }
+  }
+  return rep;
+}
+
 /**
- * 分析整曲，返回节奏型段落卡片（按出现次数排序，最多 10 张）。
- * 分段/量化按传入的 bpm / offsetMs / timeSignature 网格进行。
+ * 分析整曲，返回节奏型段落卡片（按出现次数排序，最多 12 张）。
+ * 分段/量化按传入的 bpm / offsetMs / timeSignature 网格进行；
+ * 聚类按 16 分位图相似度归并，段落音符取簇成员的多数表决代表型。
  */
 export async function analyzeDrums(
   buffer: AudioBuffer,
@@ -126,8 +188,10 @@ export async function analyzeDrums(
   const beatMs = 60000 / bpm;
   const beatsPerBar = timeSignature[0] * (4 / timeSignature[1]);
   const bands: DrumBand[] = ["kick", "snare", "hihat"];
+  const steps = Math.max(STEPS_PER_BEAT, Math.round(beatsPerBar * STEPS_PER_BEAT));
 
-  const perBar = new Map<number, SegmentNote[]>();
+  // onset → 每小节步进位图
+  const perBar = new Map<number, BarPattern>();
   for (const band of bands) {
     const pcm = await renderBand(buffer, band);
     const onsets = detectOnsets(pcm, band);
@@ -137,35 +201,68 @@ export async function analyzeDrums(
       if (beat < 0) continue;
       const q = Math.round(beat / QUANT) * QUANT;
       const bar = Math.floor(q / beatsPerBar);
-      const beatInBar = Math.round((q - bar * beatsPerBar) * 100) / 100;
-      const arr = perBar.get(bar) ?? [];
-      if (!arr.some((n) => n.beat === beatInBar && n.band === band)) {
-        arr.push({ beat: beatInBar, band });
+      const step = Math.round((q - bar * beatsPerBar) * STEPS_PER_BEAT);
+      if (step < 0 || step >= steps) continue;
+      let p = perBar.get(bar);
+      if (!p) {
+        p = { bar, bm: emptyBitmap(steps) };
+        perBar.set(bar, p);
       }
-      perBar.set(bar, arr);
+      p.bm[band][step] = 1;
     }
   }
 
-  // 聚类：完全相同的小节型归为一类
-  const clusters = new Map<string, DrumSegment>();
-  let idx = 0;
-  for (const [bar, notes] of [...perBar.entries()].sort((a, b) => a[0] - b[0])) {
-    if (notes.length === 0) continue;
-    const sorted = [...notes].sort(
-      (a, b) => a.beat - b.beat || a.band.localeCompare(b.band),
-    );
-    const sig = sorted.map((n) => `${n.beat}:${n.band}`).join("|");
-    const seg = clusters.get(sig);
-    if (seg) seg.bars.push(bar);
-    else clusters.set(sig, { id: `seg-${idx++}`, notes: sorted, bars: [bar], beatsPerBar });
+  // 贪心相似度聚类（按小节顺序；与现有簇代表比较，归并最相似者）
+  interface Cluster {
+    id: string;
+    members: BarPattern[];
+    rep: BandBitmap;
+  }
+  const clusters: Cluster[] = [];
+  for (const p of [...perBar.values()].sort((a, b) => a.bar - b.bar)) {
+    let best: Cluster | null = null;
+    let bestSim = 0;
+    for (const c of clusters) {
+      const s = bitmapSim(p.bm, c.rep, bands);
+      if (s > bestSim) {
+        bestSim = s;
+        best = c;
+      }
+    }
+    if (best && bestSim >= CLUSTER_SIM) {
+      best.members.push(p);
+      best.rep = majorityBitmap(best.members, steps, bands);
+    } else {
+      clusters.push({
+        id: `seg-${clusters.length}`,
+        members: [p],
+        rep: majorityBitmap([p], steps, bands),
+      });
+    }
   }
 
-  return [...clusters.values()]
-    .filter((s) => s.bars.length >= 2 || s.notes.length >= 6)
-    .sort(
-      (a, b) => b.bars.length - a.bars.length || b.notes.length - a.notes.length,
-    )
-    .slice(0, 10);
+  // 代表位图 → 段落音符；按出现次数排序，单次段落自然排后
+  const segments: DrumSegment[] = clusters.map((c) => {
+    const notes: SegmentNote[] = [];
+    for (const band of bands) {
+      const bm = c.rep[band];
+      for (let s = 0; s < steps; s++) {
+        if (bm[s]) notes.push({ beat: Math.round((s / STEPS_PER_BEAT) * 100) / 100, band });
+      }
+    }
+    notes.sort((a, b) => a.beat - b.beat || a.band.localeCompare(b.band));
+    return {
+      id: c.id,
+      notes,
+      bars: c.members.map((m) => m.bar).sort((a, b) => a - b),
+      beatsPerBar,
+    };
+  });
+
+  return segments
+    .filter((s) => s.notes.length > 0)
+    .sort((a, b) => b.bars.length - a.bars.length || b.notes.length - a.notes.length)
+    .slice(0, 12);
 }
 
 /** 由勾选段落生成谱面（多段落重叠区域同键近邻去重） */
