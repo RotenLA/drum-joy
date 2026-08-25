@@ -135,14 +135,15 @@ export function arrangeChart(opts: ArrangeOptions): TaikoChart {
   out.sort((a, b) => a.timeMs - b.timeMs);
   const dedup: TaikoNote[] = [];
   for (const n of out) {
-    if (
-      dedup.some(
-        (m) => m.note === n.note && Math.abs(m.timeMs - n.timeMs) < 40,
-      )
-    ) {
-      continue;
+    let dup = false;
+    for (let i = dedup.length - 1; i >= 0 && i >= dedup.length - 6; i--) {
+      const m = dedup[i]!;
+      if (m.note === n.note && Math.abs(m.timeMs - n.timeMs) < 40) {
+        dup = true;
+        break;
+      }
     }
-    dedup.push(n);
+    if (!dup) dedup.push(n);
   }
 
   const chart: TaikoChart = {
