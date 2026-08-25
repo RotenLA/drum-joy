@@ -60,7 +60,9 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         chart: null,
         segments: [],
         primarySegmentId: null,
+        grooveId: null,
         barActivity: [],
+        barBands: [],
         activeRange: null,
         metaSource: null,
       });
@@ -78,10 +80,13 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
 
       setBusy("分析鼓节奏…");
       const analysis = await analyzeDrums(audioBuffer, bpm, det.offsetMs, timeSignature);
+      const primary = analysis.segments[0] ?? null;
       song.setSong({
         segments: analysis.segments,
-        primarySegmentId: analysis.segments[0]?.id ?? null,
+        primarySegmentId: primary?.id ?? null,
+        grooveId: matchGroove(primary, bpm).id,
         barActivity: analysis.barActivity,
+        barBands: analysis.barBands,
         activeRange: analysis.activeRange,
         chart: analysis.segments.length === 0 ? null : song.chart,
       });
@@ -103,10 +108,13 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         song.offsetMs,
         song.timeSignature,
       );
+      const primary = analysis.segments[0] ?? null;
       song.setSong({
         segments: analysis.segments,
-        primarySegmentId: analysis.segments[0]?.id ?? null,
+        primarySegmentId: primary?.id ?? null,
+        grooveId: matchGroove(primary, song.bpm).id,
         barActivity: analysis.barActivity,
+        barBands: analysis.barBands,
         activeRange: analysis.activeRange,
       });
     } finally {
@@ -114,15 +122,30 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     }
   };
 
-  // ---- 主体段落 / 改速度拍号 / 改分区 → 重建预览谱面 ----
+  const primarySegment = useMemo(
+    () => segments.find((s) => s.id === song.primarySegmentId) ?? null,
+    [segments, song.primarySegmentId],
+  );
+  /** 主体段落 → 基础节奏型排序（前几名给出推荐标记） */
+  const grooveRanking = useMemo(
+    () => scoreGrooves(primarySegment, song.bpm),
+    [primarySegment, song.bpm],
+  );
+  const groove =
+    (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ??
+    grooveRanking[0]?.pattern ??
+    GROOVE_PATTERNS[0]!;
+
+  /** 选主体 / 改基础型 / 改档位 / 改速度拍号 / 改分区 → 重建预览谱面 */
   useEffect(() => {
     if (!song.audioBuffer || segments.length === 0) return;
-    const next = buildChart({
-      segments,
-      primarySegmentId: song.primarySegmentId,
+    const next = arrangeChart({
+      groove,
       barActivity: song.barActivity,
+      barBands: song.barBands,
       activeRange: song.activeRange,
       layout,
+      density: song.density,
       bpm: song.bpm,
       offsetMs: song.offsetMs,
       timeSignature: song.timeSignature,
@@ -133,8 +156,10 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     segments,
-    song.primarySegmentId,
+    groove,
+    song.density,
     song.barActivity,
+    song.barBands,
     song.activeRange,
     song.bpm,
     song.timeSignature,
