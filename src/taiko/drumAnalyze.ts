@@ -1,9 +1,9 @@
 /**
  * 鼓节奏自动分析：三频带 onset 检测 → 量化到节拍网格 → 按小节聚类节奏型，
- * 产出可勾选的 MIDI 段落卡片；勾选的段落按其实际出现的小节铺进谱面。
+ * 产出可单选为主体的 MIDI 段落卡片，并记录逐小节活跃度供全曲编谱。
  *
  * 启发式：低频→底鼓、中频→军鼓、高频→踩镲。混音复杂时会误判，
- * 界面需标注「自动分析仅供参考」，最终谱面由用户勾选段落确认。
+ * 界面需标注「自动分析仅供参考」，最终谱面由用户选择主体后生成。
  */
 import { getDrumLane } from "@/shared/drumLaneMap";
 import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
@@ -374,6 +374,7 @@ export function buildChart(opts: {
   };
 
   if (primary && range) {
+    const primaryBands = new Set(primary.notes.map((note) => note.band));
     for (let bar = range[0]; bar <= range[1]; bar++) {
       const activity = opts.barActivity[bar] ?? 0;
       const prevActivity = opts.barActivity[bar - 1] ?? activity;
@@ -387,6 +388,12 @@ export function buildChart(opts: {
         if (activity < 0.08 && note.band === "hihat") continue;
         const part: PartId = note.band === "kick" ? "kick" : note.band === "snare" ? "snare" : "hihat";
         add(bar, note.beat, part);
+      }
+      // 主体缺少某个核心鼓件时补最小骨架，确保三类核心音符始终占最高频率。
+      if (!primaryBands.has("kick")) add(bar, 0, "kick");
+      if (!primaryBands.has("snare")) add(bar, Math.min(1, primary.beatsPerBar / 2), "snare");
+      if (!primaryBands.has("hihat") && activity >= 0.08) {
+        for (let beat = 0; beat < primary.beatsPerBar; beat += 1) add(bar, beat, "hihat");
       }
 
       const strong = activity >= 0.55;

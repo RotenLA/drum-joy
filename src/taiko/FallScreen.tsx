@@ -365,7 +365,7 @@ export function FallScreen({
         {audioBuffer && (!playChart || playChart.notes.length === 0) && (
           <Overlay>
             <p className="text-sm text-white/80">谱面为空</p>
-            <p className="text-xs text-white/50">请到「谱面」屏勾选至少一个节奏段落</p>
+            <p className="text-xs text-white/50">请到「谱面」屏选择一个主体节奏</p>
           </Overlay>
         )}
         {audioBuffer && playChart && playChart.notes.length > 0 && phase === "idle" && (
