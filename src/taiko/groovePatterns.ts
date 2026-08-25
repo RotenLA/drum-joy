@@ -165,14 +165,33 @@ export const GROOVE_BY_ID = Object.fromEntries(
   GROOVE_PATTERNS.map((g) => [g.id, g]),
 ) as Record<string, GroovePattern>;
 
-/** 镲的拍位（按细分/摇摆展开到目标小节拍数） */
-export function hatBeats(pattern: GroovePattern, beatsPerBar: number, div?: 1 | 2 | 4): number[] {
+/**
+ * 镲的拍位（按细分/摇摆展开到目标小节拍数）。
+ * 始终从每拍正拍开始生成，正拍必有；细分降级时只去掉反拍与十六分。
+ */
+export function hatBeats(
+  pattern: GroovePattern,
+  beatsPerBar: number,
+  div?: 1 | 2 | 4,
+  swing?: number,
+): number[] {
   const d = div ?? pattern.hatDiv;
+  const sw = swing ?? pattern.hatSwing ?? 0;
+  if (pattern.hatCustom) {
+    // 自定义节奏：保留落在允许网格上的镲，并保证每拍正拍存在
+    const grid = 1 / d;
+    const set = new Set<number>();
+    for (const b of pattern.hatCustom) {
+      const snapped = Math.round(b / grid) * grid;
+      if (snapped >= 0 && snapped < beatsPerBar) set.add(Math.round(snapped * 1000) / 1000);
+    }
+    return [...set].sort((a, b) => a - b);
+  }
   const out: number[] = [];
   for (let beat = 0; beat < beatsPerBar; beat += 1) {
     for (let k = 0; k < d; k++) {
       let b = beat + k / d;
-      if (pattern.hatSwing && d === 2 && k === 1) b = beat + 0.5 + pattern.hatSwing;
+      if (sw && d === 2 && k === 1) b = beat + 0.5 + sw;
       if (b < beatsPerBar) out.push(Math.round(b * 1000) / 1000);
     }
   }
@@ -187,3 +206,63 @@ export function scaleBeats(beats: readonly number[], from: number, to: number): 
     .map((b) => Math.round(b * k * 4) / 4)
     .filter((b) => b >= 0 && b < to);
 }
+
+/** 自定义一小节（三轨 16 分位图）→ 临时基础节奏型 */
+export interface CustomPattern {
+  kick: boolean[];
+  snare: boolean[];
+  hihat: boolean[];
+}
+
+export const CUSTOM_GROOVE_ID = "__custom__";
+
+export function patternFromCustom(
+  custom: CustomPattern,
+  beatsPerBar: number,
+  bpm: number,
+): GroovePattern {
+  const toBeats = (cells: boolean[]) =>
+    cells
+      .map((on, i) => (on ? i / 4 : -1))
+      .filter((b) => b >= 0 && b < beatsPerBar);
+  const hats = toBeats(custom.hihat);
+  const hatPerBeat = hats.length / Math.max(1, beatsPerBar);
+  return {
+    id: CUSTOM_GROOVE_ID,
+    label: "自定义节奏",
+    beatsPerBar,
+    kick: toBeats(custom.kick),
+    snare: toBeats(custom.snare),
+    hatDiv: hatPerBeat >= 2.6 ? 4 : hatPerBeat >= 1.4 ? 2 : 1,
+    hatCustom: hats,
+    bpm: [Math.max(40, bpm - 40), bpm + 40],
+    intensity: 2,
+    fill: [
+      { beat: -0.5, part: "midTom" },
+      { beat: -0.25, part: "floorTom" },
+    ],
+  };
+}
+
+/** 空白自定义节奏（按拍号生成格子数） */
+export function emptyCustom(beatsPerBar: number): CustomPattern {
+  const n = Math.max(4, Math.round(beatsPerBar * 4));
+  return {
+    kick: Array<boolean>(n).fill(false),
+    snare: Array<boolean>(n).fill(false),
+    hihat: Array<boolean>(n).fill(false),
+  };
+}
+
+/** 调整自定义节奏长度以匹配拍号 */
+export function resizeCustom(custom: CustomPattern, beatsPerBar: number): CustomPattern {
+  const n = Math.max(4, Math.round(beatsPerBar * 4));
+  const fit = (cells: boolean[]) =>
+    Array.from({ length: n }, (_, i) => cells[i] ?? false);
+  return { kick: fit(custom.kick), snare: fit(custom.snare), hihat: fit(custom.hihat) };
+}
+
+export function customIsEmpty(custom: CustomPattern): boolean {
+  return ![...custom.kick, ...custom.snare, ...custom.hihat].some(Boolean);
+}
+
