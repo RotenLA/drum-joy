@@ -11,9 +11,18 @@ import {
   type DrumSegment,
 } from "./drumAnalyze";
 import { arrangeChart } from "./arrange";
-import { GROOVE_BY_ID, GROOVE_PATTERNS } from "./groovePatterns";
+import {
+  GROOVE_BY_ID,
+  GROOVE_PATTERNS,
+  customIsEmpty,
+  emptyCustom,
+  patternFromCustom,
+  resizeCustom,
+  type CustomPattern,
+} from "./groovePatterns";
 import { matchGroove, scoreGrooves } from "./grooveMatch";
 import { DENSITY_LABEL, type Density } from "./chartSimplify";
+import { GROOVE_STYLES } from "./grooveStyles";
 import { PART_BY_ID } from "./laneLayouts";
 import type { LayoutMode } from "./laneLayouts";
 import { songPlayer } from "./player";
