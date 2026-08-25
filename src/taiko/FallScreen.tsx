@@ -12,6 +12,7 @@ import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { midiManager } from "./midiInput";
 import { click as metronomeClick } from "./metronome";
+import { buildChart } from "./drumAnalyze";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
@@ -34,7 +35,8 @@ export function FallScreen({
   onLayoutChange: (m: LayoutMode) => void;
   onSpeedChange: (s: number) => void;
 }) {
-  const { audioBuffer, chart } = useSong();
+  const song = useSong();
+  const { audioBuffer } = song;
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -57,19 +59,33 @@ export function FallScreen({
 
   const parts = VISIBLE_PARTS[layout];
 
-  /** 5 分区模式丢弃不可见部件的音符 */
+  /** 根据当前分区从同一主体重新编谱，而不是删除另一分区的音符。 */
   const playChart = useMemo(() => {
-    if (!chart) return null;
-    const visible = new Set<PartId>(parts);
-    return {
-      ...chart,
-      notes: chart.notes.filter((n) => {
-        if (n.note === undefined) return false;
-        const p = partOfNote(n.note);
-        return p !== null && visible.has(p);
-      }),
-    };
-  }, [chart, parts]);
+    if (!audioBuffer || !song.primarySegmentId || song.segments.length === 0) return null;
+    return buildChart({
+      segments: song.segments,
+      primarySegmentId: song.primarySegmentId,
+      barActivity: song.barActivity,
+      activeRange: song.activeRange,
+      layout,
+      bpm: song.bpm,
+      offsetMs: song.offsetMs,
+      timeSignature: song.timeSignature,
+      durationMs: audioBuffer.duration * 1000,
+      title: song.fileName,
+    });
+  }, [
+    audioBuffer,
+    layout,
+    song.activeRange,
+    song.barActivity,
+    song.bpm,
+    song.fileName,
+    song.offsetMs,
+    song.primarySegmentId,
+    song.segments,
+    song.timeSignature,
+  ]);
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -86,6 +102,18 @@ export function FallScreen({
     flashesRef.current = {};
     missFlashesRef.current = {};
     judgementRef.current = null;
+  }, [playChart]);
+
+  useEffect(() => {
+    songPlayer.stop();
+    resetRun();
+    setPhaseBoth("idle");
+  }, [playChart, resetRun, setPhaseBoth]);
+
+  useEffect(() => {
+    if (playChart && song.chart !== playChart) song.setSong({ chart: playChart });
+    // playChart 只在编谱输入变化时重建；chart 本身不参与其依赖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playChart]);
 
   // 音频装载 / 卸载
@@ -337,7 +365,7 @@ export function FallScreen({
         {audioBuffer && (!playChart || playChart.notes.length === 0) && (
           <Overlay>
             <p className="text-sm text-white/80">谱面为空</p>
-            <p className="text-xs text-white/50">请到「谱面」屏勾选至少一个节奏段落</p>
+            <p className="text-xs text-white/50">请到「谱面」屏选择一个主体节奏</p>
           </Overlay>
         )}
         {audioBuffer && playChart && playChart.notes.length > 0 && phase === "idle" && (

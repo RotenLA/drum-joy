@@ -12,6 +12,7 @@ import {
   type DrumSegment,
 } from "./drumAnalyze";
 import { PART_BY_ID } from "./laneLayouts";
+import type { LayoutMode } from "./laneLayouts";
 import { songPlayer } from "./player";
 import { Metronome, getAudioContext } from "./metronome";
 
@@ -22,13 +23,12 @@ const TIME_SIGS: readonly [number, number][] = [
   [6, 8],
 ];
 
-export function ChartScreen() {
+export function ChartScreen({ layout }: { layout: LayoutMode }) {
   const song = useSong();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  // 段落 / 勾选 / 来源标签存于 songStore：切屏卸载组件后不丢失
+  // 段落 / 主体 / 来源标签存于 songStore：切屏卸载组件后不丢失
   const segments = song.segments;
-  const selected = useMemo(() => new Set(song.selectedSegmentIds), [song.selectedSegmentIds]);
   const metaSource = song.metaSource;
   const [playing, setPlaying] = useState(false);
   const [posMs, setPosMs] = useState(0);
@@ -56,7 +56,9 @@ export function ChartScreen() {
         fileName,
         chart: null,
         segments: [],
-        selectedSegmentIds: [],
+        primarySegmentId: null,
+        barActivity: [],
+        activeRange: null,
         metaSource: null,
       });
 
@@ -72,10 +74,13 @@ export function ChartScreen() {
       });
 
       setBusy("分析鼓节奏…");
-      const segs = await analyzeDrums(audioBuffer, bpm, det.offsetMs, timeSignature);
+      const analysis = await analyzeDrums(audioBuffer, bpm, det.offsetMs, timeSignature);
       song.setSong({
-        segments: segs,
-        selectedSegmentIds: segs.slice(0, 3).map((s) => s.id),
+        segments: analysis.segments,
+        primarySegmentId: analysis.segments[0]?.id ?? null,
+        barActivity: analysis.barActivity,
+        activeRange: analysis.activeRange,
+        chart: analysis.segments.length === 0 ? null : song.chart,
       });
     } catch (err) {
       console.error(err);
@@ -89,22 +94,32 @@ export function ChartScreen() {
     if (!song.audioBuffer) return;
     setBusy("按当前 BPM/拍号重新分析…");
     try {
-      const segs = await analyzeDrums(song.audioBuffer, song.bpm, song.offsetMs, song.timeSignature);
+      const analysis = await analyzeDrums(
+        song.audioBuffer,
+        song.bpm,
+        song.offsetMs,
+        song.timeSignature,
+      );
       song.setSong({
-        segments: segs,
-        selectedSegmentIds: segs.slice(0, 3).map((s) => s.id),
+        segments: analysis.segments,
+        primarySegmentId: analysis.segments[0]?.id ?? null,
+        barActivity: analysis.barActivity,
+        activeRange: analysis.activeRange,
       });
     } finally {
       setBusy(null);
     }
   };
 
-  // ---- 勾选段落 / 改速度拍号 → 重建谱面 ----
+  // ---- 主体段落 / 改速度拍号 / 改分区 → 重建预览谱面 ----
   useEffect(() => {
     if (!song.audioBuffer || segments.length === 0) return;
     const next = buildChart({
       segments,
-      selectedIds: selected,
+      primarySegmentId: song.primarySegmentId,
+      barActivity: song.barActivity,
+      activeRange: song.activeRange,
+      layout,
       bpm: song.bpm,
       offsetMs: song.offsetMs,
       timeSignature: song.timeSignature,
@@ -113,7 +128,18 @@ export function ChartScreen() {
     });
     song.setSong({ chart: next });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segments, selected, song.bpm, song.timeSignature, song.offsetMs, song.audioBuffer, song.fileName]);
+  }, [
+    segments,
+    song.primarySegmentId,
+    song.barActivity,
+    song.activeRange,
+    song.bpm,
+    song.timeSignature,
+    song.offsetMs,
+    song.audioBuffer,
+    song.fileName,
+    layout,
+  ]);
 
   // ---- 播放（真实音频） ----
   useEffect(() => {
@@ -149,13 +175,6 @@ export function ChartScreen() {
     });
     return () => m.stop();
   }, [metroOn, song.bpm, song.timeSignature, song.offsetMs, song.audioBuffer]);
-
-  const toggleSegment = (id: string) => {
-    const next = new Set(song.selectedSegmentIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    song.setSong({ selectedSegmentIds: [...next] });
-  };
 
   const measures = useMemo(
     () => (chart ? splitByMeasure(chart, song.offsetMs) : []),
@@ -277,9 +296,12 @@ export function ChartScreen() {
           <select
             value={`${song.timeSignature[0]}/${song.timeSignature[1]}`}
             onChange={(e) => {
-              const [a, b] = e.target.value.split("/").map(Number);
+              const values = e.target.value.split("/").map(Number);
+              const a = values[0];
+              const b = values[1];
+              if (a === undefined || b === undefined) return;
               markManual();
-              song.setSong({ timeSignature: [a!, b!] });
+              song.setSong({ timeSignature: [a, b] });
             }}
             className="border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm tabular-nums text-[var(--taiko-ink)]"
           >
@@ -348,21 +370,7 @@ export function ChartScreen() {
         <div className="flex items-baseline gap-3">
           <h2 className="text-sm font-medium">鼓节奏段落</h2>
           <span className="text-xs text-[var(--taiko-ink)]/45">
-            自动分析仅供参考 · 勾选的段落会按出现位置铺进谱面
-          </span>
-          <span className="ml-auto flex gap-2">
-            <button
-              onClick={() => song.setSong({ selectedSegmentIds: segments.map((s) => s.id) })}
-              className="text-xs text-[var(--taiko-ink)]/60 underline-offset-2 hover:underline"
-            >
-              全选
-            </button>
-            <button
-              onClick={() => song.setSong({ selectedSegmentIds: [] })}
-              className="text-xs text-[var(--taiko-ink)]/60 underline-offset-2 hover:underline"
-            >
-              全不选
-            </button>
+            选择一个主体节奏 · 将按歌曲强弱生成整段谱面
           </span>
         </div>
         {segments.length === 0 ? (
@@ -375,8 +383,8 @@ export function ChartScreen() {
               <SegmentCard
                 key={seg.id}
                 seg={seg}
-                checked={selected.has(seg.id)}
-                onToggle={() => toggleSegment(seg.id)}
+                checked={song.primarySegmentId === seg.id}
+                onToggle={() => song.setSong({ primarySegmentId: seg.id })}
               />
             ))}
           </div>
@@ -389,7 +397,7 @@ export function ChartScreen() {
           <div className="flex flex-col divide-y divide-[var(--taiko-line)] border border-[var(--taiko-line)]">
             {measures.length === 0 || chart.notes.length === 0 ? (
               <p className="px-4 py-6 text-center text-xs text-[var(--taiko-ink)]/45">
-                谱面为空：勾选上方至少一个节奏段落
+                谱面为空：请选择上方一个主体节奏
               </p>
             ) : (
               measures.map((m, i) => {
@@ -444,7 +452,10 @@ export function ChartScreen() {
               <Stat label="拍号" value={`${chart.timeSignature[0]}/${chart.timeSignature[1]}`} />
               <Stat label="小节数" value={String(measures.length)} />
               <Stat label="音符总数" value={String(chart.notes.length)} />
-              <Stat label="已选段落" value={`${selected.size} / ${segments.length}`} />
+              <Stat
+                label="主体节奏"
+                value={song.primarySegmentId ? `${segments.findIndex((s) => s.id === song.primarySegmentId) + 1} / ${segments.length}` : "未选择"}
+              />
             </dl>
             <p className="mt-4 text-xs leading-relaxed text-[var(--taiko-ink)]/45">
               音符颜色对应鼓件颜色（底鼓红 / 军鼓蓝 / 踩镲橙）。点击小节可跳转试听。
@@ -456,7 +467,7 @@ export function ChartScreen() {
   );
 }
 
-/** 段落卡片：缩略网格 + 出现信息 + 勾选 */
+/** 段落卡片：缩略网格 + 出现信息 + 主体单选 */
 function SegmentCard({
   seg,
   checked,
@@ -472,6 +483,7 @@ function SegmentCard({
   return (
     <button
       onClick={onToggle}
+      aria-pressed={checked}
       className={`flex flex-col gap-2 border p-3 text-left transition-colors ${
         checked
           ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/5"
@@ -480,7 +492,7 @@ function SegmentCard({
     >
       <div className="flex items-center gap-2 text-xs">
         <i
-          className={`inline-block h-3 w-3 border ${
+          className={`inline-block h-3 w-3 rounded-full border ${
             checked ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]" : "border-[var(--taiko-line)]"
           }`}
         />

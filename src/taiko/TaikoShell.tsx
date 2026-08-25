@@ -131,7 +131,7 @@ function ShellInner() {
               onSpeedChange={(speed) => updateSettings({ speed })}
             />
           )}
-          {screen === "chart" && <ChartScreen />}
+          {screen === "chart" && <ChartScreen layout={settings.layout} />}
           {screen === "mapping" && (
             <MappingScreen
               deviceId={settings.midiDeviceId}
