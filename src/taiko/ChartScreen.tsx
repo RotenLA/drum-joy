@@ -538,9 +538,11 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
                 label="主体节奏"
                 value={song.primarySegmentId ? `${segments.findIndex((s) => s.id === song.primarySegmentId) + 1} / ${segments.length}` : "未选择"}
               />
+              <Stat label="基础型" value={groove.label} />
+              <Stat label="密度" value={DENSITY_LABEL[song.density]} />
             </dl>
             <p className="mt-4 text-xs leading-relaxed text-[var(--taiko-ink)]/45">
-              音符颜色对应鼓件颜色（底鼓红 / 军鼓蓝 / 踩镲橙）。点击小节可跳转试听。
+              音符颜色对应鼓件颜色（底鼓红 / 军鼓蓝 / 镲橙）。点击小节可跳转试听。
             </p>
           </aside>
         </div>
