@@ -61,12 +61,23 @@ export function FallScreen({
 
   const parts = VISIBLE_PARTS[layout];
 
-  /** 以基础节奏型为骨架，按当前分区/密度档位重新编谱。 */
+  /** 以基础节奏型（或自定义节奏）为骨架，按当前分区/难度/风格重新编谱。 */
   const playChart = useMemo(() => {
-    if (!audioBuffer || !song.primarySegmentId || song.segments.length === 0) return null;
+    if (!audioBuffer) return null;
+    const beatsPerBar = song.timeSignature[0] * (4 / song.timeSignature[1]);
     const primary = song.segments.find((s) => s.id === song.primarySegmentId) ?? null;
-    const groove =
-      (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ?? matchGroove(primary, song.bpm);
+    let groove;
+    if (song.useCustom && !customIsEmpty(song.customPattern)) {
+      groove = patternFromCustom(
+        resizeCustom(song.customPattern, beatsPerBar),
+        beatsPerBar,
+        song.bpm,
+      );
+    } else {
+      if (!song.primarySegmentId || song.segments.length === 0) return null;
+      groove =
+        (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ?? matchGroove(primary, song.bpm);
+    }
     return arrangeChart({
       groove,
       barActivity: song.barActivity,
@@ -74,6 +85,7 @@ export function FallScreen({
       activeRange: song.activeRange,
       layout,
       density: song.density,
+      style: song.style,
       bpm: song.bpm,
       offsetMs: song.offsetMs,
       timeSignature: song.timeSignature,
@@ -87,14 +99,18 @@ export function FallScreen({
     song.barActivity,
     song.barBands,
     song.bpm,
+    song.customPattern,
     song.density,
     song.fileName,
     song.grooveId,
     song.offsetMs,
     song.primarySegmentId,
     song.segments,
+    song.style,
     song.timeSignature,
+    song.useCustom,
   ]);
+
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
