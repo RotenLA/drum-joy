@@ -1,13 +1,14 @@
 /**
- * 鼓节奏自动分析：三频带 onset 检测 → 量化到节拍网格 → 按小节聚类节奏型，
- * 产出可单选为主体的 MIDI 段落卡片，并记录逐小节活跃度供全曲编谱。
+ * 鼓声自动分析：统一 onset 检测 → 逐击点频谱特征分类（底鼓 / 军鼓 / 镲）
+ * → 量化到节拍网格 → 按小节聚类节奏型，产出可单选为主体的段落卡片，
+ * 并记录逐小节活跃度与三类鼓件占比，供全曲编谱使用。
  *
- * 启发式：低频→底鼓、中频→军鼓、高频→踩镲。混音复杂时会误判，
- * 界面需标注「自动分析仅供参考」，最终谱面由用户选择主体后生成。
+ * 为什么不再用「三条独立滤波链各自检测」：镲片主要能量落在 2–8 kHz，
+ * 与军鼓的中高噪声完全重叠，独立检测会把每一次镲都写成军鼓。
+ * 现在只做一次 onset 检测，再用低频 / 鼓腔 / 中高噪声 / 极高频 + 衰减时长
+ * 判断这一击是什么鼓件，阈值取整曲分位数自适应。
  */
-import { getDrumLane } from "@/shared/drumLaneMap";
-import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
-import type { LayoutMode, PartId } from "./laneLayouts";
+import type { LayoutMode } from "./laneLayouts";
 
 export type DrumBand = "kick" | "snare" | "hihat";
 
@@ -16,7 +17,7 @@ export const BAND_NOTE: Record<DrumBand, number> = { kick: 36, snare: 38, hihat:
 export const BAND_LABEL: Record<DrumBand, string> = {
   kick: "底鼓",
   snare: "军鼓",
-  hihat: "踩镲",
+  hihat: "镲",
 };
 
 /** 段落内一个音符：beat 为相对小节首拍的拍位置（已量化到 1/4 拍） */
@@ -35,66 +36,131 @@ export interface DrumSegment {
   beatsPerBar: number;
 }
 
+/** 每小节三类鼓件的击数（未归一化） */
+export interface BarBands {
+  kick: number;
+  snare: number;
+  hihat: number;
+}
+
 export interface DrumAnalysis {
   segments: DrumSegment[];
   /** 每小节鼓声活跃度，已归一化到 0–1 */
   barActivity: number[];
+  /** 每小节三类鼓件击数（弱鼓段降级时判断该留镲还是留底鼓） */
+  barBands: BarBands[];
   /** 稳定鼓声开始/结束小节（均包含）；无有效鼓段时为 null */
   activeRange: [number, number] | null;
 }
 
-const ANALYSIS_SR = 8000;
-const HOP = 256; // 32ms @ 8kHz
+const ANALYSIS_SR = 22050;
+const HOP = 512; // ≈23ms @22.05kHz
+const HOP_MS = (HOP / ANALYSIS_SR) * 1000;
 const QUANT = 0.25; // 量化到 16 分音符
 
 const yieldMain = () => new Promise<void>((r) => setTimeout(r, 0));
 
-/** 用 OfflineAudioContext 分频段渲染（8kHz 降采样，快） */
-async function renderBand(buffer: AudioBuffer, band: DrumBand): Promise<Float32Array> {
-  const sr = ANALYSIS_SR;
-  const frames = Math.max(1, Math.ceil(buffer.duration * sr));
-  const ctx = new OfflineAudioContext(1, frames, sr);
+type FeatBand = "low" | "body" | "mid" | "high";
+
+const FEAT_FILTERS: Record<FeatBand, readonly [BiquadFilterType, number][]> = {
+  low: [["lowpass", 110]],
+  body: [["highpass", 140], ["lowpass", 320]],
+  mid: [["highpass", 2000], ["lowpass", 6000]],
+  high: [["highpass", 8000]],
+};
+
+/** 单条滤波链渲染（22.05kHz 降采样，足以覆盖 8kHz 以上的镲片能量） */
+async function renderFiltered(
+  buffer: AudioBuffer,
+  chain: readonly [BiquadFilterType, number][],
+): Promise<Float32Array> {
+  const frames = Math.max(1, Math.ceil(buffer.duration * ANALYSIS_SR));
+  const ctx = new OfflineAudioContext(1, frames, ANALYSIS_SR);
   const src = ctx.createBufferSource();
   src.buffer = buffer;
   let node: AudioNode = src;
-  const addFilter = (type: BiquadFilterType, freq: number) => {
+  for (const [type, freq] of chain) {
     const f = ctx.createBiquadFilter();
     f.type = type;
     f.frequency.value = freq;
     node.connect(f);
     node = f;
-  };
-  if (band === "kick") addFilter("lowpass", 150);
-  else if (band === "snare") {
-    addFilter("highpass", 1200);
-    addFilter("lowpass", 5000);
-  } else addFilter("highpass", 6000);
+  }
   node.connect(ctx.destination);
   src.start();
   const out = await ctx.startRendering();
   return out.getChannelData(0);
 }
 
-/** 能量包络 onset 检测（正向差分 + 自适应阈值 + 最小间隔峰值拾取） */
-function detectOnsets(pcm: Float32Array, band: DrumBand): number[] {
-  const hopMs = (HOP / ANALYSIS_SR) * 1000;
-  const frameCount = Math.floor(pcm.length / HOP);
-  const energy = new Float32Array(frameCount);
+/** 平均绝对值包络（每 HOP 一帧） */
+function envelope(pcm: Float32Array, frameCount: number): Float32Array {
+  const env = new Float32Array(frameCount);
   for (let i = 0; i < frameCount; i++) {
     let s = 0;
+    let c = 0;
     const base = i * HOP;
-    for (let j = 0; j < HOP; j += 4) s += Math.abs(pcm[base + j] ?? 0);
-    energy[i] = s;
+    for (let j = 0; j < HOP; j += 2) {
+      s += Math.abs(pcm[base + j] ?? 0);
+      c++;
+    }
+    env[i] = c > 0 ? s / c : 0;
   }
+  return env;
+}
+
+function quantile(values: readonly number[], q: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * q)));
+  return sorted[idx] ?? 0;
+}
+
+/** 按分位数归一化（抗个别极端峰值） */
+function normalize(env: Float32Array): Float32Array {
+  const ref = quantile(Array.from(env), 0.98) || 1e-6;
+  const out = new Float32Array(env.length);
+  for (let i = 0; i < env.length; i++) out[i] = Math.min(2.5, env[i]! / ref);
+  return out;
+}
+
+interface Hit {
+  frame: number;
+  timeMs: number;
+  bands: DrumBand[];
+}
+
+/** 统一 onset 检测 + 逐击点分类 */
+async function detectHits(buffer: AudioBuffer): Promise<Hit[]> {
+  const frameCount = Math.max(
+    1,
+    Math.floor((buffer.duration * ANALYSIS_SR) / HOP),
+  );
+  const env: Record<FeatBand, Float32Array> = {
+    low: new Float32Array(frameCount),
+    body: new Float32Array(frameCount),
+    mid: new Float32Array(frameCount),
+    high: new Float32Array(frameCount),
+  };
+  for (const band of ["low", "body", "mid", "high"] as FeatBand[]) {
+    const pcm = await renderFiltered(buffer, FEAT_FILTERS[band]);
+    env[band] = normalize(envelope(pcm, frameCount));
+    await yieldMain();
+  }
+
+  // ---- 统一 novelty（正向差分加权和）----
+  const W: Record<FeatBand, number> = { low: 1, body: 0.6, mid: 1, high: 0.9 };
   const nov = new Float32Array(frameCount);
-  for (let i = 1; i < frameCount; i++) nov[i] = Math.max(0, energy[i]! - energy[i - 1]!);
+  for (let i = 1; i < frameCount; i++) {
+    let v = 0;
+    for (const band of ["low", "body", "mid", "high"] as FeatBand[]) {
+      v += W[band] * Math.max(0, env[band][i]! - env[band][i - 1]!);
+    }
+    nov[i] = v;
+  }
 
-  const win = Math.round(500 / hopMs); // 0.5s 邻域均值
-  const k = band === "kick" ? 1.7 : band === "snare" ? 1.6 : 2.0;
-  const minGap = Math.max(1, Math.round((band === "hihat" ? 70 : 120) / hopMs));
-
-  const onsets: number[] = [];
-  const peakVals: number[] = [];
+  const win = Math.round(500 / HOP_MS);
+  const minGapFrames = Math.max(1, Math.round(55 / HOP_MS));
+  const peaks: number[] = [];
   for (let i = 1; i < frameCount - 1; i++) {
     if (nov[i]! <= 0) continue;
     if (nov[i]! < nov[i - 1]! || nov[i]! < nov[i + 1]!) continue;
@@ -105,21 +171,74 @@ function detectOnsets(pcm: Float32Array, band: DrumBand): number[] {
       cnt++;
     }
     mean = cnt > 0 ? mean / cnt : 0;
-    if (nov[i]! < mean * k + 1e-4) continue;
-    const tMs = i * hopMs;
-    const last = onsets.length - 1;
-    if (last >= 0 && tMs - onsets[last]! < minGap * hopMs) {
-      // 间隔内保留更强者
-      if (nov[i]! > peakVals[last]!) {
-        onsets[last] = tMs;
-        peakVals[last] = nov[i]!;
-      }
+    if (nov[i]! < mean * 1.5 + 2e-3) continue;
+    const last = peaks[peaks.length - 1];
+    if (last !== undefined && i - last < minGapFrames) {
+      if (nov[i]! > nov[last]!) peaks[peaks.length - 1] = i;
       continue;
     }
-    onsets.push(tMs);
-    peakVals.push(nov[i]!);
+    peaks.push(i);
   }
-  return onsets;
+
+  // ---- 逐击点特征 ----
+  const peakOf = (band: FeatBand, i: number) => {
+    let m = 0;
+    for (let j = Math.max(0, i - 1); j <= Math.min(frameCount - 1, i + 4); j++) {
+      m = Math.max(m, env[band][j]!);
+    }
+    return m;
+  };
+  const decayMs = (i: number) => {
+    const total = (j: number) =>
+      (env.low[j] ?? 0) * 0.5 + (env.body[j] ?? 0) + (env.mid[j] ?? 0) + (env.high[j] ?? 0);
+    let peakFrame = i;
+    let peakVal = total(i);
+    for (let j = i; j <= Math.min(frameCount - 1, i + 4); j++) {
+      const v = total(j);
+      if (v > peakVal) {
+        peakVal = v;
+        peakFrame = j;
+      }
+    }
+    if (peakVal <= 0) return 0;
+    for (let j = peakFrame + 1; j <= Math.min(frameCount - 1, peakFrame + 20); j++) {
+      if (total(j) < peakVal * 0.25) return (j - peakFrame) * HOP_MS;
+    }
+    return 20 * HOP_MS;
+  };
+
+  const feats = peaks.map((i) => ({
+    frame: i,
+    low: peakOf("low", i),
+    body: peakOf("body", i),
+    mid: peakOf("mid", i),
+    high: peakOf("high", i),
+    decay: decayMs(i),
+  }));
+
+  // ---- 自适应阈值（整曲分位数）----
+  const thr = (key: "low" | "body" | "mid" | "high", q: number, floor: number) =>
+    Math.max(floor, quantile(feats.map((f) => f[key]), q) * 0.5);
+  const thrLow = thr("low", 0.6, 0.06);
+  const thrBody = thr("body", 0.55, 0.05);
+  const thrMid = thr("mid", 0.55, 0.05);
+  const thrHigh = thr("high", 0.5, 0.04);
+
+  const hits: Hit[] = [];
+  for (const f of feats) {
+    const bands: DrumBand[] = [];
+    // 底鼓：低频主导，且不是被镲片的宽带能量带起来的
+    if (f.low >= thrLow && f.low >= f.high * 0.7) bands.push("kick");
+    const handHit = f.high >= thrHigh || f.mid >= thrMid;
+    if (handHit) {
+      const snareLike =
+        f.body >= thrBody && f.mid >= thrMid && f.decay <= 150 && f.high <= f.mid * 1.7;
+      bands.push(snareLike ? "snare" : "hihat");
+    }
+    if (bands.length === 0) continue;
+    hits.push({ frame: f.frame, timeMs: f.frame * HOP_MS, bands });
+  }
+  return hits;
 }
 
 // ---- 相似度聚类：真实演奏每小节有微小差异，不能用「完全相同」签名 ----
@@ -128,7 +247,7 @@ function detectOnsets(pcm: Float32Array, band: DrumBand): number[] {
 const STEPS_PER_BEAT = 4;
 /** 三段频带位图加权 Jaccard ≥ 此值归并为同一段落 */
 const CLUSTER_SIM = 0.7;
-/** 频带权重：底鼓/军鼓是节奏骨架，踩镲装饰性强、容忍差异 */
+/** 频带权重：底鼓/军鼓是节奏骨架，镲装饰性强、容忍差异 */
 const BAND_W: Record<DrumBand, number> = { kick: 1, snare: 1, hihat: 0.6 };
 
 type BandBitmap = Record<DrumBand, Uint8Array>;
@@ -184,9 +303,8 @@ function majorityBitmap(
 }
 
 /**
- * 分析整曲，返回节奏型段落卡片（按出现次数排序，最多 12 张）。
- * 分段/量化按传入的 bpm / offsetMs / timeSignature 网格进行；
- * 聚类按 16 分位图相似度归并，段落音符取簇成员的多数表决代表型。
+ * 分析整曲，返回节奏型段落卡片（按出现次数排序，最多 12 张）
+ * 以及逐小节活跃度 / 三类鼓件占比 / 有效鼓声区间。
  */
 export async function analyzeDrums(
   buffer: AudioBuffer,
@@ -199,26 +317,23 @@ export async function analyzeDrums(
   const bands: DrumBand[] = ["kick", "snare", "hihat"];
   const steps = Math.max(STEPS_PER_BEAT, Math.round(beatsPerBar * STEPS_PER_BEAT));
 
-  // onset → 每小节步进位图
+  const hits = await detectHits(buffer);
+
+  // 击点 → 每小节步进位图
   const perBar = new Map<number, BarPattern>();
-  for (const band of bands) {
-    const pcm = await renderBand(buffer, band);
-    const onsets = detectOnsets(pcm, band);
-    await yieldMain();
-    for (const tMs of onsets) {
-      const beat = (tMs - offsetMs) / beatMs;
-      if (beat < 0) continue;
-      const q = Math.round(beat / QUANT) * QUANT;
-      const bar = Math.floor(q / beatsPerBar);
-      const step = Math.round((q - bar * beatsPerBar) * STEPS_PER_BEAT);
-      if (step < 0 || step >= steps) continue;
-      let p = perBar.get(bar);
-      if (!p) {
-        p = { bar, bm: emptyBitmap(steps) };
-        perBar.set(bar, p);
-      }
-      p.bm[band][step] = 1;
+  for (const hit of hits) {
+    const beat = (hit.timeMs - offsetMs) / beatMs;
+    if (beat < 0) continue;
+    const q = Math.round(beat / QUANT) * QUANT;
+    const bar = Math.floor(q / beatsPerBar);
+    const step = Math.round((q - bar * beatsPerBar) * STEPS_PER_BEAT);
+    if (step < 0 || step >= steps) continue;
+    let p = perBar.get(bar);
+    if (!p) {
+      p = { bar, bm: emptyBitmap(steps) };
+      perBar.set(bar, p);
     }
+    for (const band of hit.bands) p.bm[band][step] = 1;
   }
 
   // 贪心相似度聚类（按小节顺序；与现有簇代表比较，归并最相似者）
@@ -250,7 +365,6 @@ export async function analyzeDrums(
     }
   }
 
-  // 代表位图 → 段落音符；按出现次数排序，单次段落自然排后
   const segments: DrumSegment[] = clusters.map((c) => {
     const notes: SegmentNote[] = [];
     for (const band of bands) {
@@ -273,19 +387,24 @@ export async function analyzeDrums(
     .sort((a, b) => b.bars.length - a.bars.length || b.notes.length - a.notes.length)
     .slice(0, 12);
 
-  const barCount = Math.max(1, Math.ceil((buffer.duration * 1000 - offsetMs) / (beatMs * beatsPerBar)));
-  const rawActivity = Array.from({ length: barCount }, (_, bar) => {
+  const barCount = Math.max(
+    1,
+    Math.ceil((buffer.duration * 1000 - offsetMs) / (beatMs * beatsPerBar)),
+  );
+  const barBands: BarBands[] = Array.from({ length: barCount }, (_, bar) => {
     const pattern = perBar.get(bar);
-    if (!pattern) return 0;
-    let score = 0;
-    for (const band of bands) {
-      const weight = band === "hihat" ? 0.55 : 1;
-      for (const hit of pattern.bm[band]) score += hit ? weight : 0;
-    }
-    return score;
+    const count = (band: DrumBand) => {
+      if (!pattern) return 0;
+      let c = 0;
+      for (const hit of pattern.bm[band]) if (hit) c++;
+      return c;
+    };
+    return { kick: count("kick"), snare: count("snare"), hihat: count("hihat") };
   });
+  const rawActivity = barBands.map((b) => b.kick + b.snare + b.hihat * 0.55);
   const maxActivity = Math.max(0, ...rawActivity);
   const barActivity = rawActivity.map((v) => (maxActivity > 0 ? v / maxActivity : 0));
+
   const activeThreshold = 0.12;
   const stableAt = (bar: number) => {
     let active = 0;
@@ -320,120 +439,24 @@ export async function analyzeDrums(
   return {
     segments: rankedSegments,
     barActivity,
+    barBands,
     activeRange:
       activeStart >= 0 && activeEnd >= activeStart ? [activeStart, activeEnd] : fallbackRange,
   };
 }
 
-const PART_NOTE: Record<PartId, number> = {
-  pedalHat: 44,
-  kick: 36,
-  hihat: 42,
-  crash: 49,
-  snare: 38,
-  highTom: 48,
-  midTom: 47,
-  floorTom: 43,
-  ride: 51,
+/** 分区可用鼓件（编谱与简化共用） */
+export const LAYOUT_PARTS: Record<LayoutMode, readonly string[]> = {
+  five: ["kick", "hihat", "snare", "floorTom", "pedalHat"],
+  nine: [
+    "kick",
+    "hihat",
+    "snare",
+    "crash",
+    "highTom",
+    "midTom",
+    "floorTom",
+    "ride",
+    "pedalHat",
+  ],
 };
-
-function stableUnit(seed: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    hash ^= seed.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0) / 4294967296;
-}
-
-/** 由单一主体生成整段谱面；同参数输出始终一致。 */
-export function buildChart(opts: {
-  segments: DrumSegment[];
-  primarySegmentId: string | null;
-  barActivity: readonly number[];
-  activeRange: [number, number] | null;
-  layout: LayoutMode;
-  bpm: number;
-  offsetMs: number;
-  timeSignature: [number, number];
-  durationMs: number;
-  title: string;
-}): TaikoChart {
-  const beatMs = 60000 / opts.bpm;
-  const out: TaikoNote[] = [];
-  const primary = opts.segments.find((s) => s.id === opts.primarySegmentId);
-  const range = opts.activeRange;
-
-  const add = (bar: number, beat: number, part: PartId) => {
-    if (!primary || beat < 0 || beat >= primary.beatsPerBar) return;
-    const timeMs = opts.offsetMs + (bar * primary.beatsPerBar + beat) * beatMs;
-    if (timeMs < 0 || timeMs > opts.durationMs) return;
-    const midi = PART_NOTE[part];
-    const lane = getDrumLane(midi);
-    if (lane) out.push({ timeMs, lane, note: midi });
-  };
-
-  if (primary && range) {
-    const primaryBands = new Set(primary.notes.map((note) => note.band));
-    for (let bar = range[0]; bar <= range[1]; bar++) {
-      const activity = opts.barActivity[bar] ?? 0;
-      const prevActivity = opts.barActivity[bar - 1] ?? activity;
-      const phraseStart = bar === range[0] || bar % 8 === 0;
-      const phraseEnd = bar === range[1] || (bar + 1) % 4 === 0;
-      const rising = activity - prevActivity > 0.18;
-      const seed = `${opts.title}|${opts.primarySegmentId}|${opts.layout}|${bar}`;
-
-      // 主体骨架贯穿有效区间；极安静小节只保留底鼓/军鼓，形成自然呼吸。
-      for (const note of primary.notes) {
-        if (activity < 0.08 && note.band === "hihat") continue;
-        const part: PartId = note.band === "kick" ? "kick" : note.band === "snare" ? "snare" : "hihat";
-        add(bar, note.beat, part);
-      }
-      // 主体缺少某个核心鼓件时补最小骨架，确保三类核心音符始终占最高频率。
-      if (!primaryBands.has("kick")) add(bar, 0, "kick");
-      if (!primaryBands.has("snare")) add(bar, Math.min(1, primary.beatsPerBar / 2), "snare");
-      if (!primaryBands.has("hihat") && activity >= 0.08) {
-        for (let beat = 0; beat < primary.beatsPerBar; beat += 1) add(bar, beat, "hihat");
-      }
-
-      const strong = activity >= 0.55;
-      const veryStrong = activity >= 0.75;
-      if (opts.layout === "five") {
-        if (phraseEnd && strong && stableUnit(`${seed}|floor`) < 0.62) {
-          add(bar, primary.beatsPerBar - 0.5, "floorTom");
-        }
-        if (veryStrong && stableUnit(`${seed}|pedal`) < 0.28) {
-          add(bar, Math.max(0, primary.beatsPerBar - 1), "pedalHat");
-        }
-      } else {
-        if (phraseStart && (strong || rising)) add(bar, 0, "crash");
-        if (phraseEnd && strong) {
-          add(bar, primary.beatsPerBar - 0.75, "highTom");
-          if (stableUnit(`${seed}|mid`) < 0.72) add(bar, primary.beatsPerBar - 0.5, "midTom");
-          if (veryStrong) add(bar, primary.beatsPerBar - 0.25, "floorTom");
-        }
-        if (strong && stableUnit(`${seed}|tom`) < 0.2) {
-          add(bar, Math.max(0, primary.beatsPerBar / 2), "highTom");
-        }
-        if (veryStrong && stableUnit(`${seed}|ride`) < 0.14) add(bar, 0, "ride");
-        if (veryStrong && stableUnit(`${seed}|pedal`) < 0.1) {
-          add(bar, Math.max(0, primary.beatsPerBar - 1), "pedalHat");
-        }
-      }
-    }
-  }
-  out.sort((a, b) => a.timeMs - b.timeMs);
-  const dedup: TaikoNote[] = [];
-  for (const n of out) {
-    const last = dedup[dedup.length - 1];
-    if (last && last.note === n.note && Math.abs(last.timeMs - n.timeMs) < 40) continue;
-    dedup.push(n);
-  }
-  return {
-    title: opts.title,
-    bpm: opts.bpm,
-    timeSignature: opts.timeSignature,
-    durationMs: opts.durationMs,
-    notes: dedup,
-  };
-}
