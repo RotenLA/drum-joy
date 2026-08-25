@@ -1,9 +1,14 @@
 /**
- * 歌曲状态：导入的音频 + 速度/拍号/偏移 + 生成的谱面，三屏共享。
+ * 歌曲状态：导入的音频 + 速度/拍号/偏移 + 鼓节奏段落 + 生成的谱面，三屏共享。
+ * 段落与勾选存在这里（而非 ChartScreen 本地 state），切屏卸载后不丢失。
  * 不持久化歌曲（每次重新导入），仅设置/映射存 localStorage。
  */
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import type { TaikoChart } from "@/shared/taikoChart";
+import type { DrumSegment } from "./drumAnalyze";
+
+/** 速度/拍号来源标签（谱面屏展示用） */
+export type MetaSource = "metadata" | "detect" | "manual";
 
 export interface SongState {
   audioBuffer: AudioBuffer | null;
@@ -13,6 +18,11 @@ export interface SongState {
   /** 首拍偏移（毫秒，自动检测给出，可手动微调） */
   offsetMs: number;
   chart: TaikoChart | null;
+  /** 鼓节奏分析段落（重新导入时清空） */
+  segments: DrumSegment[];
+  /** 勾选的段落 id */
+  selectedSegmentIds: string[];
+  metaSource: MetaSource | null;
 }
 
 export interface SongContextValue extends SongState {
@@ -29,6 +39,9 @@ export function SongProvider({ children }: { children: ReactNode }) {
     timeSignature: [4, 4],
     offsetMs: 0,
     chart: null,
+    segments: [],
+    selectedSegmentIds: [],
+    metaSource: null,
   });
 
   const value = useMemo<SongContextValue>(
