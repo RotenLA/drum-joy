@@ -200,6 +200,10 @@ export async function detectBeat(buffer: AudioBuffer): Promise<BeatDetectResult>
     bpm = 60000 / (fineLag * hopMs);
     while (bpm < 80) bpm *= 2;
     while (bpm > 180) bpm /= 2;
+    console.log("[beatDetect DEBUG] coarse lag", bestLag, "fine lag", fineLag,
+      "onsets", onsetFrames.length, "bpm", bpm);
+  } else {
+    console.log("[beatDetect DEBUG] too few onsets:", onsetFrames.length, "coarse lag", bestLag);
   }
   bpm = Math.round(bpm * 100) / 100;
 
