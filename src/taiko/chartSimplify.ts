@@ -78,33 +78,46 @@ export function simplifyChart(
     }
     notes = snappedNotes.sort((a, b) => a.timeMs - b.timeMs);
   }
-
-
-  // 2) 同一时刻多件同响 → 只保留优先级最高的一件
-  const collapsed: TaikoNote[] = [];
+  // 2) 同一时刻按肢体分组：脚（底鼓/踩镲踏板）与手各留优先级最高的一件
+  //    （底鼓 + 镲同拍是最自然的鼓型，不应被合并掉）
+  const clusters: TaikoNote[][] = [];
   for (const n of notes) {
-    const last = collapsed[collapsed.length - 1];
-    if (last && Math.abs(last.timeMs - n.timeMs) < 40) {
-      if (PRIORITY[partOf(n)] < PRIORITY[partOf(last)]) collapsed[collapsed.length - 1] = n;
-      continue;
-    }
-    collapsed.push(n);
+    const last = clusters[clusters.length - 1];
+    if (last && Math.abs(last[0]!.timeMs - n.timeMs) < 40) last.push(n);
+    else clusters.push([n]);
   }
-  notes = collapsed;
+  const isFoot = (n: TaikoNote) => {
+    const p = partOf(n);
+    return p === "kick" || p === "pedalHat";
+  };
+  const reduced: TaikoNote[][] = clusters.map((group) => {
+    const pick = (list: TaikoNote[]) =>
+      list.length === 0
+        ? null
+        : list.reduce((a, b) => (PRIORITY[partOf(b)] < PRIORITY[partOf(a)] ? b : a));
+    const foot = pick(group.filter(isFoot));
+    const hand = pick(group.filter((n) => !isFoot(n)));
+    return [foot, hand].filter((n): n is TaikoNote => n !== null);
+  });
 
-  // 3) 最小间隔：低优先级的那一个先让位
+  // 3) 最小间隔：整簇之间保持间隔，低优先级的簇先让位
+  let kept = reduced;
   if (rule.minGapMs > 0) {
-    const gapped: TaikoNote[] = [];
-    for (const n of notes) {
+    const gapped: TaikoNote[][] = [];
+    for (const group of kept) {
       const last = gapped[gapped.length - 1];
-      if (last && n.timeMs - last.timeMs < rule.minGapMs) {
-        if (PRIORITY[partOf(n)] < PRIORITY[partOf(last)]) gapped[gapped.length - 1] = n;
+      if (last && group[0]!.timeMs - last[0]!.timeMs < rule.minGapMs) {
+        const bestNew = Math.min(...group.map((n) => PRIORITY[partOf(n)]));
+        const bestOld = Math.min(...last.map((n) => PRIORITY[partOf(n)]));
+        if (bestNew < bestOld) gapped[gapped.length - 1] = group;
         continue;
       }
-      gapped.push(n);
+      gapped.push(group);
     }
-    notes = gapped;
+    kept = gapped;
   }
+  notes = kept.flat();
+
 
   // 4) 每小节上限：离强拍越远越先丢
   if (Number.isFinite(rule.maxPerBar)) {
