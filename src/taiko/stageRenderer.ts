@@ -113,11 +113,6 @@ function padRotation(anchor: PadAnchor, w: number, h: number): number {
   return Math.atan2(anchor.cy * h - g.y, anchor.cx * w - g.x) - Math.PI / 2;
 }
 
-/** 踏板音符倾角：与踏板顶面 x 轴棱线平行（符号与各自踏板的镜像外八一致） */
-function pedalNoteAngle(part: PartId): number {
-  const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
-  return Math.atan2(Math.sin(th) * 0.42, Math.cos(th));
-}
 
 function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0a0a0c";
@@ -219,36 +214,49 @@ function drawNotes(
     const p = Math.pow(t, EASE);
     const x = g0.x + (pad.cx - g0.x) * p;
     const y = g0.y + (pad.cy - g0.y) * p;
-    const scale = (0.18 + 0.82 * p) * (big ? 1.35 : 1);
-    const nw = Math.max(6, pad.rx * 0.8 * scale);
-    const nh = Math.max(3, nw * 0.34);
-    // 芯片长边垂直于车道方向；踏板音符与踏板顶面棱线平行（踏板不随车道旋转）
-    const ang = anchor.square
-      ? pedalNoteAngle(part)
-      : Math.atan2(pad.cy - g0.y, pad.cx - g0.x) + Math.PI / 2;
+    // 落到鼓面时 = 鼓面的 70%；远端约 13%，重击额外放大
+    const scale = (0.18 + 0.82 * p) * 0.7 * (big ? 1.3 : 1);
+    const rx = Math.max(4, pad.rx * scale);
     const color = PART_BY_ID[part].color;
-    // 出生淡入：中/下排收束段在屏幕中段，避免音符凭空冒出
     const fadeIn = Math.min(1, t / 0.1);
+    const alpha = (0.35 + 0.65 * p) * fadeIn;
 
     ctx.save();
     ctx.translate(x, y);
-    ctx.rotate(ang);
-    ctx.globalAlpha = (0.25 + 0.75 * p) * fadeIn;
+    ctx.globalAlpha = alpha;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 16 * scale;
-    ctx.fillStyle = color;
+    ctx.shadowBlur = 18 * scale;
+    ctx.lineWidth = Math.max(1.5, rx * 0.16);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = hexToRgba(color, 0.34);
+
     ctx.beginPath();
-    ctx.roundRect(-nw / 2, -nh / 2, nw, nh, nh / 2);
+    if (anchor.square) {
+      // 踏板：与踏板顶面同构——正方形先按外八角旋转，再统一压扁 0.42
+      const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
+      ctx.save();
+      ctx.scale(1, 0.42);
+      ctx.rotate(th);
+      ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
+      ctx.restore();
+    } else {
+      ctx.ellipse(0, 0, rx, rx * 0.42, padRotation(anchor, w, h), 0, Math.PI * 2);
+    }
     ctx.fill();
-    // 顶部高光
+    ctx.stroke();
+
+    // 顶部高光弧
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.globalAlpha = alpha * 0.6;
+    ctx.strokeStyle = "rgba(255,255,255,0.75)";
+    ctx.lineWidth = Math.max(1, rx * 0.1);
     ctx.beginPath();
-    ctx.roundRect(-nw / 2, -nh / 2, nw, nh * 0.32, nh / 4);
-    ctx.fill();
+    ctx.ellipse(0, -rx * 0.06, rx * 0.62, rx * 0.26, 0, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
     ctx.restore();
   }
 }
+
 
 function spawnSparks(anchor: PadAnchor, color: string, w: number, h: number, now: number) {
   const p = padPixels(anchor, w, h);
@@ -629,7 +637,6 @@ export function renderStage(
   drawBackground(ctx, w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
   drawLanes(ctx, w, h, parts);
-  drawNotes(ctx, w, h, f);
 
   // 远的鼓盘先画，近的压上层（无遮挡摆位下主要是保险）
   const sorted = [...parts].sort((a, b) => PAD_ANCHORS[a].cy - PAD_ANCHORS[b].cy);
@@ -644,6 +651,10 @@ export function renderStage(
     const miss = Math.max(0, Math.min(1, (missExpiry - f.now) / 240));
     drawPad(ctx, id, intensity, w, h, miss);
   }
+
+  // 音符画在鼓盘上层：靠近判定点不再被鼓面遮挡
+  drawNotes(ctx, w, h, f);
+
 
   drawParticles(ctx, f.now);
   drawVignette(ctx, w, h);
