@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { measureDurationMs, splitByMeasure } from "@/shared/taikoChart";
-import { useSong, type MetaSource } from "./songStore";
+import { useSong } from "./songStore";
 import { parseAudioMeta } from "./audioMeta";
 import { detectBeat } from "./beatDetect";
 import {
