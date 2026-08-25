@@ -275,6 +275,8 @@ export async function detectBeat(buffer: AudioBuffer): Promise<BeatDetectResult>
   // （真正的 3/4、6/8 重音结构非常显著）才采纳，否则回退 4/4。
   const c44 = candidates.find((c) => c.ts[0] === 4 && c.ts[1] === 4)!;
   let top = candidates[0]!;
+  console.log("[beatDetect DEBUG] ts candidates",
+    candidates.map((c) => `${c.ts[0]}/${c.ts[1]}=${c.score.toFixed(3)}`).join(" "));
   if (top !== c44) {
     const margin = top.score > 0 ? (top.score - c44.score) / top.score : 0;
     if (margin < 0.6) top = c44;
