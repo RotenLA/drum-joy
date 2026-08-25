@@ -7,10 +7,13 @@ import {
   BAND_LABEL,
   BAND_NOTE,
   analyzeDrums,
-  buildChart,
   type DrumBand,
   type DrumSegment,
 } from "./drumAnalyze";
+import { arrangeChart } from "./arrange";
+import { GROOVE_BY_ID, GROOVE_PATTERNS } from "./groovePatterns";
+import { matchGroove, scoreGrooves } from "./grooveMatch";
+import { DENSITY_LABEL, type Density } from "./chartSimplify";
 import { PART_BY_ID } from "./laneLayouts";
 import type { LayoutMode } from "./laneLayouts";
 import { songPlayer } from "./player";
