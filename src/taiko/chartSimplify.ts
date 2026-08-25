@@ -56,16 +56,29 @@ export function simplifyChart(
 
   let notes = [...chart.notes].sort((a, b) => a.timeMs - b.timeMs);
 
-  // 1) 镲细分降级：只保留落在允许网格上的镲
+  // 1) 镲细分降级：把镲吸附到允许网格（正拍优先），而不是整条丢弃
   if (rule.hatDiv < 4) {
     const gridBeats = 1 / rule.hatDiv;
-    notes = notes.filter((n) => {
-      if (partOf(n) !== "hihat") return true;
+    const seen = new Set<string>();
+    const snappedNotes: TaikoNote[] = [];
+    for (const n of notes) {
+      if (partOf(n) !== "hihat" && partOf(n) !== "ride") {
+        snappedNotes.push(n);
+        continue;
+      }
       const b = beatInBar(n.timeMs);
+      const bar = barOf(n.timeMs);
       const snapped = Math.round(b / gridBeats) * gridBeats;
-      return Math.abs(b - snapped) < 0.06;
-    });
+      if (snapped < 0 || snapped >= opts.beatsPerBar) continue;
+      const key = `${bar}|${snapped.toFixed(3)}|${n.note}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const timeMs = opts.offsetMs + (bar * opts.beatsPerBar + snapped) * beatMs;
+      snappedNotes.push({ ...n, timeMs });
+    }
+    notes = snappedNotes.sort((a, b) => a.timeMs - b.timeMs);
   }
+
 
   // 2) 同一时刻多件同响 → 只保留优先级最高的一件
   const collapsed: TaikoNote[] = [];
