@@ -7,10 +7,13 @@ import {
   BAND_LABEL,
   BAND_NOTE,
   analyzeDrums,
-  buildChart,
   type DrumBand,
   type DrumSegment,
 } from "./drumAnalyze";
+import { arrangeChart } from "./arrange";
+import { GROOVE_BY_ID, GROOVE_PATTERNS } from "./groovePatterns";
+import { matchGroove, scoreGrooves } from "./grooveMatch";
+import { DENSITY_LABEL, type Density } from "./chartSimplify";
 import { PART_BY_ID } from "./laneLayouts";
 import type { LayoutMode } from "./laneLayouts";
 import { songPlayer } from "./player";
@@ -57,7 +60,9 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         chart: null,
         segments: [],
         primarySegmentId: null,
+        grooveId: null,
         barActivity: [],
+        barBands: [],
         activeRange: null,
         metaSource: null,
       });
@@ -75,10 +80,13 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
 
       setBusy("分析鼓节奏…");
       const analysis = await analyzeDrums(audioBuffer, bpm, det.offsetMs, timeSignature);
+      const primary = analysis.segments[0] ?? null;
       song.setSong({
         segments: analysis.segments,
-        primarySegmentId: analysis.segments[0]?.id ?? null,
+        primarySegmentId: primary?.id ?? null,
+        grooveId: matchGroove(primary, bpm).id,
         barActivity: analysis.barActivity,
+        barBands: analysis.barBands,
         activeRange: analysis.activeRange,
         chart: analysis.segments.length === 0 ? null : song.chart,
       });
@@ -100,10 +108,13 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         song.offsetMs,
         song.timeSignature,
       );
+      const primary = analysis.segments[0] ?? null;
       song.setSong({
         segments: analysis.segments,
-        primarySegmentId: analysis.segments[0]?.id ?? null,
+        primarySegmentId: primary?.id ?? null,
+        grooveId: matchGroove(primary, song.bpm).id,
         barActivity: analysis.barActivity,
+        barBands: analysis.barBands,
         activeRange: analysis.activeRange,
       });
     } finally {
@@ -111,15 +122,30 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     }
   };
 
-  // ---- 主体段落 / 改速度拍号 / 改分区 → 重建预览谱面 ----
+  const primarySegment = useMemo(
+    () => segments.find((s) => s.id === song.primarySegmentId) ?? null,
+    [segments, song.primarySegmentId],
+  );
+  /** 主体段落 → 基础节奏型排序（前几名给出推荐标记） */
+  const grooveRanking = useMemo(
+    () => scoreGrooves(primarySegment, song.bpm),
+    [primarySegment, song.bpm],
+  );
+  const groove =
+    (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ??
+    grooveRanking[0]?.pattern ??
+    GROOVE_PATTERNS[0]!;
+
+  /** 选主体 / 改基础型 / 改档位 / 改速度拍号 / 改分区 → 重建预览谱面 */
   useEffect(() => {
     if (!song.audioBuffer || segments.length === 0) return;
-    const next = buildChart({
-      segments,
-      primarySegmentId: song.primarySegmentId,
+    const next = arrangeChart({
+      groove,
       barActivity: song.barActivity,
+      barBands: song.barBands,
       activeRange: song.activeRange,
       layout,
+      density: song.density,
       bpm: song.bpm,
       offsetMs: song.offsetMs,
       timeSignature: song.timeSignature,
@@ -130,8 +156,10 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     segments,
-    song.primarySegmentId,
+    groove,
+    song.density,
     song.barActivity,
+    song.barBands,
     song.activeRange,
     song.bpm,
     song.timeSignature,
@@ -370,7 +398,7 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         <div className="flex items-baseline gap-3">
           <h2 className="text-sm font-medium">鼓节奏段落</h2>
           <span className="text-xs text-[var(--taiko-ink)]/45">
-            选择一个主体节奏 · 将按歌曲强弱生成整段谱面
+            选择一个主体节奏 · 自动匹配基础节奏型后生成整段谱面
           </span>
         </div>
         {segments.length === 0 ? (
@@ -384,12 +412,66 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
                 key={seg.id}
                 seg={seg}
                 checked={song.primarySegmentId === seg.id}
-                onToggle={() => song.setSong({ primarySegmentId: seg.id })}
+                onToggle={() =>
+                  song.setSong({
+                    primarySegmentId: seg.id,
+                    grooveId: matchGroove(seg, song.bpm).id,
+                  })
+                }
               />
             ))}
           </div>
         )}
       </section>
+
+      {/* 基础节奏型 + 密度档位 */}
+      {segments.length > 0 && (
+        <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h2 className="text-sm font-medium">基础节奏型</h2>
+            <span className="text-xs text-[var(--taiko-ink)]/45">
+              自动匹配「{grooveRanking[0]?.pattern.label ?? "-"}」，可手动改选；
+              游玩谱面以基础型为主，偶尔加变体
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {grooveRanking.map(({ pattern }, i) => (
+              <button
+                key={pattern.id}
+                onClick={() => song.setSong({ grooveId: pattern.id })}
+                className={`border px-3 py-1.5 text-xs transition-colors ${
+                  groove.id === pattern.id
+                    ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                    : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+                }`}
+              >
+                {pattern.label}
+                {i === 0 ? " ·推荐" : ""}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[var(--taiko-ink)]/50">谱面密度</span>
+            {(["easy", "normal", "raw"] as Density[]).map((d) => (
+              <button
+                key={d}
+                onClick={() => song.setSong({ density: d })}
+                className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
+                  song.density === d
+                    ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                    : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+                }`}
+              >
+                {DENSITY_LABEL[d]}
+              </button>
+            ))}
+            <span className="text-xs text-[var(--taiko-ink)]/40">
+              轻松＝每小节最多 6 音、镲只到四分；标准＝最多 10 音、镲到八分
+            </span>
+          </div>
+        </section>
+      )}
+
 
       {/* 小节网格（只读，点击跳转播放） */}
       {chart && (
@@ -456,9 +538,11 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
                 label="主体节奏"
                 value={song.primarySegmentId ? `${segments.findIndex((s) => s.id === song.primarySegmentId) + 1} / ${segments.length}` : "未选择"}
               />
+              <Stat label="基础型" value={groove.label} />
+              <Stat label="密度" value={DENSITY_LABEL[song.density]} />
             </dl>
             <p className="mt-4 text-xs leading-relaxed text-[var(--taiko-ink)]/45">
-              音符颜色对应鼓件颜色（底鼓红 / 军鼓蓝 / 踩镲橙）。点击小节可跳转试听。
+              音符颜色对应鼓件颜色（底鼓红 / 军鼓蓝 / 镲橙）。点击小节可跳转试听。
             </p>
           </aside>
         </div>
