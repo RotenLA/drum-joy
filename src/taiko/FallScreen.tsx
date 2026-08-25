@@ -74,7 +74,18 @@ export function FallScreen({
       durationMs: audioBuffer.duration * 1000,
       title: song.fileName,
     });
-  }, [audioBuffer, layout, song]);
+  }, [
+    audioBuffer,
+    layout,
+    song.activeRange,
+    song.barActivity,
+    song.bpm,
+    song.fileName,
+    song.offsetMs,
+    song.primarySegmentId,
+    song.segments,
+    song.timeSignature,
+  ]);
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;

@@ -12,6 +12,7 @@ import {
   type DrumSegment,
 } from "./drumAnalyze";
 import { PART_BY_ID } from "./laneLayouts";
+import type { LayoutMode } from "./laneLayouts";
 import { songPlayer } from "./player";
 import { Metronome, getAudioContext } from "./metronome";
 
@@ -22,7 +23,7 @@ const TIME_SIGS: readonly [number, number][] = [
   [6, 8],
 ];
 
-export function ChartScreen() {
+export function ChartScreen({ layout }: { layout: LayoutMode }) {
   const song = useSong();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -109,7 +110,7 @@ export function ChartScreen() {
     }
   };
 
-  // ---- 主体段落 / 改速度拍号 → 重建 9 分区预览谱面 ----
+  // ---- 主体段落 / 改速度拍号 / 改分区 → 重建预览谱面 ----
   useEffect(() => {
     if (!song.audioBuffer || segments.length === 0) return;
     const next = buildChart({
@@ -117,7 +118,7 @@ export function ChartScreen() {
       primarySegmentId: song.primarySegmentId,
       barActivity: song.barActivity,
       activeRange: song.activeRange,
-      layout: "nine",
+      layout,
       bpm: song.bpm,
       offsetMs: song.offsetMs,
       timeSignature: song.timeSignature,
@@ -136,6 +137,7 @@ export function ChartScreen() {
     song.offsetMs,
     song.audioBuffer,
     song.fileName,
+    layout,
   ]);
 
   // ---- 播放（真实音频） ----
@@ -464,7 +466,7 @@ export function ChartScreen() {
   );
 }
 
-/** 段落卡片：缩略网格 + 出现信息 + 勾选 */
+/** 段落卡片：缩略网格 + 出现信息 + 主体单选 */
 function SegmentCard({
   seg,
   checked,
@@ -480,6 +482,7 @@ function SegmentCard({
   return (
     <button
       onClick={onToggle}
+      aria-pressed={checked}
       className={`flex flex-col gap-2 border p-3 text-left transition-colors ${
         checked
           ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/5"
@@ -488,7 +491,7 @@ function SegmentCard({
     >
       <div className="flex items-center gap-2 text-xs">
         <i
-          className={`inline-block h-3 w-3 border ${
+          className={`inline-block h-3 w-3 rounded-full border ${
             checked ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]" : "border-[var(--taiko-line)]"
           }`}
         />
