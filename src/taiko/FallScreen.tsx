@@ -134,6 +134,7 @@ export function FallScreen({
 
   const resetRun = useCallback(() => {
     judgedRef.current = new Uint8Array(playChart?.notes.length ?? 0);
+    judgedAtRef.current = new Float64Array(playChart?.notes.length ?? 0);
     statsRef.current = { perfect: 0, good: 0, miss: 0 };
     comboRef.current = 0;
     maxComboRef.current = 0;
