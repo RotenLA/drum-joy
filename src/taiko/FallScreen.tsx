@@ -326,6 +326,7 @@ export function FallScreen({
         while (c < notes.length && notes[c]!.timeMs < t - GOOD_MS) {
           if (!judgedRef.current[c]) {
             judgedRef.current[c] = 2;
+            judgedAtRef.current[c] = now;
             statsRef.current.miss++;
             comboRef.current = 0;
             const note = notes[c]!.note;
@@ -356,7 +357,7 @@ export function FallScreen({
             )
           : null;
 
-      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, {
+      const frame = {
         chart: frameChart,
         timeMs: t,
         speed,
@@ -369,7 +370,17 @@ export function FallScreen({
         judgement: judgementRef.current,
         countText,
         stats: statsRef.current,
-      });
+      };
+
+      if (playMode === "osu") {
+        renderOsu(ctx, canvas.clientWidth, canvas.clientHeight, {
+          ...frame,
+          judged: judgedRef.current,
+          judgedAt: judgedAtRef.current,
+        });
+      } else {
+        renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      }
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
@@ -378,7 +389,7 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [playChart, speed, parts]);
+  }, [playChart, speed, parts, playMode]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
