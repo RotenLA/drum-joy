@@ -32,16 +32,23 @@ const COUNT_IN_BEATS = 4;
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
+/** 游玩模式：舞台下落式 / osu! 随机鼓盘 */
+export type PlayMode = "stage" | "osu";
+
 export function FallScreen({
   layout,
   speed,
+  playMode,
   onLayoutChange,
   onSpeedChange,
+  onPlayModeChange,
 }: {
   layout: LayoutMode;
   speed: number;
+  playMode: PlayMode;
   onLayoutChange: (m: LayoutMode) => void;
   onSpeedChange: (s: number) => void;
+  onPlayModeChange: (m: PlayMode) => void;
 }) {
   const song = useSong();
   const { audioBuffer } = song;
