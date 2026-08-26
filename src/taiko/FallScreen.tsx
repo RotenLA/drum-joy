@@ -62,6 +62,8 @@ export function FallScreen({
   const judgementRef = useRef<{ text: string; color: string; until: number } | null>(null);
   /** 0 未判定 / 1 命中 / 2 Miss */
   const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
+  /** 判定发生时的时间戳（osu! 模式的命中/Miss 动画用） */
+  const judgedAtRef = useRef<Float64Array>(new Float64Array(0));
   const statsRef = useRef({ perfect: 0, good: 0, miss: 0 });
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
