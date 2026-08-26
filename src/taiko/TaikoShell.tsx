@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { SongProvider, useSong } from "./songStore";
-import { FallScreen } from "./FallScreen";
+import { FallScreen, type PlayMode } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
 import { midiManager } from "./midiInput";
@@ -12,10 +12,17 @@ interface TaikoSettings {
   layout: LayoutMode;
   speed: number;
   midiDeviceId: string | null;
+  /** 游玩模式：舞台下落 / osu! */
+  playMode: PlayMode;
 }
 
 const SETTINGS_KEY = "taiko.settings.v2";
-const DEFAULT_SETTINGS: TaikoSettings = { layout: "five", speed: 1, midiDeviceId: null };
+const DEFAULT_SETTINGS: TaikoSettings = {
+  layout: "five",
+  speed: 1,
+  midiDeviceId: null,
+  playMode: "stage",
+};
 
 const NAV: { key: ScreenKey; label: string; hint: string }[] = [
   { key: "play", label: "游玩", hint: "PLAY" },
@@ -127,8 +134,10 @@ function ShellInner() {
             <FallScreen
               layout={settings.layout}
               speed={settings.speed}
+              playMode={settings.playMode}
               onLayoutChange={(layout) => updateSettings({ layout })}
               onSpeedChange={(speed) => updateSettings({ speed })}
+              onPlayModeChange={(playMode) => updateSettings({ playMode })}
             />
           )}
           {screen === "chart" && <ChartScreen layout={settings.layout} />}
