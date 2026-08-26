@@ -483,6 +483,27 @@ export function FallScreen({
         </button>
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
+        <span className="text-xs text-[var(--taiko-ink)]/50">模式</span>
+        {(
+          [
+            ["stage", "舞台下落"],
+            ["osu", "osu!"],
+          ] as const
+        ).map(([mode, label]) => (
+          <button
+            key={mode}
+            onClick={() => onPlayModeChange(mode)}
+            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
+              playMode === mode
+                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+
+        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
         <span className="text-xs text-[var(--taiko-ink)]/50">速度</span>
         {SPEEDS.map((s) => (
           <button
