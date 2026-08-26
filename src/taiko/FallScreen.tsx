@@ -8,6 +8,7 @@ import {
   type PartId,
 } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
+import { renderOsu } from "./osuRenderer";
 import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { midiManager } from "./midiInput";
