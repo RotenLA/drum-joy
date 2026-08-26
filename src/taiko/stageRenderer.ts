@@ -43,7 +43,7 @@ const EASE = 1.55;
 /** 命中闪光时长（与 FallScreen 的 FLASH_MS 对应） */
 const FLASH_MS = 200;
 /** 踏板斜放角：左右镜像「外八」，顶面正方形旋转后再按 0.42 压扁 */
-const PEDAL_TILT = (12 * Math.PI) / 180;
+export const PEDAL_TILT = (12 * Math.PI) / 180;
 
 export interface StageFrame {
   chart: TaikoChart;
@@ -81,7 +81,7 @@ interface Particle {
 const particles: Particle[] = [];
 const lastFlash: Partial<Record<PartId, number>> = {};
 
-function hexToRgba(hex: string, a: number): string {
+export function hexToRgba(hex: string, a: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
@@ -114,7 +114,7 @@ function padRotation(anchor: PadAnchor, w: number, h: number): number {
 }
 
 
-function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
+export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillStyle = "#0a0a0c";
   ctx.fillRect(0, 0, w, h);
 
@@ -156,7 +156,7 @@ function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.fillRect(0, 0, w, h);
 }
 
-function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
+export function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const g = ctx.createLinearGradient(0, h * 0.72, 0, h);
   g.addColorStop(0, "rgba(0,0,0,0)");
   g.addColorStop(1, "rgba(0,0,0,0.55)");
@@ -528,7 +528,7 @@ function drawPad(
   ctx.restore();
 }
 
-function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
+export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
   ctx.save();
 
   // 顶部细进度条

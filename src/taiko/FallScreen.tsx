@@ -8,6 +8,7 @@ import {
   type PartId,
 } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
+import { renderOsu } from "./osuRenderer";
 import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { midiManager } from "./midiInput";
@@ -31,16 +32,23 @@ const COUNT_IN_BEATS = 4;
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
+/** 游玩模式：舞台下落式 / osu! 随机鼓盘 */
+export type PlayMode = "stage" | "osu";
+
 export function FallScreen({
   layout,
   speed,
+  playMode,
   onLayoutChange,
   onSpeedChange,
+  onPlayModeChange,
 }: {
   layout: LayoutMode;
   speed: number;
+  playMode: PlayMode;
   onLayoutChange: (m: LayoutMode) => void;
   onSpeedChange: (s: number) => void;
+  onPlayModeChange: (m: PlayMode) => void;
 }) {
   const song = useSong();
   const { audioBuffer } = song;
@@ -54,6 +62,8 @@ export function FallScreen({
   const judgementRef = useRef<{ text: string; color: string; until: number } | null>(null);
   /** 0 未判定 / 1 命中 / 2 Miss */
   const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
+  /** 判定发生时的时间戳（osu! 模式的命中/Miss 动画用） */
+  const judgedAtRef = useRef<Float64Array>(new Float64Array(0));
   const statsRef = useRef({ perfect: 0, good: 0, miss: 0 });
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
@@ -124,6 +134,7 @@ export function FallScreen({
 
   const resetRun = useCallback(() => {
     judgedRef.current = new Uint8Array(playChart?.notes.length ?? 0);
+    judgedAtRef.current = new Float64Array(playChart?.notes.length ?? 0);
     statsRef.current = { perfect: 0, good: 0, miss: 0 };
     comboRef.current = 0;
     maxComboRef.current = 0;
@@ -186,6 +197,7 @@ export function FallScreen({
       }
       if (best < 0) return;
       judgedRef.current[best] = 1;
+      judgedAtRef.current[best] = now;
       const perfect = bestDiff <= PERFECT_MS;
       statsRef.current[perfect ? "perfect" : "good"]++;
       comboRef.current++;
@@ -314,6 +326,7 @@ export function FallScreen({
         while (c < notes.length && notes[c]!.timeMs < t - GOOD_MS) {
           if (!judgedRef.current[c]) {
             judgedRef.current[c] = 2;
+            judgedAtRef.current[c] = now;
             statsRef.current.miss++;
             comboRef.current = 0;
             const note = notes[c]!.note;
@@ -344,7 +357,7 @@ export function FallScreen({
             )
           : null;
 
-      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, {
+      const frame = {
         chart: frameChart,
         timeMs: t,
         speed,
@@ -357,7 +370,17 @@ export function FallScreen({
         judgement: judgementRef.current,
         countText,
         stats: statsRef.current,
-      });
+      };
+
+      if (playMode === "osu") {
+        renderOsu(ctx, canvas.clientWidth, canvas.clientHeight, {
+          ...frame,
+          judged: judgedRef.current,
+          judgedAt: judgedAtRef.current,
+        });
+      } else {
+        renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      }
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
@@ -366,7 +389,7 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [playChart, speed, parts]);
+  }, [playChart, speed, parts, playMode]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
@@ -458,6 +481,27 @@ export function FallScreen({
         >
           {phase === "paused" ? "继续" : "暂停"}
         </button>
+
+        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
+        <span className="text-xs text-[var(--taiko-ink)]/50">模式</span>
+        {(
+          [
+            ["stage", "舞台下落"],
+            ["osu", "osu!"],
+          ] as const
+        ).map(([mode, label]) => (
+          <button
+            key={mode}
+            onClick={() => onPlayModeChange(mode)}
+            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
+              playMode === mode
+                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
         <span className="text-xs text-[var(--taiko-ink)]/50">速度</span>
