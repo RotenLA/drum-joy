@@ -197,6 +197,7 @@ export function FallScreen({
       }
       if (best < 0) return;
       judgedRef.current[best] = 1;
+      judgedAtRef.current[best] = now;
       const perfect = bestDiff <= PERFECT_MS;
       statsRef.current[perfect ? "perfect" : "good"]++;
       comboRef.current++;
