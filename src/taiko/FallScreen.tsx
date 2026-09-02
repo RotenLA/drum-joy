@@ -359,7 +359,7 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [playChart, speed, parts, playMode]);
+  }, [playChart, speed, parts, playMode, audioBuffer]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
