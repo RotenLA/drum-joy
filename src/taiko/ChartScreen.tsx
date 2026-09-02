@@ -1,6 +1,6 @@
 /**
- * 谱面屏：导入「去鼓伴奏音频 + 鼓 MIDI」（同主文件名自动配对），
- * 展示 MIDI 的速度/拍号/变速信息，提供偏移微调、播放与节拍器试听，
+ * 谱面屏：导入一组 stem（xxx_Vocals/_Bass/_Drums/_Other.mp3）+ 鼓 MIDI（xxx.mid），
+ * 同主文件名自动配对；展示 MIDI 的速度/拍号/变速信息，提供偏移微调、播放与节拍器试听，
  * 以及当前难度下的谱面统计预览。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -13,11 +13,20 @@ import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
 import { layoutOf } from "./difficulty";
 import { songPlayer } from "./player";
 import { Metronome, getAudioContext } from "./metronome";
+import {
+  STEM_KINDS,
+  STEM_LABEL,
+  baseOfMidiName,
+  emptyStems,
+  hasAnyStem,
+  parseStemName,
+  peakOf,
+  stemsDurationMs,
+  type StemMap,
+} from "./stems";
 
 const AUDIO_RE = /\.(mp3|wav|m4a|ogg|flac)$/i;
 const MIDI_RE = /\.(mid|midi)$/i;
-
-const baseNameOf = (name: string) => name.replace(/\.[^.]+$/, "");
 
 export function ChartScreen() {
   const song = useSong();
@@ -29,13 +38,13 @@ export function ChartScreen() {
   const [posMs, setPosMs] = useState(0);
   const [metroOn, setMetroOn] = useState(false);
 
-  // ---- 导入：音频与 MIDI 一起收，按主文件名配对 ----
+  // ---- 导入：按 stem 后缀分轨，MIDI 单独收，主文件名配对 ----
   const importFiles = async (files: File[]) => {
     if (files.length === 0) return;
-    const audioFile = files.find((f) => AUDIO_RE.test(f.name)) ?? null;
+    const audioFiles = files.filter((f) => AUDIO_RE.test(f.name));
     const midiFile = files.find((f) => MIDI_RE.test(f.name)) ?? null;
-    if (!audioFile && !midiFile) {
-      setWarn("只支持 mp3 / wav 与 mid / midi 文件");
+    if (audioFiles.length === 0 && !midiFile) {
+      setWarn("只支持 mp3 / wav 等音频与 mid / midi 文件");
       return;
     }
     setWarn(null);
@@ -43,39 +52,58 @@ export function ChartScreen() {
     try {
       let midi: ParsedMidi | null = song.midi;
       let midiFileName = song.midiFileName;
-      let audioBuffer = song.audioBuffer;
-      let audioFileName = song.audioFileName;
+      const stems: StemMap = { ...song.stems };
+      const bases = new Set<string>();
 
       if (midiFile) {
         setBusy("解析 MIDI…");
         midi = parseMidi(await midiFile.arrayBuffer());
         midiFileName = midiFile.name;
-      }
-      if (audioFile) {
-        setBusy("解码音频…");
-        const buf = await audioFile.arrayBuffer();
-        audioBuffer = await getAudioContext().decodeAudioData(buf);
-        audioFileName = audioFile.name;
+        bases.add(baseOfMidiName(midiFile.name));
+      } else if (midiFileName) {
+        bases.add(baseOfMidiName(midiFileName));
       }
 
-      const base = baseNameOf(audioFileName || midiFileName);
-      if (
-        audioFileName &&
-        midiFileName &&
-        baseNameOf(audioFileName) !== baseNameOf(midiFileName)
-      ) {
-        setWarn(
-          `文件名不一致：${baseNameOf(audioFileName)} / ${baseNameOf(midiFileName)}，仍按当前组合使用`,
-        );
+      // 新导入一组音轨时，先清掉旧的音轨，避免混入上一首
+      if (audioFiles.length > 0) {
+        const fresh = emptyStems();
+        for (const k of STEM_KINDS) fresh[k] = null;
+        Object.assign(stems, fresh);
       }
 
-      songPlayer.load(audioBuffer);
+      for (const f of audioFiles) {
+        const { base, kind } = parseStemName(f.name);
+        bases.add(base);
+        setBusy(`解码 ${STEM_LABEL[kind]}…`);
+        const buffer = await getAudioContext().decodeAudioData(await f.arrayBuffer());
+        stems[kind] = { buffer, fileName: f.name, peak: peakOf(buffer) };
+      }
+
+      const baseList = [...bases].filter(Boolean);
+      const base = baseList[0] ?? song.fileName;
+      if (baseList.length > 1) {
+        setWarn(`文件名主名不一致：${baseList.join(" / ")}，仍按当前组合使用`);
+      }
+
+      // 时长一致性校验（stem 应对齐首尾）
+      const durations = STEM_KINDS.map((k) => stems[k]?.buffer.duration).filter(
+        (d): d is number => typeof d === "number",
+      );
+      if (durations.length > 1) {
+        const spread = Math.max(...durations) - Math.min(...durations);
+        if (spread > 0.15) {
+          setWarn(`各音轨时长相差 ${spread.toFixed(2)}s，可能未对齐首尾`);
+        }
+      }
+
+      songPlayer.load(stems);
+      songPlayer.setStemGain("vocals", song.mix.vocals);
+      songPlayer.setStemGain("drums", song.mix.drums);
       setPlaying(false);
       setPosMs(0);
       setMetroOn(false);
       song.setSong({
-        audioBuffer,
-        audioFileName,
+        stems,
         midi,
         midiFileName,
         fileName: base,
@@ -92,9 +120,9 @@ export function ChartScreen() {
     }
   };
 
-  const durationMs = song.audioBuffer
-    ? song.audioBuffer.duration * 1000
-    : (song.midi?.durationMs ?? 0);
+  const audioDurationMs = stemsDurationMs(song.stems);
+  const durationMs = audioDurationMs || (song.midi?.durationMs ?? 0);
+  const anyStem = hasAnyStem(song.stems);
 
   // ---- 谱面预览（按当前难度） ----
   const chart = useMemo(() => {
@@ -174,7 +202,7 @@ export function ChartScreen() {
   );
 
   // ---- 空态：拖放区 ----
-  if (!song.midi && !song.audioBuffer) {
+  if (!song.midi && !anyStem) {
     return (
       <div
         onDragOver={(e) => {
@@ -194,10 +222,10 @@ export function ChartScreen() {
         }`}
       >
         <p className="text-sm text-[var(--taiko-ink)]/70">
-          把「去鼓伴奏音频」和「鼓 MIDI」一起拖到这里
+          把这首歌的 stem 音轨和鼓 MIDI 一起拖到这里
         </p>
         <p className="text-xs text-[var(--taiko-ink)]/45">
-          同主文件名自动配对，如 Track01.wav + Track01.mid
+          xxx_Vocals / _Bass / _Drums / _Other.mp3（可缺）+ xxx.mid（必需）
         </p>
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -222,14 +250,28 @@ export function ChartScreen() {
           <div className="truncate text-sm font-medium">{song.fileName || "未命名"}</div>
           <div className="text-xs tabular-nums text-[var(--taiko-ink)]/50">
             {fmtTime(durationMs)}
-            {song.audioBuffer ? ` · ${song.audioBuffer.sampleRate} Hz` : " · 无音频（静音试玩）"}
+            {anyStem ? "" : " · 无音频（静音试玩）"}
           </div>
         </div>
-        <div className="flex flex-col gap-1 text-xs">
-          <span className={song.audioFileName ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/35"}>
-            音频：{song.audioFileName || "未导入"}
-          </span>
-          <span className={song.midiFileName ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/35"}>
+        <div className="grid grid-cols-2 gap-x-5 gap-y-1 text-xs">
+          {STEM_KINDS.map((k) => {
+            const t = song.stems[k];
+            return (
+              <span
+                key={k}
+                className={t ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/30"}
+              >
+                {STEM_LABEL[k]}：{t ? t.fileName : "未导入"}
+              </span>
+            );
+          })}
+          <span
+            className={
+              song.midiFileName
+                ? "text-[var(--taiko-ink)]/70"
+                : "text-[var(--taiko-ink)]/35"
+            }
+          >
             MIDI：{song.midiFileName || "未导入（无法生成谱面）"}
           </span>
         </div>
@@ -272,7 +314,7 @@ export function ChartScreen() {
         <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
         <button
           onClick={togglePlay}
-          disabled={!song.audioBuffer}
+          disabled={!anyStem}
           className="border border-[var(--taiko-ink)] px-4 py-1.5 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:opacity-30"
         >
           {playing ? "暂停" : "播放"}
