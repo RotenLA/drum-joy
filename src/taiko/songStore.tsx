@@ -3,7 +3,15 @@
  * + 难度 + 生成的谱面。速度/拍号只来自 MIDI 的 tempo / time signature map。
  * 不持久化歌曲（每次重新导入），仅难度与调音台音量存 localStorage。
  */
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type Context,
+  type ReactNode,
+} from "react";
 import type { TaikoChart } from "@/shared/taikoChart";
 import type { ParsedMidi } from "./midiFile";
 import type { Difficulty } from "./difficulty";
@@ -37,7 +45,18 @@ export interface SongContextValue extends SongState {
   setSong: (patch: Partial<SongState>) => void;
 }
 
-const SongContext = createContext<SongContextValue | null>(null);
+/**
+ * Vite 热更新可能只替换 useSong 所在模块，留下仍挂载着旧 Context 的 Provider。
+ * 将 Context 缓存在 globalThis，确保热更新前后的 Provider / consumer 使用同一实例。
+ */
+const songContextGlobal = globalThis as typeof globalThis & {
+  __lovableSynthSongContext?: Context<SongContextValue | null>;
+};
+
+const SongContext =
+  songContextGlobal.__lovableSynthSongContext ?? createContext<SongContextValue | null>(null);
+
+songContextGlobal.__lovableSynthSongContext = SongContext;
 
 const clamp01 = (v: unknown, fallback: number) =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback;
