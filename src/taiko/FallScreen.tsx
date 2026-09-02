@@ -225,13 +225,15 @@ export function FallScreen({
 
   const togglePause = useCallback(() => {
     if (phaseRef.current === "playing") {
-      songPlayer.pause();
+      if (audioBuffer) songPlayer.pause();
       setPhaseBoth("paused");
     } else if (phaseRef.current === "paused") {
-      songPlayer.play();
+      if (audioBuffer) songPlayer.play();
+      else silentStartRef.current = performance.now() - timeRef.current;
       setPhaseBoth("playing");
     }
-  }, [setPhaseBoth]);
+  }, [audioBuffer, setPhaseBoth]);
+
 
   // 空格暂停/继续，回车开始
   useEffect(() => {
