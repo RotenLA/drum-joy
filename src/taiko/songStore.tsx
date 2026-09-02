@@ -1,21 +1,27 @@
 /**
- * 歌曲状态：去鼓伴奏音频 + 对应鼓 MIDI（同文件名配对）+ 难度 + 生成的谱面。
- * 速度/拍号只来自 MIDI 的 tempo / time signature map。
- * 不持久化歌曲（每次重新导入），仅难度存 localStorage。
+ * 歌曲状态：多轨 stem 音频（Vocals / Bass / Drums / Other）+ 对应鼓 MIDI（同主文件名配对）
+ * + 难度 + 生成的谱面。速度/拍号只来自 MIDI 的 tempo / time signature map。
+ * 不持久化歌曲（每次重新导入），仅难度与调音台音量存 localStorage。
  */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { TaikoChart } from "@/shared/taikoChart";
 import type { ParsedMidi } from "./midiFile";
 import type { Difficulty } from "./difficulty";
+import { emptyStems, type StemMap } from "./stems";
 
 const SETTINGS_KEY = "taiko.settings.v3";
 
+export interface MixState {
+  /** 0~1，1 = 原始文件音量 */
+  vocals: number;
+  drums: number;
+}
+
 export interface SongState {
-  /** 去掉鼓声的伴奏音频（可为空，仅 MIDI 时静音试玩） */
-  audioBuffer: AudioBuffer | null;
-  /** 配对用的主文件名（不含扩展名） */
+  /** 各条 stem 音轨（可缺，全缺则静音试玩） */
+  stems: StemMap;
+  /** 配对用的主文件名（不含扩展名与 stem 后缀） */
   fileName: string;
-  audioFileName: string;
   midiFileName: string;
   midi: ParsedMidi | null;
   /** MIDI 与音频对齐的整体偏移（毫秒，可手动微调） */
@@ -23,6 +29,7 @@ export interface SongState {
   bpm: number;
   timeSignature: [number, number];
   difficulty: Difficulty;
+  mix: MixState;
   chart: TaikoChart | null;
 }
 
@@ -32,17 +39,20 @@ export interface SongContextValue extends SongState {
 
 const SongContext = createContext<SongContextValue | null>(null);
 
+const clamp01 = (v: unknown, fallback: number) =>
+  typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback;
+
 export function SongProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SongState>({
-    audioBuffer: null,
+    stems: emptyStems(),
     fileName: "",
-    audioFileName: "",
     midiFileName: "",
     midi: null,
     offsetMs: 0,
     bpm: 120,
     timeSignature: [4, 4],
     difficulty: "standard",
+    mix: { vocals: 1, drums: 0 },
     chart: null,
   });
 
@@ -53,9 +63,14 @@ export function SongProvider({ children }: { children: ReactNode }) {
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       const d = parsed["difficulty"];
-      if (d === "beginner" || d === "standard" || d === "hard") {
-        setState((s) => ({ ...s, difficulty: d }));
-      }
+      const mix = parsed["mix"] as Record<string, unknown> | undefined;
+      setState((s) => ({
+        ...s,
+        difficulty: d === "beginner" || d === "standard" || d === "hard" ? d : s.difficulty,
+        mix: mix
+          ? { vocals: clamp01(mix["vocals"], 1), drums: clamp01(mix["drums"], 0) }
+          : s.mix,
+      }));
     } catch {
       // 忽略损坏的本地设置
     }
@@ -65,14 +80,14 @@ export function SongProvider({ children }: { children: ReactNode }) {
     () => ({
       ...state,
       setSong: (patch) => {
-        if (patch.difficulty !== undefined) {
+        if (patch.difficulty !== undefined || patch.mix !== undefined) {
           try {
             const raw = localStorage.getItem(SETTINGS_KEY);
             const base = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-            localStorage.setItem(
-              SETTINGS_KEY,
-              JSON.stringify({ ...base, difficulty: patch.difficulty }),
-            );
+            const next = { ...base };
+            if (patch.difficulty !== undefined) next["difficulty"] = patch.difficulty;
+            if (patch.mix !== undefined) next["mix"] = patch.mix;
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
           } catch {
             // 存储不可用时仅保留内存态
           }
