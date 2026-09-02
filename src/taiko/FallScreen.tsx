@@ -4,7 +4,6 @@ import {
   PART_BY_ID,
   VISIBLE_PARTS,
   partOfNote,
-  type LayoutMode,
   type PartId,
 } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
@@ -13,14 +12,7 @@ import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { midiManager } from "./midiInput";
 import { click as metronomeClick } from "./metronome";
-import { arrangeChart } from "./arrange";
-import {
-  GROOVE_BY_ID,
-  customIsEmpty,
-  patternFromCustom,
-  resizeCustom,
-} from "./groovePatterns";
-import { matchGroove } from "./grooveMatch";
+import { DIFFICULTIES, buildPlayChart, layoutOf } from "./difficulty";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
@@ -30,23 +22,20 @@ const GOOD_MS = 120;
 /** 倒计时拍数（四分音符，无视拍号） */
 const COUNT_IN_BEATS = 4;
 
+
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
 /** 游玩模式：舞台下落式 / osu! 随机鼓盘 */
 export type PlayMode = "stage" | "osu";
 
 export function FallScreen({
-  layout,
   speed,
   playMode,
-  onLayoutChange,
   onSpeedChange,
   onPlayModeChange,
 }: {
-  layout: LayoutMode;
   speed: number;
   playMode: PlayMode;
-  onLayoutChange: (m: LayoutMode) => void;
   onSpeedChange: (s: number) => void;
   onPlayModeChange: (m: PlayMode) => void;
 }) {
@@ -73,58 +62,28 @@ export function FallScreen({
   const countdownStartRef = useRef(0);
   const countdownMsRef = useRef(0);
   const beatMsRef = useRef(500);
+  /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
+  const silentStartRef = useRef(0);
 
+  const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
+  const durationMs = audioBuffer ? audioBuffer.duration * 1000 : (song.midi?.durationMs ?? 0);
 
-  /** 以基础节奏型（或自定义节奏）为骨架，按当前分区/难度/风格重新编谱。 */
+  /** 谱面 = 鼓 MIDI 按当前难度加工（入门 5 分区 / 标准原样 / 困难加花） */
   const playChart = useMemo(() => {
-    if (!audioBuffer) return null;
-    const beatsPerBar = song.timeSignature[0] * (4 / song.timeSignature[1]);
-    const primary = song.segments.find((s) => s.id === song.primarySegmentId) ?? null;
-    let groove;
-    if (song.useCustom && !customIsEmpty(song.customPattern)) {
-      groove = patternFromCustom(
-        resizeCustom(song.customPattern, beatsPerBar),
-        beatsPerBar,
-        song.bpm,
-      );
-    } else {
-      if (!song.primarySegmentId || song.segments.length === 0) return null;
-      groove =
-        (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ?? matchGroove(primary, song.bpm);
-    }
-    return arrangeChart({
-      groove,
-      barActivity: song.barActivity,
-      barBands: song.barBands,
-      activeRange: song.activeRange,
-      layout,
-      density: song.density,
-      style: song.style,
-      bpm: song.bpm,
-      offsetMs: song.offsetMs,
-      timeSignature: song.timeSignature,
-      durationMs: audioBuffer.duration * 1000,
-      title: song.fileName,
-    });
-  }, [
-    audioBuffer,
-    layout,
-    song.activeRange,
-    song.barActivity,
-    song.barBands,
-    song.bpm,
-    song.customPattern,
-    song.density,
-    song.fileName,
-    song.grooveId,
-    song.offsetMs,
-    song.primarySegmentId,
-    song.segments,
-    song.style,
-    song.timeSignature,
-    song.useCustom,
-  ]);
+    if (!song.midi) return null;
+    return buildPlayChart(
+      song.midi,
+      {
+        title: song.fileName,
+        offsetMs: song.offsetMs,
+        durationMs: durationMs || undefined,
+      },
+      song.difficulty,
+    );
+  }, [song.midi, song.fileName, song.offsetMs, song.difficulty, durationMs]);
+
+
 
 
   const setPhaseBoth = useCallback((p: Phase) => {
@@ -239,7 +198,7 @@ export function FallScreen({
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
   const start = useCallback(() => {
-    if (!audioBuffer || !playChart || playChart.notes.length === 0) return;
+    if (!playChart || playChart.notes.length === 0) return;
     timersRef.current.forEach((t) => window.clearTimeout(t));
     timersRef.current = [];
     resetRun();
@@ -256,21 +215,25 @@ export function FallScreen({
     }
     timersRef.current.push(
       window.setTimeout(() => {
-        songPlayer.play(0);
+        if (audioBuffer) songPlayer.play(0);
+        else silentStartRef.current = performance.now();
         setPhaseBoth("playing");
       }, COUNT_IN_BEATS * beatMs),
     );
   }, [audioBuffer, playChart, resetRun, setPhaseBoth]);
 
+
   const togglePause = useCallback(() => {
     if (phaseRef.current === "playing") {
-      songPlayer.pause();
+      if (audioBuffer) songPlayer.pause();
       setPhaseBoth("paused");
     } else if (phaseRef.current === "paused") {
-      songPlayer.play();
+      if (audioBuffer) songPlayer.play();
+      else silentStartRef.current = performance.now() - timeRef.current;
       setPhaseBoth("playing");
     }
-  }, [setPhaseBoth]);
+  }, [audioBuffer, setPhaseBoth]);
+
 
   // 空格暂停/继续，回车开始
   useEffect(() => {
@@ -313,11 +276,18 @@ export function FallScreen({
     const draw = (now: number) => {
       const ph = phaseRef.current;
       let t = timeRef.current;
-      if (ph === "playing") t = songPlayer.timeMs();
-      else if (ph === "countdown") t = now - countdownStartRef.current - countdownMsRef.current;
-      else if (ph === "idle") t = 0;
+      if (ph === "playing") {
+        t = audioBuffer ? songPlayer.timeMs() : now - silentStartRef.current;
+        if (!audioBuffer && playChart && t > playChart.durationMs) {
+          phaseRef.current = "ended";
+          setPhase("ended");
+        }
+      } else if (ph === "countdown") {
+        t = now - countdownStartRef.current - countdownMsRef.current;
+      } else if (ph === "idle") t = 0;
       // paused / ended：冻结
       timeRef.current = t;
+
 
       // Miss 检测：超过 Good 窗未击
       if (ph === "playing" && playChart) {
@@ -389,7 +359,7 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [playChart, speed, parts, playMode]);
+  }, [playChart, speed, parts, playMode, audioBuffer]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
@@ -409,19 +379,21 @@ export function FallScreen({
         <canvas ref={canvasRef} className="block h-full w-full" />
 
         {/* 空态 / 开始 / 暂停 / 结算遮罩 */}
-        {!audioBuffer && (
+        {!song.midi && (
           <Overlay>
-            <p className="text-sm text-white/80">还没有歌曲</p>
-            <p className="text-xs text-white/50">请先到「谱面」屏导入 mp3 / wav 并生成谱面</p>
+            <p className="text-sm text-white/80">还没有谱面</p>
+            <p className="text-xs text-white/50">
+              请先到「谱面」屏导入去鼓伴奏音频与对应的鼓 MIDI
+            </p>
           </Overlay>
         )}
-        {audioBuffer && (!playChart || playChart.notes.length === 0) && (
+        {song.midi && (!playChart || playChart.notes.length === 0) && (
           <Overlay>
             <p className="text-sm text-white/80">谱面为空</p>
-            <p className="text-xs text-white/50">请到「谱面」屏选择一个主体节奏</p>
+            <p className="text-xs text-white/50">该 MIDI 中没有可识别的鼓音符</p>
           </Overlay>
         )}
-        {audioBuffer && playChart && playChart.notes.length > 0 && phase === "idle" && (
+        {song.midi && playChart && playChart.notes.length > 0 && phase === "idle" && (
           <Overlay>
             <button
               onClick={start}
@@ -429,9 +401,12 @@ export function FallScreen({
             >
               开始
             </button>
-            <p className="text-xs text-white/40">回车也可开始 · 空格暂停</p>
+            <p className="text-xs text-white/40">
+              回车也可开始 · 空格暂停{audioBuffer ? "" : " · 无音频，静音试玩"}
+            </p>
           </Overlay>
         )}
+
         {phase === "paused" && (
           <Overlay>
             <p className="text-lg tracking-[0.3em] text-white">已暂停</p>
@@ -520,25 +495,22 @@ export function FallScreen({
         ))}
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-        <span className="text-xs text-[var(--taiko-ink)]/50">分区</span>
-        {(
-          [
-            ["five", "5分区"],
-            ["nine", "9分区"],
-          ] as const
-        ).map(([mode, label]) => (
+        <span className="text-xs text-[var(--taiko-ink)]/50">难度</span>
+        {DIFFICULTIES.map((d) => (
           <button
-            key={mode}
-            onClick={() => onLayoutChange(mode)}
+            key={d.id}
+            onClick={() => song.setSong({ difficulty: d.id })}
+            title={d.hint}
             className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
-              layout === mode
+              song.difficulty === d.id
                 ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
                 : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
             }`}
           >
-            {label}
+            {d.label}
           </button>
         ))}
+
 
         <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55">
           {parts.map((p) => (

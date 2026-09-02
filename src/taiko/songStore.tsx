@@ -1,48 +1,29 @@
 /**
- * 歌曲状态：导入的音频 + 速度/拍号/偏移 + 歌曲段落分析 + 自定义节奏
- * + 谱面难度（密度档位）与倾向风格 + 生成的谱面，三屏共享。
- * 段落与选择存在这里（而非 ChartScreen 本地 state），切屏卸载后不丢失。
- * 不持久化歌曲（每次重新导入），仅难度/风格/自定义节奏存 localStorage。
+ * 歌曲状态：去鼓伴奏音频 + 对应鼓 MIDI（同文件名配对）+ 难度 + 生成的谱面。
+ * 速度/拍号只来自 MIDI 的 tempo / time signature map。
+ * 不持久化歌曲（每次重新导入），仅难度存 localStorage。
  */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { TaikoChart } from "@/shared/taikoChart";
-import type { BarBands, DrumSegment } from "./drumAnalyze";
-import type { Density } from "./chartSimplify";
-import { emptyCustom, type CustomPattern } from "./groovePatterns";
-import { DEFAULT_STYLE, isStyleId, type StyleId } from "./grooveStyles";
+import type { ParsedMidi } from "./midiFile";
+import type { Difficulty } from "./difficulty";
 
-/** 速度/拍号来源标签（谱面屏展示用） */
-export type MetaSource = "metadata" | "detect" | "manual";
-
-const SETTINGS_KEY = "taiko.settings.v2";
+const SETTINGS_KEY = "taiko.settings.v3";
 
 export interface SongState {
+  /** 去掉鼓声的伴奏音频（可为空，仅 MIDI 时静音试玩） */
   audioBuffer: AudioBuffer | null;
+  /** 配对用的主文件名（不含扩展名） */
   fileName: string;
+  audioFileName: string;
+  midiFileName: string;
+  midi: ParsedMidi | null;
+  /** MIDI 与音频对齐的整体偏移（毫秒，可手动微调） */
+  offsetMs: number;
   bpm: number;
   timeSignature: [number, number];
-  /** 首拍偏移（毫秒，自动检测给出，可手动微调） */
-  offsetMs: number;
+  difficulty: Difficulty;
   chart: TaikoChart | null;
-  /** 歌曲段落分析结果（重新导入时清空） */
-  segments: DrumSegment[];
-  /** 单选的主体段落 id */
-  primarySegmentId: string | null;
-  /** 后台匹配到的基础节奏型 id */
-  grooveId: string | null;
-  /** 是否以「自定义节奏」为骨架（与段落单选互斥） */
-  useCustom: boolean;
-  /** 自定义一小节（三轨 16 分位图） */
-  customPattern: CustomPattern;
-  /** 谱面难度（密度档位） */
-  density: Density;
-  /** 倾向风格 */
-  style: StyleId;
-  /** 每小节鼓声活跃度（0–1）、三类鼓件击数与稳定鼓声区间 */
-  barActivity: number[];
-  barBands: BarBands[];
-  activeRange: [number, number] | null;
-  metaSource: MetaSource | null;
 }
 
 export interface SongContextValue extends SongState {
@@ -51,27 +32,18 @@ export interface SongContextValue extends SongState {
 
 const SongContext = createContext<SongContextValue | null>(null);
 
-const PERSIST_KEYS = ["density", "style", "useCustom", "customPattern"] as const;
-
 export function SongProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SongState>({
     audioBuffer: null,
     fileName: "",
+    audioFileName: "",
+    midiFileName: "",
+    midi: null,
+    offsetMs: 0,
     bpm: 120,
     timeSignature: [4, 4],
-    offsetMs: 0,
+    difficulty: "standard",
     chart: null,
-    segments: [],
-    primarySegmentId: null,
-    grooveId: null,
-    useCustom: false,
-    customPattern: emptyCustom(4),
-    density: "normal",
-    style: DEFAULT_STYLE,
-    barActivity: [],
-    barBands: [],
-    activeRange: null,
-    metaSource: null,
   });
 
   // hydration 后再读本地设置，避免 SSR 不一致
@@ -80,24 +52,10 @@ export function SongProvider({ children }: { children: ReactNode }) {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Record<string, unknown>;
-      const patch: Partial<SongState> = {};
-      const d = parsed["density"];
-      if (d === "easy" || d === "normal" || d === "raw") {
-        patch.density = d as Density;
+      const d = parsed["difficulty"];
+      if (d === "beginner" || d === "standard" || d === "hard") {
+        setState((s) => ({ ...s, difficulty: d }));
       }
-      const st = parsed["style"];
-      if (isStyleId(st)) patch.style = st;
-      const uc = parsed["useCustom"];
-      if (typeof uc === "boolean") patch.useCustom = uc;
-      const cp = parsed["customPattern"] as Partial<CustomPattern> | undefined;
-      if (cp && Array.isArray(cp.kick) && Array.isArray(cp.snare) && Array.isArray(cp.hihat)) {
-        patch.customPattern = {
-          kick: cp.kick.map(Boolean),
-          snare: cp.snare.map(Boolean),
-          hihat: cp.hihat.map(Boolean),
-        };
-      }
-      if (Object.keys(patch).length > 0) setState((s) => ({ ...s, ...patch }));
     } catch {
       // 忽略损坏的本地设置
     }
@@ -107,20 +65,13 @@ export function SongProvider({ children }: { children: ReactNode }) {
     () => ({
       ...state,
       setSong: (patch) => {
-        if (PERSIST_KEYS.some((k) => patch[k] !== undefined)) {
+        if (patch.difficulty !== undefined) {
           try {
             const raw = localStorage.getItem(SETTINGS_KEY);
             const base = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-            const next = { ...state, ...patch };
             localStorage.setItem(
               SETTINGS_KEY,
-              JSON.stringify({
-                ...base,
-                density: next.density,
-                style: next.style,
-                useCustom: next.useCustom,
-                customPattern: next.customPattern,
-              }),
+              JSON.stringify({ ...base, difficulty: patch.difficulty }),
             );
           } catch {
             // 存储不可用时仅保留内存态
