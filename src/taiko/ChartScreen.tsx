@@ -1,196 +1,124 @@
+/**
+ * 谱面屏：导入「去鼓伴奏音频 + 鼓 MIDI」（同主文件名自动配对），
+ * 展示 MIDI 的速度/拍号/变速信息，提供偏移微调、播放与节拍器试听，
+ * 以及当前难度下的谱面统计预览。
+ */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
-import { parseAudioMeta } from "./audioMeta";
-import { detectBeat } from "./beatDetect";
-import {
-  BAND_LABEL,
-  BAND_NOTE,
-  analyzeDrums,
-  type DrumBand,
-  type DrumSegment,
-} from "./drumAnalyze";
-import { arrangeChart } from "./arrange";
-import {
-  GROOVE_BY_ID,
-  GROOVE_PATTERNS,
-  customIsEmpty,
-  emptyCustom,
-  patternFromCustom,
-  resizeCustom,
-  type CustomPattern,
-} from "./groovePatterns";
-import { matchGroove, scoreGrooves } from "./grooveMatch";
-import { DENSITY_LABEL, type Density } from "./chartSimplify";
-import { GROOVE_STYLES } from "./grooveStyles";
-import { PART_BY_ID } from "./laneLayouts";
-import type { LayoutMode } from "./laneLayouts";
+import { parseMidi, type ParsedMidi } from "./midiFile";
+import { buildPlayChart } from "./difficulty";
+import { DIFFICULTIES } from "./difficulty";
+import { countByPart } from "./midiChart";
+import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
+import { layoutOf } from "./difficulty";
 import { songPlayer } from "./player";
 import { Metronome, getAudioContext } from "./metronome";
 
-const TIME_SIGS: readonly [number, number][] = [
-  [2, 4],
-  [3, 4],
-  [4, 4],
-  [6, 8],
-];
+const AUDIO_RE = /\.(mp3|wav|m4a|ogg|flac)$/i;
+const MIDI_RE = /\.(mid|midi)$/i;
 
-export function ChartScreen({ layout }: { layout: LayoutMode }) {
+const baseNameOf = (name: string) => name.replace(/\.[^.]+$/, "");
+
+export function ChartScreen() {
   const song = useSong();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  // 段落 / 主体 / 来源标签存于 songStore：切屏卸载组件后不丢失
-  const segments = song.segments;
-  const metaSource = song.metaSource;
+  const [warn, setWarn] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [posMs, setPosMs] = useState(0);
   const [metroOn, setMetroOn] = useState(false);
-  const [dragOver, setDragOver] = useState(false);
 
-  const chart = song.chart;
-
-  // ---- 导入：解码 → 元数据 → 自动检测 → 鼓节奏分析 ----
-  const importFile = async (file: File) => {
-    setBusy("解码音频…");
+  // ---- 导入：音频与 MIDI 一起收，按主文件名配对 ----
+  const importFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    const audioFile = files.find((f) => AUDIO_RE.test(f.name)) ?? null;
+    const midiFile = files.find((f) => MIDI_RE.test(f.name)) ?? null;
+    if (!audioFile && !midiFile) {
+      setWarn("只支持 mp3 / wav 与 mid / midi 文件");
+      return;
+    }
+    setWarn(null);
+    setBusy("读取文件…");
     try {
-      const arrayBuf = await file.arrayBuffer();
-      const meta = parseAudioMeta(arrayBuf);
-      const audioBuffer = await getAudioContext().decodeAudioData(arrayBuf.slice(0));
+      let midi: ParsedMidi | null = song.midi;
+      let midiFileName = song.midiFileName;
+      let audioBuffer = song.audioBuffer;
+      let audioFileName = song.audioFileName;
+
+      if (midiFile) {
+        setBusy("解析 MIDI…");
+        midi = parseMidi(await midiFile.arrayBuffer());
+        midiFileName = midiFile.name;
+      }
+      if (audioFile) {
+        setBusy("解码音频…");
+        const buf = await audioFile.arrayBuffer();
+        audioBuffer = await getAudioContext().decodeAudioData(buf);
+        audioFileName = audioFile.name;
+      }
+
+      const base = baseNameOf(audioFileName || midiFileName);
+      if (
+        audioFileName &&
+        midiFileName &&
+        baseNameOf(audioFileName) !== baseNameOf(midiFileName)
+      ) {
+        setWarn(
+          `文件名不一致：${baseNameOf(audioFileName)} / ${baseNameOf(midiFileName)}，仍按当前组合使用`,
+        );
+      }
+
       songPlayer.load(audioBuffer);
       setPlaying(false);
       setPosMs(0);
       setMetroOn(false);
-      const fileName = meta.title || file.name.replace(/\.[^.]+$/, "");
       song.setSong({
         audioBuffer,
-        fileName,
+        audioFileName,
+        midi,
+        midiFileName,
+        fileName: base,
+        offsetMs: 0,
+        bpm: midi ? Math.round(midi.bpm * 100) / 100 : 120,
+        timeSignature: midi ? midi.timeSignature : [4, 4],
         chart: null,
-        segments: [],
-        primarySegmentId: null,
-        grooveId: null,
-        barActivity: [],
-        barBands: [],
-        activeRange: null,
-        metaSource: null,
-      });
-
-      setBusy("检测速度与拍号…");
-      const det = await detectBeat(audioBuffer);
-      const bpm = meta.bpm ?? det.bpm;
-      const timeSignature = meta.timeSignature ?? det.timeSignature;
-      song.setSong({
-        bpm,
-        timeSignature,
-        offsetMs: det.offsetMs,
-        metaSource: meta.bpm || meta.timeSignature ? "metadata" : "detect",
-      });
-
-      setBusy("分析鼓节奏…");
-      const analysis = await analyzeDrums(audioBuffer, bpm, det.offsetMs, timeSignature);
-      const primary = analysis.segments[0] ?? null;
-      song.setSong({
-        segments: analysis.segments,
-        primarySegmentId: primary?.id ?? null,
-        grooveId: matchGroove(primary, bpm).id,
-        barActivity: analysis.barActivity,
-        barBands: analysis.barBands,
-        activeRange: analysis.activeRange,
-        chart: analysis.segments.length === 0 ? null : song.chart,
       });
     } catch (err) {
       console.error(err);
-      window.alert("导入失败：无法解码该音频文件");
+      window.alert("导入失败：无法解析该文件（音频需可解码，MIDI 需为标准 SMF）");
     } finally {
       setBusy(null);
     }
   };
 
-  const reanalyze = async () => {
-    if (!song.audioBuffer) return;
-    setBusy("按当前 BPM/拍号重新分析…");
-    try {
-      const analysis = await analyzeDrums(
-        song.audioBuffer,
-        song.bpm,
-        song.offsetMs,
-        song.timeSignature,
-      );
-      const primary = analysis.segments[0] ?? null;
-      song.setSong({
-        segments: analysis.segments,
-        primarySegmentId: primary?.id ?? null,
-        grooveId: matchGroove(primary, song.bpm).id,
-        barActivity: analysis.barActivity,
-        barBands: analysis.barBands,
-        activeRange: analysis.activeRange,
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
+  const durationMs = song.audioBuffer
+    ? song.audioBuffer.duration * 1000
+    : (song.midi?.durationMs ?? 0);
 
-  const primarySegment = useMemo(
-    () => segments.find((s) => s.id === song.primarySegmentId) ?? null,
-    [segments, song.primarySegmentId],
-  );
-  /** 主体段落 → 基础节奏型排序（后台匹配，界面不再手动改选） */
-  const grooveRanking = useMemo(
-    () => scoreGrooves(primarySegment, song.bpm),
-    [primarySegment, song.bpm],
-  );
-  const beatsPerBar = song.timeSignature[0] * (4 / song.timeSignature[1]);
-  const customCells = useMemo(
-    () => resizeCustom(song.customPattern, beatsPerBar),
-    [song.customPattern, beatsPerBar],
-  );
-  const customReady = song.useCustom && !customIsEmpty(customCells);
-  const groove = useMemo(() => {
-    if (customReady) return patternFromCustom(customCells, beatsPerBar, song.bpm);
-    return (
-      (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ??
-      grooveRanking[0]?.pattern ??
-      GROOVE_PATTERNS[0]!
+  // ---- 谱面预览（按当前难度） ----
+  const chart = useMemo(() => {
+    if (!song.midi) return null;
+    return buildPlayChart(
+      song.midi,
+      {
+        title: song.fileName,
+        offsetMs: song.offsetMs,
+        durationMs: durationMs || undefined,
+      },
+      song.difficulty,
     );
-  }, [customReady, customCells, beatsPerBar, song.bpm, song.grooveId, grooveRanking]);
+  }, [song.midi, song.fileName, song.offsetMs, song.difficulty, durationMs]);
 
-  /** 改主体 / 自定义节奏 / 难度 / 风格 / 速度拍号 / 分区 → 重建预览谱面 */
   useEffect(() => {
-    if (!song.audioBuffer) return;
-    if (segments.length === 0 && !customReady) return;
-    const next = arrangeChart({
-      groove,
-      barActivity: song.barActivity,
-      barBands: song.barBands,
-      activeRange: song.activeRange,
-      layout,
-      density: song.density,
-      style: song.style,
-      bpm: song.bpm,
-      offsetMs: song.offsetMs,
-      timeSignature: song.timeSignature,
-      durationMs: song.audioBuffer.duration * 1000,
-      title: song.fileName,
-    });
-    song.setSong({ chart: next });
+    song.setSong({ chart });
+    // chart 只随输入变化重建
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    segments,
-    groove,
-    customReady,
-    song.density,
-    song.style,
-    song.barActivity,
-    song.barBands,
-    song.activeRange,
-    song.bpm,
-    song.timeSignature,
+  }, [chart]);
 
-    song.offsetMs,
-    song.audioBuffer,
-    song.fileName,
-    layout,
-  ]);
+  const counts = useMemo(() => (chart ? countByPart(chart) : null), [chart]);
 
-  // ---- 播放（真实音频） ----
+  // ---- 播放 ----
   useEffect(() => {
     songPlayer.setOnEnded(() => setPlaying(false));
     return () => songPlayer.setOnEnded(null);
@@ -212,9 +140,9 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
     }
   };
 
-  // ---- 节拍器（可单独试听，也可叠在歌曲上验证速度） ----
+  // ---- 节拍器 ----
   useEffect(() => {
-    if (!metroOn || !song.audioBuffer) return;
+    if (!metroOn) return;
     const m = new Metronome();
     m.start({
       bpm: song.bpm,
@@ -223,19 +151,30 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
       getPositionMs: () => (songPlayer.playing ? songPlayer.timeMs() : null),
     });
     return () => m.stop();
-  }, [metroOn, song.bpm, song.timeSignature, song.offsetMs, song.audioBuffer]);
+  }, [metroOn, song.bpm, song.timeSignature, song.offsetMs]);
 
   const fmtTime = (ms: number) => {
     const s = Math.max(0, Math.floor(ms / 1000));
     return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   };
 
-  const markManual = () => {
-    if (song.metaSource) song.setSong({ metaSource: "manual" });
-  };
+  const fileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      multiple
+      accept=".mp3,.wav,.m4a,.ogg,.flac,.mid,.midi,audio/*"
+      className="hidden"
+      onChange={(e) => {
+        const list = Array.from(e.target.files ?? []);
+        if (list.length > 0) void importFiles(list);
+        e.target.value = "";
+      }}
+    />
+  );
 
-  // ---- 未导入：拖放区 ----
-  if (!song.audioBuffer) {
+  // ---- 空态：拖放区 ----
+  if (!song.midi && !song.audioBuffer) {
     return (
       <div
         onDragOver={(e) => {
@@ -246,14 +185,20 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          const f = e.dataTransfer.files?.[0];
-          if (f) void importFile(f);
+          void importFiles(Array.from(e.dataTransfer.files ?? []));
         }}
         className={`flex h-64 flex-col items-center justify-center gap-3 border border-dashed transition-colors ${
-          dragOver ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/5" : "border-[var(--taiko-line)]"
+          dragOver
+            ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/5"
+            : "border-[var(--taiko-line)]"
         }`}
       >
-        <p className="text-sm text-[var(--taiko-ink)]/70">把 mp3 / wav 拖到这里</p>
+        <p className="text-sm text-[var(--taiko-ink)]/70">
+          把「去鼓伴奏音频」和「鼓 MIDI」一起拖到这里
+        </p>
+        <p className="text-xs text-[var(--taiko-ink)]/45">
+          同主文件名自动配对，如 Track01.wav + Track01.mid
+        </p>
         <button
           onClick={() => fileInputRef.current?.click()}
           className="border border-[var(--taiko-ink)] px-6 py-2 text-sm text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
@@ -261,129 +206,74 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
           选择文件
         </button>
         {busy && <p className="text-xs text-[var(--taiko-ink)]/50">{busy}</p>}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void importFile(f);
-            e.target.value = "";
-          }}
-        />
+        {warn && <p className="text-xs text-[var(--taiko-ink)]/60">{warn}</p>}
+        {fileInput}
       </div>
     );
   }
 
-  const durationMs = song.audioBuffer.duration * 1000;
+  const tempoChanges = song.midi ? Math.max(0, song.midi.tempos.length - 1) : 0;
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 歌曲信息 + 导入 */}
+      {/* 配对信息 */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{song.fileName}</div>
+          <div className="truncate text-sm font-medium">{song.fileName || "未命名"}</div>
           <div className="text-xs tabular-nums text-[var(--taiko-ink)]/50">
-            {fmtTime(durationMs)} · {song.audioBuffer.sampleRate} Hz
+            {fmtTime(durationMs)}
+            {song.audioBuffer ? ` · ${song.audioBuffer.sampleRate} Hz` : " · 无音频（静音试玩）"}
           </div>
+        </div>
+        <div className="flex flex-col gap-1 text-xs">
+          <span className={song.audioFileName ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/35"}>
+            音频：{song.audioFileName || "未导入"}
+          </span>
+          <span className={song.midiFileName ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/35"}>
+            MIDI：{song.midiFileName || "未导入（无法生成谱面）"}
+          </span>
         </div>
         <button
           onClick={() => fileInputRef.current?.click()}
           className="ml-auto border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
         >
-          重新导入
+          导入 / 补充文件
         </button>
         {busy && <span className="text-xs text-[var(--taiko-ink)]/50">{busy}</span>}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void importFile(f);
-            e.target.value = "";
-          }}
-        />
+        {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
+        {fileInput}
       </div>
 
-      {/* 速度 / 拍号 / 节拍器 */}
+      {/* 速度 / 拍号（来自 MIDI）+ 偏移 + 试听 */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border border-[var(--taiko-line)] px-4 py-3">
+        <span className="text-xs tabular-nums text-[var(--taiko-ink)]/70">
+          BPM {song.bpm}
+          {tempoChanges > 0 ? ` · ${tempoChanges} 处变速` : ""}
+        </span>
+        <span className="text-xs tabular-nums text-[var(--taiko-ink)]/70">
+          拍号 {song.timeSignature[0]}/{song.timeSignature[1]}
+        </span>
+        <span className="text-xs text-[var(--taiko-ink)]/45">来自 MIDI tempo map</span>
+
         <label className="flex items-center gap-2 text-xs text-[var(--taiko-ink)]/60">
-          BPM
-          <input
-            type="number"
-            min={40}
-            max={300}
-            step={0.1}
-            value={song.bpm}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (Number.isFinite(v) && v >= 40 && v <= 300) {
-                markManual();
-                song.setSong({ bpm: v });
-              }
-            }}
-            className="w-20 border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm tabular-nums text-[var(--taiko-ink)]"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--taiko-ink)]/60">
-          拍号
-          <select
-            value={`${song.timeSignature[0]}/${song.timeSignature[1]}`}
-            onChange={(e) => {
-              const values = e.target.value.split("/").map(Number);
-              const a = values[0];
-              const b = values[1];
-              if (a === undefined || b === undefined) return;
-              markManual();
-              song.setSong({ timeSignature: [a, b] });
-            }}
-            className="border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm tabular-nums text-[var(--taiko-ink)]"
-          >
-            {TIME_SIGS.map(([a, b]) => (
-              <option key={`${a}/${b}`} value={`${a}/${b}`}>
-                {a}/{b}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-xs text-[var(--taiko-ink)]/60">
-          首拍偏移 ms
+          对齐偏移 ms
           <input
             type="number"
             step={10}
             value={Math.round(song.offsetMs)}
             onChange={(e) => {
               const v = Number(e.target.value);
-              if (Number.isFinite(v)) {
-                markManual();
-                song.setSong({ offsetMs: v });
-              }
+              if (Number.isFinite(v)) song.setSong({ offsetMs: v });
             }}
             className="w-24 border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm tabular-nums text-[var(--taiko-ink)]"
           />
         </label>
-        <span className="text-xs text-[var(--taiko-ink)]/45">
-          {metaSource === "metadata"
-            ? "来自文件元数据"
-            : metaSource === "manual"
-              ? "手动调整"
-              : "自动检测"}
-        </span>
-        <button
-          onClick={() => void reanalyze()}
-          disabled={busy !== null}
-          className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
-        >
-          按当前参数重新分析
-        </button>
 
         <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
         <button
           onClick={togglePlay}
-          className="border border-[var(--taiko-ink)] px-4 py-1.5 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
+          disabled={!song.audioBuffer}
+          className="border border-[var(--taiko-ink)] px-4 py-1.5 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:opacity-30"
         >
           {playing ? "暂停" : "播放"}
         </button>
@@ -402,259 +292,50 @@ export function ChartScreen({ layout }: { layout: LayoutMode }) {
         </button>
       </div>
 
-      {/* 歌曲段落分析 */}
-      <section className="flex flex-col gap-2">
-        <div className="flex items-baseline gap-3">
-          <h2 className="text-sm font-medium">歌曲段落分析</h2>
-          <span className="text-xs text-[var(--taiko-ink)]/45">
-            选择一个主体段落，或在下方自定义节奏中自己写一小节
-          </span>
-        </div>
-        {segments.length === 0 ? (
-          <p className="border border-[var(--taiko-line)] px-4 py-6 text-center text-xs text-[var(--taiko-ink)]/45">
-            {busy ? busy : "未识别到明显的鼓节奏型，可尝试调整 BPM 后重新分析"}
-          </p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {segments.map((seg) => (
-              <SegmentCard
-                key={seg.id}
-                seg={seg}
-                checked={!song.useCustom && song.primarySegmentId === seg.id}
-                onToggle={() =>
-                  song.setSong({
-                    useCustom: false,
-                    primarySegmentId: seg.id,
-                    grooveId: matchGroove(seg, song.bpm).id,
-                  })
-                }
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* 自定义节奏 */}
+      {/* 难度 + 谱面统计 */}
       <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={() => song.setSong({ useCustom: !song.useCustom })}
-            aria-pressed={song.useCustom}
-            className="flex items-center gap-2 text-sm font-medium"
-          >
-            <i
-              className={`inline-block h-3 w-3 rounded-full border ${
-                song.useCustom
-                  ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]"
-                  : "border-[var(--taiko-line)]"
-              }`}
-            />
-            自定义节奏
-          </button>
-          <span className="text-xs text-[var(--taiko-ink)]/45">
-            一小节 · 16 分音符 · 勾选后以这一小节为骨架（与上方段落互斥）
-          </span>
-          <button
-            onClick={() =>
-              song.setSong({ customPattern: emptyCustom(beatsPerBar), grooveId: song.grooveId })
-            }
-            className="ml-auto border border-[var(--taiko-line)] px-3 py-1 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-          >
-            清空
-          </button>
-          <button
-            onClick={() => {
-              if (!primarySegment) return;
-              const next = emptyCustom(beatsPerBar);
-              for (const n of primarySegment.notes) {
-                const idx = Math.round(n.beat * 4);
-                if (idx < 0 || idx >= next.kick.length) continue;
-                next[n.band][idx] = true;
-              }
-              song.setSong({ customPattern: next });
-            }}
-            disabled={!primarySegment}
-            className="border border-[var(--taiko-line)] px-3 py-1 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
-          >
-            载入当前段落
-          </button>
-        </div>
-        <CustomRhythmEditor
-          cells={customCells}
-          onChange={(next) => song.setSong({ customPattern: next, useCustom: true })}
-        />
-      </section>
-
-      {/* 谱面难度 + 倾向风格 */}
-      <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-sm font-medium">谱面难度</h2>
-          <span className="text-xs text-[var(--taiko-ink)]/45">
-            轻松＝每小节最多 6 音、镲只在正拍；标准＝最多 10 音、镲到八分；原样＝不限
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-0">
-          {(["easy", "normal", "raw"] as Density[]).map((d) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="mr-2 text-sm font-medium">难度</h2>
+          {DIFFICULTIES.map((d) => (
             <button
-              key={d}
-              onClick={() => song.setSong({ density: d })}
-              className={`-ml-px border border-[var(--taiko-line)] px-4 py-1.5 text-xs transition-colors first:ml-0 ${
-                song.density === d
+              key={d.id}
+              onClick={() => song.setSong({ difficulty: d.id })}
+              className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
+                song.difficulty === d.id
                   ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
                   : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
               }`}
             >
-              {DENSITY_LABEL[d]}
+              {d.label}
             </button>
           ))}
+          <span className="text-xs text-[var(--taiko-ink)]/45">
+            {DIFFICULTIES.find((d) => d.id === song.difficulty)?.hint}
+          </span>
+          <span className="ml-auto text-xs tabular-nums text-[var(--taiko-ink)]/60">
+            {chart ? `${chart.notes.length} 音符` : "缺少 MIDI，无法生成谱面"}
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-[var(--taiko-ink)]/50">倾向风格</span>
-          {GROOVE_STYLES.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => song.setSong({ style: s.id })}
-              className={`border px-3 py-1.5 text-xs transition-colors ${
-                song.style === s.id
-                  ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                  : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-[var(--taiko-ink)]/40">
-          当前骨架：{groove.label}
-          {chart ? ` · 共 ${chart.notes.length} 音符` : ""}
-        </p>
+
+        {counts && (
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {DRUM_PARTS.filter((p) => VISIBLE_PARTS[layoutOf(song.difficulty)].includes(p.id)).map(
+              (p) => (
+                <span
+                  key={p.id}
+                  className="flex items-center gap-2 text-xs tabular-nums text-[var(--taiko-ink)]/70"
+                >
+                  <i
+                    className="inline-block h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: PART_BY_ID[p.id].color }}
+                  />
+                  {p.label} {counts[p.id]}
+                </span>
+              ),
+            )}
+          </div>
+        )}
       </section>
-
-    </div>
-  );
-}
-
-/** 段落卡片：缩略网格 + 出现信息 + 主体单选 */
-function SegmentCard({
-  seg,
-  checked,
-  onToggle,
-}: {
-  seg: DrumSegment;
-  checked: boolean;
-  onToggle: () => void;
-}) {
-  const bands: DrumBand[] = ["kick", "snare", "hihat"];
-  const minBar = Math.min(...seg.bars) + 1;
-  const maxBar = Math.max(...seg.bars) + 1;
-  return (
-    <button
-      onClick={onToggle}
-      aria-pressed={checked}
-      className={`flex flex-col gap-2 border p-3 text-left transition-colors ${
-        checked
-          ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/5"
-          : "border-[var(--taiko-line)] hover:border-[var(--taiko-ink)]/50"
-      }`}
-    >
-      <div className="flex items-center gap-2 text-xs">
-        <i
-          className={`inline-block h-3 w-3 rounded-full border ${
-            checked ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]" : "border-[var(--taiko-line)]"
-          }`}
-        />
-        <span className="tabular-nums text-[var(--taiko-ink)]/70">
-          出现 {seg.bars.length} 次 · 第 {minBar}
-          {maxBar !== minBar ? `–${maxBar}` : ""} 小节等
-        </span>
-        <span className="ml-auto tabular-nums text-[var(--taiko-ink)]/45">
-          {seg.notes.length} 音/小节
-        </span>
-      </div>
-      <div className="relative h-14 w-full border border-[var(--taiko-line)] bg-[var(--taiko-paper)]">
-        {bands.map((band, ri) => (
-          <div
-            key={band}
-            className="absolute left-0 right-0 border-t border-[var(--taiko-line)]/60 first:border-t-0"
-            style={{ top: `${(ri * 100) / 3}%`, height: `${100 / 3}%` }}
-          >
-            <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[9px] text-[var(--taiko-ink)]/40">
-              {BAND_LABEL[band]}
-            </span>
-          </div>
-        ))}
-        {seg.notes.map((n, i) => (
-          <i
-            key={i}
-            className="absolute block h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-            style={{
-              left: `${((n.beat + 0.125) / seg.beatsPerBar) * 100}%`,
-              top: `${(bands.indexOf(n.band) * 100) / 3 + 100 / 6}%`,
-              backgroundColor: PART_BY_ID[BAND_NOTE[n.band] === 36 ? "kick" : BAND_NOTE[n.band] === 38 ? "snare" : "hihat"].color,
-            }}
-          />
-        ))}
-      </div>
-    </button>
-  );
-}
-
-
-/** 自定义节奏编辑器：三轨（底鼓/军鼓/镲）× 16 分格子，长度随拍号 */
-function CustomRhythmEditor({
-  cells,
-  onChange,
-}: {
-  cells: CustomPattern;
-  onChange: (next: CustomPattern) => void;
-}) {
-  const tracks: { key: keyof CustomPattern; label: string; part: "kick" | "snare" | "hihat" }[] = [
-    { key: "kick", label: "底鼓", part: "kick" },
-    { key: "snare", label: "军鼓", part: "snare" },
-    { key: "hihat", label: "镲", part: "hihat" },
-  ];
-  const n = cells.kick.length;
-  return (
-    <div className="flex flex-col gap-1">
-      {tracks.map((t) => (
-        <div key={t.key} className="flex items-center gap-2">
-          <span className="w-8 shrink-0 text-[10px] text-[var(--taiko-ink)]/45">{t.label}</span>
-          <div className="flex flex-1 gap-[2px]">
-            {cells[t.key].map((on, i) => (
-              <button
-                key={i}
-                aria-label={`${t.label} 第 ${i + 1} 格`}
-                onClick={() => {
-                  const next: CustomPattern = {
-                    kick: [...cells.kick],
-                    snare: [...cells.snare],
-                    hihat: [...cells.hihat],
-                  };
-                  next[t.key][i] = !on;
-                  onChange(next);
-                }}
-                className={`h-7 flex-1 border transition-colors ${
-                  i % 4 === 0 ? "border-l-2 border-l-[var(--taiko-ink)]/30" : ""
-                } ${on ? "border-transparent" : "border-[var(--taiko-line)] hover:bg-[var(--taiko-ink)]/10"}`}
-                style={on ? { backgroundColor: PART_BY_ID[t.part].color } : undefined}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-      <div className="flex items-center gap-2">
-        <span className="w-8 shrink-0" />
-        <div className="flex flex-1 gap-[2px]">
-          {Array.from({ length: n }, (_, i) => (
-            <span
-              key={i}
-              className="flex-1 text-center text-[9px] tabular-nums text-[var(--taiko-ink)]/35"
-            >
-              {i % 4 === 0 ? i / 4 + 1 : ""}
-            </span>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

@@ -4,21 +4,18 @@ import { FallScreen, type PlayMode } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
 import { midiManager } from "./midiInput";
-import type { LayoutMode } from "./laneLayouts";
 
 type ScreenKey = "play" | "chart" | "mapping";
 
 interface TaikoSettings {
-  layout: LayoutMode;
   speed: number;
   midiDeviceId: string | null;
   /** 游玩模式：舞台下落 / osu! */
   playMode: PlayMode;
 }
 
-const SETTINGS_KEY = "taiko.settings.v2";
+const SETTINGS_KEY = "taiko.settings.v3";
 const DEFAULT_SETTINGS: TaikoSettings = {
-  layout: "five",
   speed: 1,
   midiDeviceId: null,
   playMode: "stage",
@@ -62,7 +59,9 @@ function ShellInner() {
     setSettings((s) => {
       const next = { ...s, ...patch };
       try {
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        const base = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...base, ...next }));
       } catch {
         // 存储不可用时仅保留内存态
       }
@@ -101,10 +100,8 @@ function ShellInner() {
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-baseline gap-6 border-b border-[var(--taiko-line)] px-8 py-4">
-          <h1 className="text-base font-medium">
-            {song.fileName || "未导入歌曲"}
-          </h1>
-          {song.audioBuffer && (
+          <h1 className="text-base font-medium">{song.fileName || "未导入歌曲"}</h1>
+          {song.midi && (
             <>
               <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
                 BPM {song.bpm}
@@ -132,15 +129,13 @@ function ShellInner() {
         <div className="flex-1 overflow-auto px-8 py-6">
           {screen === "play" && (
             <FallScreen
-              layout={settings.layout}
               speed={settings.speed}
               playMode={settings.playMode}
-              onLayoutChange={(layout) => updateSettings({ layout })}
               onSpeedChange={(speed) => updateSettings({ speed })}
               onPlayModeChange={(playMode) => updateSettings({ playMode })}
             />
           )}
-          {screen === "chart" && <ChartScreen layout={settings.layout} />}
+          {screen === "chart" && <ChartScreen />}
           {screen === "mapping" && (
             <MappingScreen
               deviceId={settings.midiDeviceId}
