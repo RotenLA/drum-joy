@@ -198,7 +198,7 @@ export function FallScreen({
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
   const start = useCallback(() => {
-    if (!audioBuffer || !playChart || playChart.notes.length === 0) return;
+    if (!playChart || playChart.notes.length === 0) return;
     timersRef.current.forEach((t) => window.clearTimeout(t));
     timersRef.current = [];
     resetRun();
@@ -215,11 +215,13 @@ export function FallScreen({
     }
     timersRef.current.push(
       window.setTimeout(() => {
-        songPlayer.play(0);
+        if (audioBuffer) songPlayer.play(0);
+        else silentStartRef.current = performance.now();
         setPhaseBoth("playing");
       }, COUNT_IN_BEATS * beatMs),
     );
   }, [audioBuffer, playChart, resetRun, setPhaseBoth]);
+
 
   const togglePause = useCallback(() => {
     if (phaseRef.current === "playing") {
