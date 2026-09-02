@@ -29,17 +29,13 @@ type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 export type PlayMode = "stage" | "osu";
 
 export function FallScreen({
-  layout,
   speed,
   playMode,
-  onLayoutChange,
   onSpeedChange,
   onPlayModeChange,
 }: {
-  layout: LayoutMode;
   speed: number;
   playMode: PlayMode;
-  onLayoutChange: (m: LayoutMode) => void;
   onSpeedChange: (s: number) => void;
   onPlayModeChange: (m: PlayMode) => void;
 }) {
@@ -66,58 +62,28 @@ export function FallScreen({
   const countdownStartRef = useRef(0);
   const countdownMsRef = useRef(0);
   const beatMsRef = useRef(500);
+  /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
+  const silentStartRef = useRef(0);
 
+  const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
+  const durationMs = audioBuffer ? audioBuffer.duration * 1000 : (song.midi?.durationMs ?? 0);
 
-  /** 以基础节奏型（或自定义节奏）为骨架，按当前分区/难度/风格重新编谱。 */
+  /** 谱面 = 鼓 MIDI 按当前难度加工（入门 5 分区 / 标准原样 / 困难加花） */
   const playChart = useMemo(() => {
-    if (!audioBuffer) return null;
-    const beatsPerBar = song.timeSignature[0] * (4 / song.timeSignature[1]);
-    const primary = song.segments.find((s) => s.id === song.primarySegmentId) ?? null;
-    let groove;
-    if (song.useCustom && !customIsEmpty(song.customPattern)) {
-      groove = patternFromCustom(
-        resizeCustom(song.customPattern, beatsPerBar),
-        beatsPerBar,
-        song.bpm,
-      );
-    } else {
-      if (!song.primarySegmentId || song.segments.length === 0) return null;
-      groove =
-        (song.grooveId ? GROOVE_BY_ID[song.grooveId] : undefined) ?? matchGroove(primary, song.bpm);
-    }
-    return arrangeChart({
-      groove,
-      barActivity: song.barActivity,
-      barBands: song.barBands,
-      activeRange: song.activeRange,
-      layout,
-      density: song.density,
-      style: song.style,
-      bpm: song.bpm,
-      offsetMs: song.offsetMs,
-      timeSignature: song.timeSignature,
-      durationMs: audioBuffer.duration * 1000,
-      title: song.fileName,
-    });
-  }, [
-    audioBuffer,
-    layout,
-    song.activeRange,
-    song.barActivity,
-    song.barBands,
-    song.bpm,
-    song.customPattern,
-    song.density,
-    song.fileName,
-    song.grooveId,
-    song.offsetMs,
-    song.primarySegmentId,
-    song.segments,
-    song.style,
-    song.timeSignature,
-    song.useCustom,
-  ]);
+    if (!song.midi) return null;
+    return buildPlayChart(
+      song.midi,
+      {
+        title: song.fileName,
+        offsetMs: song.offsetMs,
+        durationMs: durationMs || undefined,
+      },
+      song.difficulty,
+    );
+  }, [song.midi, song.fileName, song.offsetMs, song.difficulty, durationMs]);
+
+
 
 
   const setPhaseBoth = useCallback((p: Phase) => {
