@@ -495,25 +495,22 @@ export function FallScreen({
         ))}
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-        <span className="text-xs text-[var(--taiko-ink)]/50">分区</span>
-        {(
-          [
-            ["five", "5分区"],
-            ["nine", "9分区"],
-          ] as const
-        ).map(([mode, label]) => (
+        <span className="text-xs text-[var(--taiko-ink)]/50">难度</span>
+        {DIFFICULTIES.map((d) => (
           <button
-            key={mode}
-            onClick={() => onLayoutChange(mode)}
+            key={d.id}
+            onClick={() => song.setSong({ difficulty: d.id })}
+            title={d.hint}
             className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
-              layout === mode
+              song.difficulty === d.id
                 ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
                 : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
             }`}
           >
-            {label}
+            {d.label}
           </button>
         ))}
+
 
         <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55">
           {parts.map((p) => (
