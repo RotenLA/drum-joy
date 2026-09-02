@@ -276,11 +276,18 @@ export function FallScreen({
     const draw = (now: number) => {
       const ph = phaseRef.current;
       let t = timeRef.current;
-      if (ph === "playing") t = songPlayer.timeMs();
-      else if (ph === "countdown") t = now - countdownStartRef.current - countdownMsRef.current;
-      else if (ph === "idle") t = 0;
+      if (ph === "playing") {
+        t = audioBuffer ? songPlayer.timeMs() : now - silentStartRef.current;
+        if (!audioBuffer && playChart && t > playChart.durationMs) {
+          phaseRef.current = "ended";
+          setPhase("ended");
+        }
+      } else if (ph === "countdown") {
+        t = now - countdownStartRef.current - countdownMsRef.current;
+      } else if (ph === "idle") t = 0;
       // paused / ended：冻结
       timeRef.current = t;
+
 
       // Miss 检测：超过 Good 窗未击
       if (ph === "playing" && playChart) {
