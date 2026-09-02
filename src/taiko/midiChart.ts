@@ -45,9 +45,9 @@ const BIG_VELOCITY = 108;
 export interface MidiChartOptions {
   title: string;
   /** 整体偏移（毫秒，音频与 MIDI 起点对不齐时用） */
-  offsetMs?: number;
+  offsetMs?: number | undefined;
   /** 曲目总长（毫秒）；不给则用 MIDI 自身长度 */
-  durationMs?: number;
+  durationMs?: number | undefined;
 }
 
 export function buildChartFromMidi(midi: ParsedMidi, opts: MidiChartOptions): TaikoChart {

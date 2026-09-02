@@ -129,7 +129,7 @@ function embellish(chart: TaikoChart): TaikoNote[] {
     if (rand() > 0.55) continue;
     const t = a.timeMs + gap / 2;
     if (occupied(t)) continue;
-    added.push({ timeMs: t, lane: "ka", note: a.note });
+    added.push({ timeMs: t, lane: "ka", note: noteForPart(pa) });
   }
 
   // 2) 乐句末过门：每 4 小节最后一拍加 3 连通鼓下行
