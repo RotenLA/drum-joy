@@ -379,19 +379,21 @@ export function FallScreen({
         <canvas ref={canvasRef} className="block h-full w-full" />
 
         {/* 空态 / 开始 / 暂停 / 结算遮罩 */}
-        {!audioBuffer && (
+        {!song.midi && (
           <Overlay>
-            <p className="text-sm text-white/80">还没有歌曲</p>
-            <p className="text-xs text-white/50">请先到「谱面」屏导入 mp3 / wav 并生成谱面</p>
+            <p className="text-sm text-white/80">还没有谱面</p>
+            <p className="text-xs text-white/50">
+              请先到「谱面」屏导入去鼓伴奏音频与对应的鼓 MIDI
+            </p>
           </Overlay>
         )}
-        {audioBuffer && (!playChart || playChart.notes.length === 0) && (
+        {song.midi && (!playChart || playChart.notes.length === 0) && (
           <Overlay>
             <p className="text-sm text-white/80">谱面为空</p>
-            <p className="text-xs text-white/50">请到「谱面」屏选择一个主体节奏</p>
+            <p className="text-xs text-white/50">该 MIDI 中没有可识别的鼓音符</p>
           </Overlay>
         )}
-        {audioBuffer && playChart && playChart.notes.length > 0 && phase === "idle" && (
+        {song.midi && playChart && playChart.notes.length > 0 && phase === "idle" && (
           <Overlay>
             <button
               onClick={start}
@@ -399,9 +401,12 @@ export function FallScreen({
             >
               开始
             </button>
-            <p className="text-xs text-white/40">回车也可开始 · 空格暂停</p>
+            <p className="text-xs text-white/40">
+              回车也可开始 · 空格暂停{audioBuffer ? "" : " · 无音频，静音试玩"}
+            </p>
           </Overlay>
         )}
+
         {phase === "paused" && (
           <Overlay>
             <p className="text-lg tracking-[0.3em] text-white">已暂停</p>
