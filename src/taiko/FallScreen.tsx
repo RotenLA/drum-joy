@@ -10,6 +10,7 @@ import { renderStage } from "./stageRenderer";
 import { renderOsu } from "./osuRenderer";
 import { useSong } from "./songStore";
 import { songPlayer } from "./player";
+import { hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
 import { click as metronomeClick } from "./metronome";
 import { DIFFICULTIES, buildPlayChart, layoutOf } from "./difficulty";
@@ -40,7 +41,8 @@ export function FallScreen({
   onPlayModeChange: (m: PlayMode) => void;
 }) {
   const song = useSong();
-  const { audioBuffer } = song;
+  const { stems } = song;
+  const hasAudio = hasAnyStem(stems);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
@@ -67,7 +69,7 @@ export function FallScreen({
 
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
-  const durationMs = audioBuffer ? audioBuffer.duration * 1000 : (song.midi?.durationMs ?? 0);
+  const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
 
   /** 谱面 = 鼓 MIDI 按当前难度加工（入门 5 分区 / 标准原样 / 困难加花） */
   const playChart = useMemo(() => {
@@ -118,10 +120,10 @@ export function FallScreen({
 
   // 音频装载 / 卸载
   useEffect(() => {
-    songPlayer.load(audioBuffer);
+    songPlayer.load(stems);
     setPhaseBoth("idle");
     return () => songPlayer.stop();
-  }, [audioBuffer, setPhaseBoth]);
+  }, [stems, setPhaseBoth]);
 
   useEffect(() => {
     songPlayer.setOnEnded(() => setPhaseBoth("ended"));
@@ -215,24 +217,24 @@ export function FallScreen({
     }
     timersRef.current.push(
       window.setTimeout(() => {
-        if (audioBuffer) songPlayer.play(0);
+        if (hasAudio) songPlayer.play(0);
         else silentStartRef.current = performance.now();
         setPhaseBoth("playing");
       }, COUNT_IN_BEATS * beatMs),
     );
-  }, [audioBuffer, playChart, resetRun, setPhaseBoth]);
+  }, [hasAudio, playChart, resetRun, setPhaseBoth]);
 
 
   const togglePause = useCallback(() => {
     if (phaseRef.current === "playing") {
-      if (audioBuffer) songPlayer.pause();
+      if (hasAudio) songPlayer.pause();
       setPhaseBoth("paused");
     } else if (phaseRef.current === "paused") {
-      if (audioBuffer) songPlayer.play();
+      if (hasAudio) songPlayer.play();
       else silentStartRef.current = performance.now() - timeRef.current;
       setPhaseBoth("playing");
     }
-  }, [audioBuffer, setPhaseBoth]);
+  }, [stems, setPhaseBoth]);
 
 
   // 空格暂停/继续，回车开始
@@ -277,8 +279,8 @@ export function FallScreen({
       const ph = phaseRef.current;
       let t = timeRef.current;
       if (ph === "playing") {
-        t = audioBuffer ? songPlayer.timeMs() : now - silentStartRef.current;
-        if (!audioBuffer && playChart && t > playChart.durationMs) {
+        t = hasAudio ? songPlayer.timeMs() : now - silentStartRef.current;
+        if (!hasAudio && playChart && t > playChart.durationMs) {
           phaseRef.current = "ended";
           setPhase("ended");
         }
@@ -359,7 +361,7 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [playChart, speed, parts, playMode, audioBuffer]);
+  }, [playChart, speed, parts, playMode, hasAudio]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
@@ -402,7 +404,7 @@ export function FallScreen({
               开始
             </button>
             <p className="text-xs text-white/40">
-              回车也可开始 · 空格暂停{audioBuffer ? "" : " · 无音频，静音试玩"}
+              回车也可开始 · 空格暂停{hasAudio ? "" : " · 无音频，静音试玩"}
             </p>
           </Overlay>
         )}
