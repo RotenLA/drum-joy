@@ -4,7 +4,6 @@ import {
   PART_BY_ID,
   VISIBLE_PARTS,
   partOfNote,
-  type LayoutMode,
   type PartId,
 } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
@@ -13,14 +12,7 @@ import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { midiManager } from "./midiInput";
 import { click as metronomeClick } from "./metronome";
-import { arrangeChart } from "./arrange";
-import {
-  GROOVE_BY_ID,
-  customIsEmpty,
-  patternFromCustom,
-  resizeCustom,
-} from "./groovePatterns";
-import { matchGroove } from "./grooveMatch";
+import { DIFFICULTIES, buildPlayChart, layoutOf } from "./difficulty";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
@@ -29,6 +21,7 @@ const PERFECT_MS = 50;
 const GOOD_MS = 120;
 /** 倒计时拍数（四分音符，无视拍号） */
 const COUNT_IN_BEATS = 4;
+
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
