@@ -125,6 +125,12 @@ export function FallScreen({
     return () => songPlayer.stop();
   }, [stems, setPhaseBoth]);
 
+  // 调音台音量 → 播放器（实时生效）
+  useEffect(() => {
+    songPlayer.setStemGain("vocals", song.mix.vocals);
+    songPlayer.setStemGain("drums", song.mix.drums);
+  }, [song.mix, stems]);
+
   useEffect(() => {
     songPlayer.setOnEnded(() => setPhaseBoth("ended"));
     return () => songPlayer.setOnEnded(null);
