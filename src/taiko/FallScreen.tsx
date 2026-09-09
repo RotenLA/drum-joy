@@ -312,6 +312,12 @@ export function FallScreen({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // 长音符下标（左踏板踩住闭镲）
+    const holdIndices: number[] = [];
+    (playChart?.notes ?? []).forEach((n, i) => {
+      if ((n.holdMs ?? 0) > 0) holdIndices.push(i);
+    });
+
     let raf = 0;
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
