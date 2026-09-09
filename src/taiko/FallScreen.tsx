@@ -186,6 +186,8 @@ export function FallScreen({
       }
       if (best < 0) return;
       judgedRef.current[best] = 1;
+      // 长音符：踩下即进入「按住中」，之后由渲染循环检查是否全程踩住
+      if ((notes[best]!.holdMs ?? 0) > 0) holdStateRef.current[best] = 1;
       const perfect = bestDiff <= PERFECT_MS;
       statsRef.current[perfect ? "perfect" : "good"]++;
       comboRef.current++;
