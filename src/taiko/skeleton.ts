@@ -17,6 +17,8 @@ export interface BarSkeleton {
   vel: Partial<Record<PartId, Record<number, number>>>;
   /** 镲的细分：4=四分 8=八分 16=十六分 0=无 */
   hatDiv: 0 | 4 | 8 | 16;
+  /** 小节内被判为「开镲」的踩镲网格位 */
+  openHat: number[];
   /** 该小节镲片主体是叮叮镲 */
   ridePrimary: boolean;
   /** 过门小节（通鼓多 / 音符密度突出） */
