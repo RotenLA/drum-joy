@@ -274,12 +274,21 @@ export function ChartScreen() {
         <p className="text-xs text-[var(--taiko-ink)]/45">
           xxx_Vocals / _Bass / _Drums / _Other.mp3（可缺）+ xxx.mid（必需）
         </p>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="border border-[var(--taiko-ink)] px-6 py-2 text-sm text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
-        >
-          选择文件
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="border border-[var(--taiko-ink)] px-6 py-2 text-sm text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
+          >
+            选择文件
+          </button>
+          <button
+            onClick={() => void importSample()}
+            disabled={busy !== null}
+            className="border border-[var(--taiko-line)] px-6 py-2 text-sm text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
+          >
+            载入示例曲：{SAMPLE_TITLE}
+          </button>
+        </div>
         {busy && <p className="text-xs text-[var(--taiko-ink)]/50">{busy}</p>}
         {warn && <p className="text-xs text-[var(--taiko-ink)]/60">{warn}</p>}
         {fileInput}
