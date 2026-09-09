@@ -157,27 +157,35 @@ export function ChartScreen() {
   const durationMs = audioDurationMs || (song.midi?.durationMs ?? 0);
   const anyStem = hasAnyStem(song.stems);
 
-  // ---- 谱面预览（按当前难度） ----
+  // ---- 谱面预览（按当前难度，与游玩共用同一份固化谱面） ----
+  const [chartNonce, setChartNonce] = useState(0);
   const chart = useMemo(() => {
     if (!song.midi) return null;
-    return buildPlayChart(
+    return getPlayChart(
       song.midi,
       {
         title: song.fileName,
         offsetMs: song.offsetMs,
         phaseBeatOffset: song.phaseBeatOffset,
-        durationMs: durationMs || undefined,
       },
       song.difficulty,
     );
+    // chartNonce 变化 = 手动「重新生成谱面」
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     song.midi,
     song.fileName,
     song.offsetMs,
     song.phaseBeatOffset,
     song.difficulty,
-    durationMs,
+    chartNonce,
   ]);
+
+  const regenerate = () => {
+    if (!song.midi) return;
+    clearChartCache(song.fileName, song.midi);
+    setChartNonce((n) => n + 1);
+  };
 
   useEffect(() => {
     song.setSong({ chart });
