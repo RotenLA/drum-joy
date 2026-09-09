@@ -270,6 +270,8 @@ function pedalHolds(emits: Emit[], diff: Difficulty, stepsPerBar: number, stepsP
   const isOpen = (e: Emit) => diff !== "beginner" && e.open === true;
   const minLen = diff === "beginner" ? stepsPerBar : stepsPerBeat * 2;
   const gapLimit = stepsPerBar;
+  /** 单条长音符最长 4 小节：太长的连续踩住在游玩上没有意义，乐句间换脚 */
+  const maxLen = stepsPerBar * 4;
 
   const segs: HoldSeg[] = [];
   let cur: HoldSeg | null = null;
@@ -284,7 +286,7 @@ function pedalHolds(emits: Emit[], diff: Difficulty, stepsPerBar: number, stepsP
       continue;
     }
     if (!cur) cur = { startStep: e.step, endStep: e.step };
-    else if (e.step - cur.endStep > gapLimit) {
+    else if (e.step - cur.endStep > gapLimit || e.step - cur.startStep >= maxLen) {
       const prevEnd = cur.endStep + 1;
       flush(prevEnd);
       cur = { startStep: e.step, endStep: e.step };
