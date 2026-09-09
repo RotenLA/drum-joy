@@ -8,6 +8,8 @@ export interface TaikoNote {
   big?: boolean;
   /** 原始 MIDI 音符号（下落式分区渲染需要） */
   note?: number;
+  /** 长音符时长（毫秒）；用于左踏板「踩住闭镲」这类需要全程按住的音符 */
+  holdMs?: number;
 }
 
 export interface TaikoChart {

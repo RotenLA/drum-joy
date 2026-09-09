@@ -33,6 +33,9 @@ export const GM_TO_PART: Readonly<Record<number, PartId>> = {
   59: "ride",
 };
 
+/** 开镲（左脚松开时敲的踩镲）音符；其余踩镲音符视为闭镲 */
+export const OPEN_HAT_NOTES: ReadonlySet<number> = new Set([46, 26]);
+
 /** 部件 → 当前映射里的代表音符（供判定时 partOfNote 反查） */
 export function noteForPart(part: PartId): number {
   const mapped = getMapping()[part];
