@@ -6,7 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
 import { parseMidi, type ParsedMidi } from "./midiFile";
-import { analyzeMidi, buildPlayChart } from "./difficulty";
+import { analyzeMidi } from "./difficulty";
+import { clearChartCache, getPlayChart } from "./chartCache";
 import { DIFFICULTIES } from "./difficulty";
 import { countByPart } from "./midiChart";
 import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
