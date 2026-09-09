@@ -205,20 +205,31 @@ export function FallScreen({
     [playChart, survival],
   );
 
-  // MIDI 击打
+  // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
   useEffect(() => {
     void midiManager.init();
-    return midiManager.onNote((note) => {
+    const offNote = midiManager.onNote((note) => {
       const part = partOfNote(note);
-      if (part && parts.includes(part)) hitPart(part);
+      if (!part) return;
+      if (part === "pedalHat") pedalHeldRef.current = true;
+      if (parts.includes(part)) hitPart(part);
     });
+    const offUp = midiManager.onNoteOff((note) => {
+      if (partOfNote(note) === "pedalHat") pedalHeldRef.current = false;
+    });
+    return () => {
+      offNote();
+      offUp();
+    };
   }, [hitPart, parts]);
 
   // 键盘调试（无 MIDI 设备时）
   useEffect(() => {
+    const pedalKey = KEY_BY_PART.pedalHat.key;
     const onKey = (e: KeyboardEvent) => {
-      if (e.repeat) return;
       const k = e.key.toLowerCase();
+      if (k === pedalKey) pedalHeldRef.current = true;
+      if (e.repeat) return;
       for (const [part, v] of Object.entries(KEY_BY_PART) as [PartId, { key: string }][]) {
         if (v.key === k && parts.includes(part)) {
           hitPart(part);
@@ -226,8 +237,15 @@ export function FallScreen({
         }
       }
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === pedalKey) pedalHeldRef.current = false;
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [hitPart, parts]);
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
