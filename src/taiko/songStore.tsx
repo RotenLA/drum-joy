@@ -70,6 +70,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
     midiFileName: "",
     midi: null,
     offsetMs: 0,
+    phaseBeatOffset: 0,
     bpm: 120,
     timeSignature: [4, 4],
     difficulty: "standard",
