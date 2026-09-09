@@ -7,13 +7,16 @@ import {
   type PartId,
 } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
-import { renderOsu } from "./osuRenderer";
+import { renderRunway } from "./runwayRenderer";
 import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
 import { click as metronomeClick } from "./metronome";
-import { DIFFICULTIES, buildPlayChart, layoutOf } from "./difficulty";
+import { DIFFICULTIES, layoutOf } from "./difficulty";
+import { getPlayChart } from "./chartCache";
+import { HP_GOOD, HP_MAX, HP_MISS, HP_PERFECT, clampHp, survivalSpeed } from "./survival";
+
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
@@ -26,8 +29,8 @@ const COUNT_IN_BEATS = 4;
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
-/** 游玩模式：舞台下落式 / osu! 随机鼓盘 */
-export type PlayMode = "stage" | "osu";
+/** 游玩模式：舞台下落 / 节奏跑道 / 生存 */
+export type PlayMode = "stage" | "runway" | "survival";
 
 export function FallScreen({
   speed,
@@ -54,8 +57,6 @@ export function FallScreen({
   const judgementRef = useRef<{ text: string; color: string; until: number } | null>(null);
   /** 0 未判定 / 1 命中 / 2 Miss */
   const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
-  /** 判定发生时的时间戳（osu! 模式的命中/Miss 动画用） */
-  const judgedAtRef = useRef<Float64Array>(new Float64Array(0));
   const statsRef = useRef({ perfect: 0, good: 0, miss: 0 });
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
@@ -67,21 +68,27 @@ export function FallScreen({
   const beatMsRef = useRef(500);
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
+  /** 生存模式血量 */
+  const hpRef = useRef(HP_MAX);
+  const [deadOut, setDeadOut] = useState(false);
 
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
   const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
+  const survival = playMode === "survival";
 
-  /** 谱面 = 鼓 MIDI 拆解后按当前难度重编（入门正拍 / 标准节奏型 / 困难手脚交替） */
+  /**
+   * 谱面 = 鼓 MIDI 拆解后按当前难度重编，并按「文件名 + MIDI 指纹」固化，
+   * 刷新或重开都拿到同一份。
+   */
   const playChart = useMemo(() => {
     if (!song.midi) return null;
-    return buildPlayChart(
+    return getPlayChart(
       song.midi,
       {
         title: song.fileName,
         offsetMs: song.offsetMs,
         phaseBeatOffset: song.phaseBeatOffset,
-        durationMs: durationMs || undefined,
       },
       song.difficulty,
     );
@@ -91,8 +98,8 @@ export function FallScreen({
     song.offsetMs,
     song.phaseBeatOffset,
     song.difficulty,
-    durationMs,
   ]);
+
 
 
 
@@ -104,7 +111,6 @@ export function FallScreen({
 
   const resetRun = useCallback(() => {
     judgedRef.current = new Uint8Array(playChart?.notes.length ?? 0);
-    judgedAtRef.current = new Float64Array(playChart?.notes.length ?? 0);
     statsRef.current = { perfect: 0, good: 0, miss: 0 };
     comboRef.current = 0;
     maxComboRef.current = 0;
@@ -113,6 +119,8 @@ export function FallScreen({
     flashesRef.current = {};
     missFlashesRef.current = {};
     judgementRef.current = null;
+    hpRef.current = HP_MAX;
+    setDeadOut(false);
   }, [playChart]);
 
   useEffect(() => {
@@ -173,19 +181,21 @@ export function FallScreen({
       }
       if (best < 0) return;
       judgedRef.current[best] = 1;
-      judgedAtRef.current[best] = now;
       const perfect = bestDiff <= PERFECT_MS;
       statsRef.current[perfect ? "perfect" : "good"]++;
       comboRef.current++;
       maxComboRef.current = Math.max(maxComboRef.current, comboRef.current);
       scoreRef.current += perfect ? 300 : 100;
+      if (survival) {
+        hpRef.current = clampHp(hpRef.current + (perfect ? HP_PERFECT : HP_GOOD));
+      }
       judgementRef.current = {
         text: perfect ? "PERFECT" : "GOOD",
         color: perfect ? "#ffd75e" : "#7dd3fc",
         until: now + 500,
       };
     },
-    [playChart],
+    [playChart, survival],
   );
 
   // MIDI 击打
@@ -313,9 +323,17 @@ export function FallScreen({
         while (c < notes.length && notes[c]!.timeMs < t - GOOD_MS) {
           if (!judgedRef.current[c]) {
             judgedRef.current[c] = 2;
-            judgedAtRef.current[c] = now;
             statsRef.current.miss++;
             comboRef.current = 0;
+            if (survival) {
+              hpRef.current = clampHp(hpRef.current + HP_MISS);
+              if (hpRef.current <= 0) {
+                phaseRef.current = "ended";
+                setPhase("ended");
+                setDeadOut(true);
+                songPlayer.stop();
+              }
+            }
             const note = notes[c]!.note;
             const p = note !== undefined ? partOfNote(note) : null;
             if (p) missFlashesRef.current[p] = now + 240;
@@ -347,7 +365,8 @@ export function FallScreen({
       const frame = {
         chart: frameChart,
         timeMs: t,
-        speed,
+        // 生存模式：连击越高下落越快
+        speed: survival ? survivalSpeed(speed, comboRef.current) : speed,
         now,
         flashes: flashesRef.current,
         missFlashes: missFlashesRef.current,
@@ -357,14 +376,11 @@ export function FallScreen({
         judgement: judgementRef.current,
         countText,
         stats: statsRef.current,
+        hp: survival ? hpRef.current / HP_MAX : null,
       };
 
-      if (playMode === "osu") {
-        renderOsu(ctx, canvas.clientWidth, canvas.clientHeight, {
-          ...frame,
-          judged: judgedRef.current,
-          judgedAt: judgedAtRef.current,
-        });
+      if (playMode === "runway") {
+        renderRunway(ctx, canvas.clientWidth, canvas.clientHeight, frame);
       } else {
         renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
       }
@@ -376,7 +392,7 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [playChart, speed, parts, playMode, hasAudio]);
+  }, [playChart, speed, parts, playMode, hasAudio, survival]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
@@ -386,10 +402,12 @@ export function FallScreen({
     <div className="flex flex-col gap-4">
       <div
         ref={wrapRef}
-        className="relative w-full overflow-hidden border border-[var(--taiko-line)]"
+        className="relative mx-auto w-full overflow-hidden border border-[var(--taiko-line)]"
         style={{
-          height: "min(64vh, 660px)",
-          minHeight: 420,
+          // 演奏区始终 16:9
+          aspectRatio: "16 / 9",
+          maxHeight: "min(70vh, 720px)",
+          maxWidth: "calc(min(70vh, 720px) * 16 / 9)",
           backgroundColor: "#0a0a0c",
         }}
       >
@@ -498,7 +516,9 @@ export function FallScreen({
         )}
         {phase === "ended" && (
           <Overlay>
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Result</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">
+              {deadOut ? "Failed · 体力耗尽" : "Result"}
+            </p>
             <p className="text-3xl font-bold tabular-nums text-white">
               {String(scoreRef.current).padStart(7, "0")}
             </p>
@@ -532,7 +552,8 @@ export function FallScreen({
         {(
           [
             ["stage", "舞台下落"],
-            ["osu", "osu!"],
+            ["runway", "节奏跑道"],
+            ["survival", "生存"],
           ] as const
         ).map(([mode, label]) => (
           <button

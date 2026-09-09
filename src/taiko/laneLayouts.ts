@@ -131,20 +131,25 @@ const MID_ROW_CY = 0.728;
 /** 上排横坐标：中排踩镲/地通的车道端点取相邻上排两端点的正中 */
 const TOP_CX = { crash: 0.16, highTom: 0.38, midTom: 0.62, ride: 0.84 } as const;
 
+/** 鼓盘半径（整体缩小约 12%，音符仍取鼓面 70%） */
+const PAD_R = 0.042;
+const PEDAL_R = 0.04;
+
 export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
   // 上排（row 0，全员圆柱同尺寸）
-  crash: { cx: TOP_CX.crash, cy: TOP_ROW_CY, r: 0.048, kind: "drum", row: 0 },
-  highTom: { cx: TOP_CX.highTom, cy: TOP_ROW_CY, r: 0.048, kind: "drum", row: 0 },
-  midTom: { cx: TOP_CX.midTom, cy: TOP_ROW_CY, r: 0.048, kind: "drum", row: 0 },
-  ride: { cx: TOP_CX.ride, cy: TOP_ROW_CY, r: 0.048, kind: "drum", row: 0 },
+  crash: { cx: TOP_CX.crash, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
+  highTom: { cx: TOP_CX.highTom, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
+  midTom: { cx: TOP_CX.midTom, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
+  ride: { cx: TOP_CX.ride, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
   // 中排（row 1，车道端点分别处于吊镲/高通与中通/叮叮镲端点的正中）
-  hihat: { cx: (TOP_CX.crash + TOP_CX.highTom) / 2, cy: MID_ROW_CY, r: 0.048, kind: "drum", row: 1 },
-  snare: { cx: 0.5, cy: MID_ROW_CY, r: 0.048, kind: "drum", row: 1 },
-  floorTom: { cx: (TOP_CX.midTom + TOP_CX.ride) / 2, cy: MID_ROW_CY, r: 0.048, kind: "drum", row: 1 },
+  hihat: { cx: (TOP_CX.crash + TOP_CX.highTom) / 2, cy: MID_ROW_CY, r: PAD_R, kind: "drum", row: 1 },
+  snare: { cx: 0.5, cy: MID_ROW_CY, r: PAD_R, kind: "drum", row: 1 },
+  floorTom: { cx: (TOP_CX.midTom + TOP_CX.ride) / 2, cy: MID_ROW_CY, r: PAD_R, kind: "drum", row: 1 },
   // 下排（row 2，方形踏板与手击鼓盘区分，两踏板等大）
-  pedalHat: { cx: 0.35, cy: 0.92, r: 0.045, kind: "pedal", square: true, row: 2 },
-  kick: { cx: 0.65, cy: 0.92, r: 0.045, kind: "drum", square: true, row: 2 },
+  pedalHat: { cx: 0.35, cy: 0.92, r: PEDAL_R, kind: "pedal", square: true, row: 2 },
+  kick: { cx: 0.65, cy: 0.92, r: PEDAL_R, kind: "drum", square: true, row: 2 },
 };
+
 
 // ================= 分区显示集 =================
 

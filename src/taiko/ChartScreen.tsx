@@ -6,7 +6,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
 import { parseMidi, type ParsedMidi } from "./midiFile";
-import { analyzeMidi, buildPlayChart } from "./difficulty";
+import { analyzeMidi } from "./difficulty";
+import { clearChartCache, getPlayChart } from "./chartCache";
 import { DIFFICULTIES } from "./difficulty";
 import { countByPart } from "./midiChart";
 import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
@@ -157,27 +158,35 @@ export function ChartScreen() {
   const durationMs = audioDurationMs || (song.midi?.durationMs ?? 0);
   const anyStem = hasAnyStem(song.stems);
 
-  // ---- 谱面预览（按当前难度） ----
+  // ---- 谱面预览（按当前难度，与游玩共用同一份固化谱面） ----
+  const [chartNonce, setChartNonce] = useState(0);
   const chart = useMemo(() => {
     if (!song.midi) return null;
-    return buildPlayChart(
+    return getPlayChart(
       song.midi,
       {
         title: song.fileName,
         offsetMs: song.offsetMs,
         phaseBeatOffset: song.phaseBeatOffset,
-        durationMs: durationMs || undefined,
       },
       song.difficulty,
     );
+    // chartNonce 变化 = 手动「重新生成谱面」
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     song.midi,
     song.fileName,
     song.offsetMs,
     song.phaseBeatOffset,
     song.difficulty,
-    durationMs,
+    chartNonce,
   ]);
+
+  const regenerate = () => {
+    if (!song.midi) return;
+    clearChartCache(song.fileName, song.midi);
+    setChartNonce((n) => n + 1);
+  };
 
   useEffect(() => {
     song.setSong({ chart });
@@ -462,7 +471,17 @@ export function ChartScreen() {
           <span className="ml-auto text-xs tabular-nums text-[var(--taiko-ink)]/60">
             {chart ? `${chart.notes.length} 音符` : "缺少 MIDI，无法生成谱面"}
           </span>
+          {song.midi && (
+            <button
+              onClick={regenerate}
+              title="谱面按歌曲固化，只有点这里才会重算"
+              className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:text-[var(--taiko-ink)]"
+            >
+              重新生成谱面
+            </button>
+          )}
         </div>
+
 
         {counts && (
           <div className="flex flex-wrap gap-x-6 gap-y-2">
