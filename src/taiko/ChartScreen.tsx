@@ -471,7 +471,17 @@ export function ChartScreen() {
           <span className="ml-auto text-xs tabular-nums text-[var(--taiko-ink)]/60">
             {chart ? `${chart.notes.length} 音符` : "缺少 MIDI，无法生成谱面"}
           </span>
+          {song.midi && (
+            <button
+              onClick={regenerate}
+              title="谱面按歌曲固化，只有点这里才会重算"
+              className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:text-[var(--taiko-ink)]"
+            >
+              重新生成谱面
+            </button>
+          )}
         </div>
+
 
         {counts && (
           <div className="flex flex-wrap gap-x-6 gap-y-2">
