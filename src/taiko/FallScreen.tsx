@@ -57,6 +57,10 @@ export function FallScreen({
   const judgementRef = useRef<{ text: string; color: string; until: number } | null>(null);
   /** 0 未判定 / 1 命中 / 2 Miss */
   const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
+  /** 长音符（左踏板踩住闭镲）状态：0 未开始 / 1 按住中 / 2 已断开或结算 */
+  const holdStateRef = useRef<Uint8Array>(new Uint8Array(0));
+  /** 左踏板当前是否被踩住（键盘 keyup / MIDI note-off 抬起） */
+  const pedalHeldRef = useRef(false);
   const statsRef = useRef({ perfect: 0, good: 0, miss: 0 });
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
@@ -111,6 +115,7 @@ export function FallScreen({
 
   const resetRun = useCallback(() => {
     judgedRef.current = new Uint8Array(playChart?.notes.length ?? 0);
+    holdStateRef.current = new Uint8Array(playChart?.notes.length ?? 0);
     statsRef.current = { perfect: 0, good: 0, miss: 0 };
     comboRef.current = 0;
     maxComboRef.current = 0;
@@ -181,6 +186,8 @@ export function FallScreen({
       }
       if (best < 0) return;
       judgedRef.current[best] = 1;
+      // 长音符：踩下即进入「按住中」，之后由渲染循环检查是否全程踩住
+      if ((notes[best]!.holdMs ?? 0) > 0) holdStateRef.current[best] = 1;
       const perfect = bestDiff <= PERFECT_MS;
       statsRef.current[perfect ? "perfect" : "good"]++;
       comboRef.current++;
@@ -198,20 +205,31 @@ export function FallScreen({
     [playChart, survival],
   );
 
-  // MIDI 击打
+  // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
   useEffect(() => {
     void midiManager.init();
-    return midiManager.onNote((note) => {
+    const offNote = midiManager.onNote((note) => {
       const part = partOfNote(note);
-      if (part && parts.includes(part)) hitPart(part);
+      if (!part) return;
+      if (part === "pedalHat") pedalHeldRef.current = true;
+      if (parts.includes(part)) hitPart(part);
     });
+    const offUp = midiManager.onNoteOff((note) => {
+      if (partOfNote(note) === "pedalHat") pedalHeldRef.current = false;
+    });
+    return () => {
+      offNote();
+      offUp();
+    };
   }, [hitPart, parts]);
 
   // 键盘调试（无 MIDI 设备时）
   useEffect(() => {
+    const pedalKey = KEY_BY_PART.pedalHat.key;
     const onKey = (e: KeyboardEvent) => {
-      if (e.repeat) return;
       const k = e.key.toLowerCase();
+      if (k === pedalKey) pedalHeldRef.current = true;
+      if (e.repeat) return;
       for (const [part, v] of Object.entries(KEY_BY_PART) as [PartId, { key: string }][]) {
         if (v.key === k && parts.includes(part)) {
           hitPart(part);
@@ -219,8 +237,15 @@ export function FallScreen({
         }
       }
     };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === pedalKey) pedalHeldRef.current = false;
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [hitPart, parts]);
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
@@ -287,6 +312,12 @@ export function FallScreen({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // 长音符下标（左踏板踩住闭镲）
+    const holdIndices: number[] = [];
+    (playChart?.notes ?? []).forEach((n, i) => {
+      if ((n.holdMs ?? 0) > 0) holdIndices.push(i);
+    });
+
     let raf = 0;
     const resize = () => {
       const dpr = window.devicePixelRatio || 1;
@@ -342,6 +373,32 @@ export function FallScreen({
           c++;
         }
         missCursorRef.current = c;
+      }
+
+      // 长音符（左踏板踩住闭镲）：全程按住，中途松开立即判失误
+      if (ph === "playing" && playChart) {
+        const notes = playChart.notes;
+        for (const i of holdIndices) {
+          const n = notes[i]!;
+          const end = n.timeMs + (n.holdMs ?? 0);
+          if (t < n.timeMs || t > end) continue;
+          if (holdStateRef.current[i] !== 1) continue;
+          if (pedalHeldRef.current) continue;
+          holdStateRef.current[i] = 2;
+          statsRef.current.miss++;
+          comboRef.current = 0;
+          missFlashesRef.current["pedalHat"] = now + 240;
+          judgementRef.current = { text: "MISS", color: "#f87171", until: now + 500 };
+          if (survival) {
+            hpRef.current = clampHp(hpRef.current + HP_MISS);
+            if (hpRef.current <= 0) {
+              phaseRef.current = "ended";
+              setPhase("ended");
+              setDeadOut(true);
+              songPlayer.stop();
+            }
+          }
+        }
       }
 
       const frameChart =

@@ -25,11 +25,13 @@ interface MidiAccessLike {
 }
 
 type NoteListener = (note: number, velocity: number) => void;
+type NoteOffListener = (note: number) => void;
 type StateListener = () => void;
 
 class MidiManager {
   private access: MidiAccessLike | null = null;
   private noteListeners = new Set<NoteListener>();
+  private noteOffListeners = new Set<NoteOffListener>();
   private stateListeners = new Set<StateListener>();
   private selectedId: string | null = null;
 
@@ -84,9 +86,12 @@ class MidiManager {
   private handle(e: MidiMessageLike): void {
     const d = e.data;
     if (!d || d.length < 3) return;
+    const status = d[0]! & 0xf0;
     // note-on：0x90 且力度 > 0（力度 0 视为 note-off）
-    if ((d[0]! & 0xf0) === 0x90 && d[2]! > 0) {
+    if (status === 0x90 && d[2]! > 0) {
       for (const f of this.noteListeners) f(d[1]!, d[2]!);
+    } else if (status === 0x80 || (status === 0x90 && d[2]! === 0)) {
+      for (const f of this.noteOffListeners) f(d[1]!);
     }
   }
 
@@ -94,6 +99,14 @@ class MidiManager {
     this.noteListeners.add(fn);
     return () => {
       this.noteListeners.delete(fn);
+    };
+  }
+
+  /** note-off（长音符「全程按住」判定用） */
+  onNoteOff(fn: NoteOffListener): () => void {
+    this.noteOffListeners.add(fn);
+    return () => {
+      this.noteOffListeners.delete(fn);
     };
   }
 

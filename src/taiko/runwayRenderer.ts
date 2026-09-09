@@ -115,14 +115,17 @@ export function renderRunway(
     if (part === null) continue;
     const row = rowOf.get(part);
     if (row === undefined) continue;
+    const hold = n.holdMs && n.holdMs > 0 ? n.holdMs : 0;
     const dt = (n.timeMs - f.timeMs) * f.speed;
-    if (dt > LEAD_MS || dt < -260) continue;
+    const dtTail = dt + hold * f.speed;
+    if (dt > LEAD_MS || dtTail < -260) continue;
     const x = hitX + ((v.w - hitX) * dt) / LEAD_MS;
+    const xTail = hitX + ((v.w - hitX) * Math.min(dtTail, LEAD_MS)) / LEAD_MS;
     const y = top + laneH * row + laneH / 2;
     const color = PART_BY_ID[part].color;
     const nh = laneH * (n.big ? 0.74 : 0.58);
     const nw = nh * 1.5;
-    const alpha = dt < 0 ? Math.max(0, 1 + dt / 260) : 1;
+    const alpha = dtTail < 0 ? Math.max(0, 1 + dtTail / 260) : 1;
 
     ctx.save();
     ctx.globalAlpha = alpha;
@@ -131,10 +134,22 @@ export function renderRunway(
     ctx.fillStyle = hexToRgba(color, 0.38);
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(x - nw / 2, y - nh / 2, nw, nh, nh * 0.28);
-    ctx.fill();
-    ctx.stroke();
+    if (hold) {
+      // 长音符：从头部一直拖到尾端的色带
+      const bh = nh * 0.6;
+      ctx.beginPath();
+      ctx.roundRect(Math.min(x, xTail), y - bh / 2, Math.abs(xTail - x), bh, bh * 0.3);
+      ctx.fillStyle = hexToRgba(color, 0.26);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = hexToRgba(color, 0.38);
+    }
+    if (dt > -260) {
+      ctx.beginPath();
+      ctx.roundRect(x - nw / 2, y - nh / 2, nw, nh, nh * 0.28);
+      ctx.fill();
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

@@ -17,6 +17,8 @@ export interface BarSkeleton {
   vel: Partial<Record<PartId, Record<number, number>>>;
   /** 镲的细分：4=四分 8=八分 16=十六分 0=无 */
   hatDiv: 0 | 4 | 8 | 16;
+  /** 小节内被判为「开镲」的踩镲网格位 */
+  openHat: number[];
   /** 该小节镲片主体是叮叮镲 */
   ridePrimary: boolean;
   /** 过门小节（通鼓多 / 音符密度突出） */
@@ -53,6 +55,7 @@ export function buildSkeleton(clean: CleanedMidi): Skeleton {
       slots: {},
       vel: {},
       hatDiv: 0,
+      openHat: [],
       ridePrimary: false,
       isFill: false,
       isPhraseStart: false,
@@ -68,6 +71,7 @@ export function buildSkeleton(clean: CleanedMidi): Skeleton {
     if (local < 0 || local >= stepsPerBar) continue;
     (bar.slots[h.part] ??= []).push(local);
     (bar.vel[h.part] ??= {})[local] = h.velocity;
+    if (h.open && h.part === "hihat") bar.openHat.push(local);
     bar.noteCount++;
   }
 

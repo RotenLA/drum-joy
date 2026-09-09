@@ -214,50 +214,90 @@ function noteItems(
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
     if (!part) continue;
+    const hold = n.holdMs && n.holdMs > 0 ? n.holdMs : 0;
     // t: 0 = 收束段，1 = 鼓盘（到达即命中，不再绘制）
     const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
-    if (t <= 0.02 || t >= 1) continue;
+    const tTail = hold ? 1 - ((n.timeMs + hold - f.timeMs) * f.speed) / LEAD_MS : t;
+    if (t <= 0.02) continue;
+    if (tTail >= 1) continue;
 
     const anchor = PAD_ANCHORS[part];
     const pad = padPixels(anchor, w, h);
     const g0 = gatePoint(anchor, w, h);
-    const p = Math.pow(t, EASE);
-    const x = g0.x + (pad.cx - g0.x) * p;
-    const y = g0.y + (pad.cy - g0.y) * p;
-    // 落到鼓面时 = 鼓面的 70%；远端约 13%，重击额外放大
-    const scale = (0.18 + 0.82 * p) * 0.7 * (n.big ? 1.3 : 1);
-    const rx = Math.max(3, pad.rx * scale);
+    const at = (tt: number) => {
+      const p = Math.pow(Math.max(0.02, Math.min(1, tt)), EASE);
+      return {
+        p,
+        x: g0.x + (pad.cx - g0.x) * p,
+        y: g0.y + (pad.cy - g0.y) * p,
+        // 落到鼓面时 = 鼓面的 70%；远端约 13%，重击额外放大
+        rx: Math.max(3, pad.rx * (0.18 + 0.82 * p) * 0.7 * (n.big ? 1.3 : 1)),
+      };
+    };
+    const head = at(Math.min(t, 1));
+    const tail = hold ? at(tTail) : head;
+    const p = head.p;
+    const scale = head.rx / Math.max(1, pad.rx);
+    const rx = head.rx;
+    const { x, y } = head;
     const color = PART_BY_ID[part].color;
     const fadeIn = Math.min(1, t / 0.1);
     const alpha = (0.35 + 0.65 * p) * fadeIn;
+    const headVisible = t < 1;
 
     items.push({
       // 同深度时音符压在鼓盘上层（+ε），保证判定点处不被自己的鼓面吃掉
       depth: y / h + 0.0015,
       draw: () => {
         ctx.save();
-        ctx.translate(x, y);
         ctx.globalAlpha = alpha;
         ctx.shadowColor = color;
-        ctx.shadowBlur = 18 * scale;
-        ctx.lineWidth = Math.max(1.4, rx * 0.16);
-        ctx.strokeStyle = color;
-        ctx.fillStyle = hexToRgba(color, 0.34);
 
-        ctx.beginPath();
-        if (anchor.square) {
-          // 踏板：与踏板顶面同构——正方形先按外八角旋转，再统一压扁 0.42
-          const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
-          ctx.save();
-          ctx.scale(1, 0.42);
-          ctx.rotate(th);
-          ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
-          ctx.restore();
-        } else {
-          ctx.ellipse(0, 0, rx, rx * 0.42, padRotation(anchor, w, h), 0, Math.PI * 2);
+        // 长音符：先画一条从尾端连到头部的色带（左踏板「一直踩住」）
+        if (hold) {
+          const dx = head.x - tail.x;
+          const dy = head.y - tail.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const nx = -dy / len;
+          const ny = dx / len;
+          const wh = head.rx * 0.55;
+          const wt = tail.rx * 0.55;
+          ctx.shadowBlur = 14 * scale;
+          ctx.fillStyle = hexToRgba(color, 0.28);
+          ctx.strokeStyle = hexToRgba(color, 0.75);
+          ctx.lineWidth = Math.max(1, rx * 0.08);
+          ctx.beginPath();
+          ctx.moveTo(tail.x + nx * wt, tail.y + ny * wt);
+          ctx.lineTo(head.x + nx * wh, head.y + ny * wh);
+          ctx.lineTo(head.x - nx * wh, head.y - ny * wh);
+          ctx.lineTo(tail.x - nx * wt, tail.y - ny * wt);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
         }
-        ctx.fill();
-        ctx.stroke();
+
+        if (headVisible) {
+          ctx.translate(x, y);
+          ctx.shadowBlur = 18 * scale;
+          ctx.lineWidth = Math.max(1.4, rx * 0.16);
+          ctx.strokeStyle = color;
+          ctx.fillStyle = hexToRgba(color, 0.34);
+
+          ctx.beginPath();
+          if (anchor.square) {
+            // 踏板：与踏板顶面同构——正方形先按外八角旋转，再统一压扁 0.42
+            const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
+            ctx.save();
+            ctx.scale(1, 0.42);
+            ctx.rotate(th);
+            ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
+            ctx.restore();
+          } else {
+            ctx.ellipse(0, 0, rx, rx * 0.42, padRotation(anchor, w, h), 0, Math.PI * 2);
+          }
+          ctx.fill();
+          ctx.stroke();
+        }
         ctx.restore();
       },
     });

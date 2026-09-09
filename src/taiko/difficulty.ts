@@ -41,7 +41,21 @@ interface Emit {
   step: number;
   part: PartId;
   velocity: number;
+  /** 踩镲为开镲（此刻左脚必须松开，长音符要断开） */
+  open?: boolean;
 }
+
+/** 手部件（左右踏板之外的 7 件）：同一时刻最多同时出现 2 个 */
+const HAND_PRIORITY: Partial<Record<PartId, number>> = {
+  snare: 0,
+  crash: 1,
+  hihat: 2,
+  ride: 2,
+  highTom: 3,
+  midTom: 4,
+  floorTom: 5,
+};
+const MAX_HANDS_AT_ONCE = 2;
 
 // ================= 入门 =================
 
@@ -83,9 +97,9 @@ function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
     }
   }
 
-  // 踩镲：八分结构为主，稀疏段落降为四分
+  // 踩镲：入门以「每拍一下」为主，只有原曲是连续 16 分的密集段才升到八分
   if (bar.hatDiv !== 0) {
-    const div = bar.hatDiv >= 8 ? stepsPerBeat / 2 : stepsPerBeat;
+    const div = bar.hatDiv === 16 ? stepsPerBeat / 2 : stepsPerBeat;
     for (let s = 0; s < stepsPerBar; s += div) out.push({ step: s, part: "hihat", velocity: 90 });
   }
 
@@ -126,18 +140,17 @@ function standardBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
   const div = bar.hatDiv === 0 ? 0 : bar.hatDiv === 16 ? 1 : bar.hatDiv === 8 ? 2 : 4;
   const useDiv = div === 0 ? (pattern.hatDiv === 16 ? 1 : pattern.hatDiv === 8 ? 2 : 4) : div;
   if (bar.hatDiv !== 0) {
-    for (let s = 0; s < stepsPerBar; s += useDiv)
-      out.push({ step: s, part: cymbalPart, velocity: 90 });
+    for (let s = 0; s < stepsPerBar; s += useDiv) {
+      const open = cymbalPart === "hihat" && bar.openHat.some((o) => Math.abs(o - s) <= 1);
+      out.push({ step: s, part: cymbalPart, velocity: open ? 100 : 90, open });
+    }
   }
 
   // 原曲的吊镲落点叠加回来（乐句首的重音）
   for (const s of bar.slots.crash ?? []) {
     out.push({ step: s, part: "crash", velocity: bar.vel.crash?.[s] ?? 110 });
   }
-  // 踏板踩镲若原曲有，保留正拍上的
-  for (const s of bar.slots.pedalHat ?? []) {
-    if (s % stepsPerBeat === 0) out.push({ step: s, part: "pedalHat", velocity: 90 });
-  }
+  // 原曲的踏板踩镲不再单独出音符：左脚改由「闭镲长音符」统一表示
 
   return out;
 }
@@ -151,18 +164,20 @@ const ALTERNATE: Partial<Record<PartId, PartId>> = {
   highTom: "snare",
   midTom: "highTom",
   floorTom: "midTom",
-  kick: "pedalHat",
-  pedalHat: "kick",
 };
 
 const TOM_DOWN: readonly PartId[] = ["highTom", "midTom", "floorTom"];
 
 function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
-  const emits: Emit[] = clean.hits.map((h: CleanHit) => ({
-    step: h.step,
-    part: h.part,
-    velocity: h.velocity,
-  }));
+  const emits: Emit[] = clean.hits
+    // 原曲的踏板踩镲交给闭镲长音符表示
+    .filter((h: CleanHit) => h.part !== "pedalHat")
+    .map((h: CleanHit) => ({
+      step: h.step,
+      part: h.part,
+      velocity: h.velocity,
+      open: h.open ?? false,
+    }));
 
   // 1) 同一鼓件的快速连打拆成交替（间隔 ≤ 2 格、长度 ≥ 4）
   const byPart = new Map<PartId, Emit[]>();
@@ -208,6 +223,79 @@ function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
 
 // ================= 组装 =================
 
+/**
+ * 物理限制：除左右踏板外，同一时刻手上最多只能打两个部件。
+ * 超出的按优先级（军鼓 > 吊镲 > 踩镲/叮叮镲 > 高通 > 中通 > 地通）丢弃。
+ */
+function limitHands(emits: Emit[]): Emit[] {
+  const byStep = new Map<number, Emit[]>();
+  for (const e of emits) {
+    const list = byStep.get(e.step) ?? [];
+    list.push(e);
+    byStep.set(e.step, list);
+  }
+  const out: Emit[] = [];
+  for (const list of byStep.values()) {
+    const hands = list.filter((e) => HAND_PRIORITY[e.part] !== undefined);
+    const feet = list.filter((e) => HAND_PRIORITY[e.part] === undefined);
+    out.push(...feet);
+    if (hands.length <= MAX_HANDS_AT_ONCE) {
+      out.push(...hands);
+      continue;
+    }
+    hands.sort(
+      (a, b) =>
+        (HAND_PRIORITY[a.part] ?? 9) - (HAND_PRIORITY[b.part] ?? 9) ||
+        b.velocity - a.velocity,
+    );
+    out.push(...hands.slice(0, MAX_HANDS_AT_ONCE));
+  }
+  out.sort((a, b) => a.step - b.step);
+  return out;
+}
+
+interface HoldSeg {
+  startStep: number;
+  endStep: number;
+}
+
+/**
+ * 闭镲期间左脚要一直踩住：把连续的闭镲段落转成左踏板长音符。
+ * 开镲处断开，开镲之后再出现闭镲则重新踩下。
+ */
+function pedalHolds(emits: Emit[], diff: Difficulty, stepsPerBar: number, stepsPerBeat: number): HoldSeg[] {
+  const hats = emits.filter((e) => e.part === "hihat").sort((a, b) => a.step - b.step);
+  if (hats.length === 0) return [];
+  // 入门：全部按闭镲处理
+  const isOpen = (e: Emit) => diff !== "beginner" && e.open === true;
+  const minLen = diff === "beginner" ? stepsPerBar : stepsPerBeat * 2;
+  const gapLimit = stepsPerBar;
+  /** 单条长音符最长 4 小节：太长的连续踩住在游玩上没有意义，乐句间换脚 */
+  const maxLen = stepsPerBar * 4;
+
+  const segs: HoldSeg[] = [];
+  let cur: HoldSeg | null = null;
+  const flush = (endStep: number) => {
+    if (cur && endStep - cur.startStep >= minLen) segs.push({ ...cur, endStep });
+    cur = null;
+  };
+  for (const e of hats) {
+    if (isOpen(e)) {
+      // 开镲前一格松脚
+      if (cur) flush(Math.max(cur.startStep, e.step - 1));
+      continue;
+    }
+    if (!cur) cur = { startStep: e.step, endStep: e.step };
+    else if (e.step - cur.endStep > gapLimit || e.step - cur.startStep >= maxLen) {
+      const prevEnd = cur.endStep + 1;
+      flush(prevEnd);
+      cur = { startStep: e.step, endStep: e.step };
+    } else cur.endStep = e.step;
+  }
+  if (cur) flush((cur as HoldSeg).endStep + 1);
+  return segs;
+}
+
 function emitsToNotes(
   emits: Emit[],
   midi: ParsedMidi,
@@ -233,6 +321,29 @@ function emitsToNotes(
     });
   }
   notes.sort((a, b) => a.timeMs - b.timeMs);
+  return notes;
+}
+
+function holdsToNotes(
+  segs: HoldSeg[],
+  midi: ParsedMidi,
+  clean: CleanedMidi,
+  layout: LayoutMode,
+  offsetMs: number,
+): TaikoNote[] {
+  if (!VISIBLE_PARTS[layout].includes("pedalHat")) return [];
+  const notes: TaikoNote[] = [];
+  for (const s of segs) {
+    const startMs = tickToMs(midi, s.startStep * clean.stepTicks) + offsetMs;
+    const endMs = tickToMs(midi, s.endStep * clean.stepTicks) + offsetMs;
+    if (startMs < 0 || endMs <= startMs) continue;
+    notes.push({
+      timeMs: startMs,
+      lane: "don",
+      note: noteForPart("pedalHat"),
+      holdMs: Math.round(endMs - startMs),
+    });
+  }
   return notes;
 }
 
@@ -265,7 +376,13 @@ export function buildPlayChart(
     }
   }
 
-  const notes = emitsToNotes(emits, midi, clean, layout, offset);
+  emits = limitHands(emits);
+  const holds = pedalHolds(emits, diff, skeleton.stepsPerBar, skeleton.stepsPerBeat);
+
+  const notes = [
+    ...emitsToNotes(emits, midi, clean, layout, offset),
+    ...holdsToNotes(holds, midi, clean, layout, offset),
+  ].sort((a, b) => a.timeMs - b.timeMs);
   const last = notes[notes.length - 1]?.timeMs ?? 0;
   return {
     title: opts.title,
