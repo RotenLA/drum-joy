@@ -57,6 +57,10 @@ export function FallScreen({
   const judgementRef = useRef<{ text: string; color: string; until: number } | null>(null);
   /** 0 未判定 / 1 命中 / 2 Miss */
   const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
+  /** 长音符（左踏板踩住闭镲）状态：0 未开始 / 1 按住中 / 2 已断开或结算 */
+  const holdStateRef = useRef<Uint8Array>(new Uint8Array(0));
+  /** 左踏板当前是否被踩住（键盘 keyup / MIDI note-off 抬起） */
+  const pedalHeldRef = useRef(false);
   const statsRef = useRef({ perfect: 0, good: 0, miss: 0 });
   const comboRef = useRef(0);
   const maxComboRef = useRef(0);
