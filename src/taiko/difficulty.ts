@@ -62,12 +62,15 @@ function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
 
   for (let b = 0; b < beats; b++) {
     const local = b * stepsPerBeat;
-    // 底鼓：只允许正拍，原谱在这一拍附近有底鼓就落一下
-    const k = hasNear(bar, "kick", local, stepsPerBeat / 2);
-    if (k !== null) out.push({ step: local, part: "kick", velocity: bar.vel.kick?.[k] ?? 100 });
     // 军鼓：正拍（多在 2、4 拍）
     const s = hasNear(bar, "snare", local, stepsPerBeat / 2);
     if (s !== null) out.push({ step: local, part: "snare", velocity: bar.vel.snare?.[s] ?? 100 });
+    // 底鼓：只允许正拍。原谱正拍上/紧邻有底鼓就落一下；
+    // 只有切分底鼓（差半拍）时，仅在这一拍没有军鼓时才吸附过来，避免变成四踩。
+    const exact = hasNear(bar, "kick", local, 1);
+    const near = exact ?? (s === null ? hasNear(bar, "kick", local, stepsPerBeat / 2) : null);
+    if (near !== null)
+      out.push({ step: local, part: "kick", velocity: bar.vel.kick?.[near] ?? 100 });
   }
 
   // 偶尔的反拍军鼓：原谱在八分反拍有很强的军鼓时，每 4 小节最多保留一次
