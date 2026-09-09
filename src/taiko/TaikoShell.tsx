@@ -10,7 +10,7 @@ type ScreenKey = "play" | "chart" | "mapping";
 interface TaikoSettings {
   speed: number;
   midiDeviceId: string | null;
-  /** 游玩模式：舞台下落 / osu! */
+  /** 游玩模式：舞台下落 / 节奏跑道 / 生存 */
   playMode: PlayMode;
 }
 
@@ -44,7 +44,13 @@ function ShellInner() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) setSettings((s) => ({ ...s, ...JSON.parse(raw) }));
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<TaikoSettings>;
+      // 旧版本存过 "osu"，已下线 → 回落到舞台下落
+      const modes: PlayMode[] = ["stage", "runway", "survival"];
+      const playMode =
+        parsed.playMode && modes.includes(parsed.playMode) ? parsed.playMode : "stage";
+      setSettings((s) => ({ ...s, ...parsed, playMode }));
     } catch {
       // 忽略损坏的本地设置
     }
