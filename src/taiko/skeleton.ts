@@ -55,6 +55,7 @@ export function buildSkeleton(clean: CleanedMidi): Skeleton {
       slots: {},
       vel: {},
       hatDiv: 0,
+      openHat: [],
       ridePrimary: false,
       isFill: false,
       isPhraseStart: false,
@@ -70,6 +71,7 @@ export function buildSkeleton(clean: CleanedMidi): Skeleton {
     if (local < 0 || local >= stepsPerBar) continue;
     (bar.slots[h.part] ??= []).push(local);
     (bar.vel[h.part] ??= {})[local] = h.velocity;
+    if (h.open && h.part === "hihat") bar.openHat.push(local);
     bar.noteCount++;
   }
 
