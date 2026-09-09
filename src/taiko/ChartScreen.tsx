@@ -331,16 +331,65 @@ export function ChartScreen() {
             MIDI：{song.midiFileName || "未导入（无法生成谱面）"}
           </span>
         </div>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="ml-auto border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-        >
-          导入 / 补充文件
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => void importSample()}
+            disabled={busy !== null}
+            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
+          >
+            示例曲
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+          >
+            导入 / 补充文件
+          </button>
+        </div>
         {busy && <span className="text-xs text-[var(--taiko-ink)]/50">{busy}</span>}
         {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
         {fileInput}
       </div>
+
+      {/* MIDI 拆解结果 */}
+      {analysis && (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border border-[var(--taiko-line)] px-4 py-3 text-xs text-[var(--taiko-ink)]/70">
+          <span className="font-medium text-[var(--taiko-ink)]">MIDI 拆解</span>
+          <span className="tabular-nums">量化后 {analysis.clean.hits.length} 击</span>
+          <span className="tabular-nums">{analysis.skeleton.bars.length} 小节</span>
+          <span className="tabular-nums">
+            过门 {analysis.skeleton.bars.filter((b) => b.isFill).length} 小节
+          </span>
+          <span className="tabular-nums">
+            小节相位 {analysis.clean.phaseSteps / analysis.clean.stepsPerBeat} 拍
+          </span>
+          <span className="flex items-center gap-1">
+            微调
+            <button
+              onClick={() => song.setSong({ phaseBeatOffset: song.phaseBeatOffset - 1 })}
+              className="border border-[var(--taiko-line)] px-2 py-0.5 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+            >
+              −1 拍
+            </button>
+            <button
+              onClick={() => song.setSong({ phaseBeatOffset: song.phaseBeatOffset + 1 })}
+              className="border border-[var(--taiko-line)] px-2 py-0.5 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+            >
+              +1 拍
+            </button>
+            {song.phaseBeatOffset !== 0 && (
+              <button
+                onClick={() => song.setSong({ phaseBeatOffset: 0 })}
+                className="px-1 underline decoration-dotted"
+              >
+                复位（{song.phaseBeatOffset > 0 ? "+" : ""}
+                {song.phaseBeatOffset}）
+              </button>
+            )}
+          </span>
+        </div>
+      )}
+
 
       {/* 速度 / 拍号（来自 MIDI）+ 偏移 + 试听 */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border border-[var(--taiko-line)] px-4 py-3">
