@@ -6,11 +6,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
 import { parseMidi, type ParsedMidi } from "./midiFile";
-import { buildPlayChart } from "./difficulty";
+import { analyzeMidi, buildPlayChart } from "./difficulty";
 import { DIFFICULTIES } from "./difficulty";
 import { countByPart } from "./midiChart";
 import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
 import { layoutOf } from "./difficulty";
+import { loadSampleSong, SAMPLE_TITLE } from "./sampleSong";
 import { songPlayer } from "./player";
 import { Metronome, getAudioContext } from "./metronome";
 import {
