@@ -30,10 +30,11 @@ if (wallImg) wallImg.src = stageWallUrl;
  * 不再长距离重叠；同列部件（高通↔踩镲踏板、中通↔底鼓）的车道接近平行。
  */
 const ROW_GATES = [
-  { y: 0.13, halfW: 0.05 },
-  { y: 0.3, halfW: 0.05 },
-  { y: 0.46, halfW: 0.05 },
+  { y: 0.13, halfW: 0.044 },
+  { y: 0.3, halfW: 0.044 },
+  { y: 0.46, halfW: 0.044 },
 ] as const;
+
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
@@ -65,6 +66,9 @@ export interface StageFrame {
   countText?: string | null;
   /** 判定统计（HUD 显示 P/G/M 与准确率） */
   stats?: { perfect: number; good: number; miss: number } | null;
+  /** 生存模式血量 0~1（其他模式不传） */
+  hp?: number | null;
+
 }
 
 interface Particle {
@@ -188,13 +192,24 @@ function drawLanes(
   ctx.restore();
 }
 
-function drawNotes(
+export interface DepthItem {
+  /** 归一化纵深（0 远 → 1 近），越大越靠近玩家、越后绘制 */
+  depth: number;
+  draw: () => void;
+}
+
+/**
+ * 飞行中的音符 → 纵深绘制项。
+ * 音符按当前所在高度参与统一排序：飞过某个鼓盘所在深度之前会被该鼓面遮挡，
+ * 越过之后才压在上层；到达自己鼓盘时（同深度 + 微小偏置）始终可见。
+ */
+function noteItems(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
   f: StageFrame,
-) {
-  const visible: { part: PartId; t: number; big: boolean }[] = [];
+): DepthItem[] {
+  const items: DepthItem[] = [];
   for (const n of f.chart.notes) {
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
@@ -202,12 +217,7 @@ function drawNotes(
     // t: 0 = 收束段，1 = 鼓盘（到达即命中，不再绘制）
     const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
     if (t <= 0.02 || t >= 1) continue;
-    visible.push({ part, t, big: !!n.big });
-  }
-  // 远的先画，近的在上一层
-  visible.sort((a, b) => a.t - b.t);
 
-  for (const { part, t, big } of visible) {
     const anchor = PAD_ANCHORS[part];
     const pad = padPixels(anchor, w, h);
     const g0 = gatePoint(anchor, w, h);
@@ -215,39 +225,46 @@ function drawNotes(
     const x = g0.x + (pad.cx - g0.x) * p;
     const y = g0.y + (pad.cy - g0.y) * p;
     // 落到鼓面时 = 鼓面的 70%；远端约 13%，重击额外放大
-    const scale = (0.18 + 0.82 * p) * 0.7 * (big ? 1.3 : 1);
-    const rx = Math.max(4, pad.rx * scale);
+    const scale = (0.18 + 0.82 * p) * 0.7 * (n.big ? 1.3 : 1);
+    const rx = Math.max(3, pad.rx * scale);
     const color = PART_BY_ID[part].color;
     const fadeIn = Math.min(1, t / 0.1);
     const alpha = (0.35 + 0.65 * p) * fadeIn;
 
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 18 * scale;
-    ctx.lineWidth = Math.max(1.5, rx * 0.16);
-    ctx.strokeStyle = color;
-    ctx.fillStyle = hexToRgba(color, 0.34);
+    items.push({
+      // 同深度时音符压在鼓盘上层（+ε），保证判定点处不被自己的鼓面吃掉
+      depth: y / h + 0.0015,
+      draw: () => {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.globalAlpha = alpha;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 18 * scale;
+        ctx.lineWidth = Math.max(1.4, rx * 0.16);
+        ctx.strokeStyle = color;
+        ctx.fillStyle = hexToRgba(color, 0.34);
 
-    ctx.beginPath();
-    if (anchor.square) {
-      // 踏板：与踏板顶面同构——正方形先按外八角旋转，再统一压扁 0.42
-      const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
-      ctx.save();
-      ctx.scale(1, 0.42);
-      ctx.rotate(th);
-      ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
-      ctx.restore();
-    } else {
-      ctx.ellipse(0, 0, rx, rx * 0.42, padRotation(anchor, w, h), 0, Math.PI * 2);
-    }
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-
+        ctx.beginPath();
+        if (anchor.square) {
+          // 踏板：与踏板顶面同构——正方形先按外八角旋转，再统一压扁 0.42
+          const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
+          ctx.save();
+          ctx.scale(1, 0.42);
+          ctx.rotate(th);
+          ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
+          ctx.restore();
+        } else {
+          ctx.ellipse(0, 0, rx, rx * 0.42, padRotation(anchor, w, h), 0, Math.PI * 2);
+        }
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      },
+    });
   }
+  return items;
 }
+
 
 
 function spawnSparks(anchor: PadAnchor, color: string, w: number, h: number, now: number) {
@@ -541,6 +558,27 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.fillRect(0, 0, w * Math.min(1, progress), 3);
   ctx.shadowBlur = 0;
 
+  // 生存模式血条（进度条下方一条粗条，低血变红闪）
+  if (f.hp !== undefined && f.hp !== null) {
+    const bw = w * 0.34;
+    const bx = (w - bw) / 2;
+    const by = 14;
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    ctx.fillRect(bx, by, bw, 8);
+    const low = f.hp < 0.3;
+    const col = low ? "#f87171" : f.hp < 0.6 ? "#fbbf24" : "#4ade80";
+    ctx.shadowColor = col;
+    ctx.shadowBlur = low ? 14 + 8 * Math.sin(f.now / 120) : 10;
+    ctx.fillStyle = col;
+    ctx.fillRect(bx, by, bw * Math.max(0, f.hp), 8);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, bw, 8);
+  }
+
+
+
   // 左上得分
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(255,255,255,0.4)";
@@ -620,6 +658,21 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.restore();
 }
 
+/**
+ * 演奏区固定 16:9：背景铺满整个画布，鼓阵/车道/音符/HUD 全部布局在
+ * 画布内居中的 16:9 逻辑区域里，窗口比例变化时构图不变形。
+ */
+export function stageViewport(w: number, h: number) {
+  const target = 16 / 9;
+  let vw = w;
+  let vh = w / target;
+  if (vh > h) {
+    vh = h;
+    vw = h * target;
+  }
+  return { x: (w - vw) / 2, y: (h - vh) / 2, w: vw, h: vh };
+}
+
 export function renderStage(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -627,31 +680,44 @@ export function renderStage(
   f: StageFrame,
 ) {
   drawBackground(ctx, w, h);
+  const v = stageViewport(w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
-  drawLanes(ctx, w, h, parts);
 
-  // 远的鼓盘先画，近的压上层（无遮挡摆位下主要是保险）
-  const sorted = [...parts].sort((a, b) => PAD_ANCHORS[a].cy - PAD_ANCHORS[b].cy);
-  for (const id of sorted) {
+  ctx.save();
+  ctx.translate(v.x, v.y);
+  drawLanes(ctx, v.w, v.h, parts);
+
+  // 鼓盘与音符合并成一条按纵深排序的绘制队列：越靠下（离玩家越近）越后画，
+  // 于是飞行中的音符会被更近的鼓面正确遮挡。
+  const items: DepthItem[] = [];
+  for (const id of parts) {
     const expiry = f.flashes[id] ?? 0;
     const intensity = Math.max(0, Math.min(1, (expiry - f.now) / FLASH_MS));
     if (expiry > (lastFlash[id] ?? 0)) {
-      spawnSparks(PAD_ANCHORS[id], PART_BY_ID[id].color, w, h, f.now);
+      spawnSparks(PAD_ANCHORS[id], PART_BY_ID[id].color, v.w, v.h, f.now);
       lastFlash[id] = expiry;
     }
     const missExpiry = f.missFlashes?.[id] ?? 0;
     const miss = Math.max(0, Math.min(1, (missExpiry - f.now) / 240));
-    drawPad(ctx, id, intensity, w, h, miss);
+    items.push({
+      depth: PAD_ANCHORS[id].cy,
+      draw: () => drawPad(ctx, id, intensity, v.w, v.h, miss),
+    });
   }
-
-  // 音符画在鼓盘上层：靠近判定点不再被鼓面遮挡
-  drawNotes(ctx, w, h, f);
-
+  items.push(...noteItems(ctx, v.w, v.h, f));
+  items.sort((a, b) => a.depth - b.depth);
+  for (const it of items) it.draw();
 
   drawParticles(ctx, f.now);
+  ctx.restore();
+
   drawVignette(ctx, w, h);
-  drawHud(ctx, w, h, f);
+  ctx.save();
+  ctx.translate(v.x, v.y);
+  drawHud(ctx, v.w, v.h, f);
+  ctx.restore();
 }
+
 
 // ================= 映射屏复用：静态鼓盘阵 =================
 
@@ -671,16 +737,19 @@ export function renderPadArray(
   opts: PadArrayOptions,
 ) {
   drawBackground(ctx, w, h);
+  const v = stageViewport(w, h);
+  ctx.save();
+  ctx.translate(v.x, v.y);
   const sorted = [...opts.parts].sort(
     (a, b) => PAD_ANCHORS[a].cy - PAD_ANCHORS[b].cy,
   );
   for (const id of sorted) {
     const expiry = opts.flashes[id] ?? 0;
     const intensity = Math.max(0, Math.min(1, (expiry - opts.now) / FLASH_MS));
-    drawPad(ctx, id, intensity, w, h);
+    drawPad(ctx, id, intensity, v.w, v.h);
     if (opts.selected === id) {
       const a = PAD_ANCHORS[id];
-      const p = padPixels(a, w, h);
+      const p = padPixels(a, v.w, v.h);
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.lineWidth = 2;
@@ -699,8 +768,10 @@ export function renderPadArray(
       ctx.restore();
     }
   }
+  ctx.restore();
   drawVignette(ctx, w, h);
 }
+
 
 /** 点击命中测试：返回命中的鼓盘（近处优先） */
 export function partAtPoint(
@@ -710,13 +781,16 @@ export function partAtPoint(
   w: number,
   h: number,
 ): PartId | null {
+  const v = stageViewport(w, h);
+  const lx = x - v.x;
+  const ly = y - v.y;
   const sorted = [...parts].sort((a, b) => PAD_ANCHORS[b].cy - PAD_ANCHORS[a].cy);
   for (const id of sorted) {
     const a = PAD_ANCHORS[id];
-    const p = padPixels(a, w, h);
+    const p = padPixels(a, v.w, v.h);
     const ry = a.square ? p.rx : p.ry; // 方形踏板纵向按全半径判定
-    const dx = (x - p.cx) / (p.rx * 1.15);
-    const dy = (y - p.cy) / (ry * 1.6);
+    const dx = (lx - p.cx) / (p.rx * 1.15);
+    const dy = (ly - p.cy) / (ry * 1.6);
     if (dx * dx + dy * dy <= 1) return id;
   }
   return null;
