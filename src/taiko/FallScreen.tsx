@@ -516,7 +516,9 @@ export function FallScreen({
         )}
         {phase === "ended" && (
           <Overlay>
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Result</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">
+              {deadOut ? "Failed · 体力耗尽" : "Result"}
+            </p>
             <p className="text-3xl font-bold tabular-nums text-white">
               {String(scoreRef.current).padStart(7, "0")}
             </p>
