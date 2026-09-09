@@ -25,11 +25,13 @@ interface MidiAccessLike {
 }
 
 type NoteListener = (note: number, velocity: number) => void;
+type NoteOffListener = (note: number) => void;
 type StateListener = () => void;
 
 class MidiManager {
   private access: MidiAccessLike | null = null;
   private noteListeners = new Set<NoteListener>();
+  private noteOffListeners = new Set<NoteOffListener>();
   private stateListeners = new Set<StateListener>();
   private selectedId: string | null = null;
 
