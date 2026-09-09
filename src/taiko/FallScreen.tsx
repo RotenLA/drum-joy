@@ -550,7 +550,8 @@ export function FallScreen({
         {(
           [
             ["stage", "舞台下落"],
-            ["osu", "osu!"],
+            ["runway", "节奏跑道"],
+            ["survival", "生存"],
           ] as const
         ).map(([mode, label]) => (
           <button
