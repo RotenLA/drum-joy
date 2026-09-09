@@ -41,7 +41,21 @@ interface Emit {
   step: number;
   part: PartId;
   velocity: number;
+  /** 踩镲为开镲（此刻左脚必须松开，长音符要断开） */
+  open?: boolean;
 }
+
+/** 手部件（左右踏板之外的 7 件）：同一时刻最多同时出现 2 个 */
+const HAND_PRIORITY: Partial<Record<PartId, number>> = {
+  snare: 0,
+  crash: 1,
+  hihat: 2,
+  ride: 2,
+  highTom: 3,
+  midTom: 4,
+  floorTom: 5,
+};
+const MAX_HANDS_AT_ONCE = 2;
 
 // ================= 入门 =================
 
@@ -83,9 +97,9 @@ function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
     }
   }
 
-  // 踩镲：八分结构为主，稀疏段落降为四分
+  // 踩镲：入门以「每拍一下」为主，只有原曲是连续 16 分的密集段才升到八分
   if (bar.hatDiv !== 0) {
-    const div = bar.hatDiv >= 8 ? stepsPerBeat / 2 : stepsPerBeat;
+    const div = bar.hatDiv === 16 ? stepsPerBeat / 2 : stepsPerBeat;
     for (let s = 0; s < stepsPerBar; s += div) out.push({ step: s, part: "hihat", velocity: 90 });
   }
 
@@ -126,18 +140,17 @@ function standardBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
   const div = bar.hatDiv === 0 ? 0 : bar.hatDiv === 16 ? 1 : bar.hatDiv === 8 ? 2 : 4;
   const useDiv = div === 0 ? (pattern.hatDiv === 16 ? 1 : pattern.hatDiv === 8 ? 2 : 4) : div;
   if (bar.hatDiv !== 0) {
-    for (let s = 0; s < stepsPerBar; s += useDiv)
-      out.push({ step: s, part: cymbalPart, velocity: 90 });
+    for (let s = 0; s < stepsPerBar; s += useDiv) {
+      const open = cymbalPart === "hihat" && bar.openHat.some((o) => Math.abs(o - s) <= 1);
+      out.push({ step: s, part: cymbalPart, velocity: open ? 100 : 90, open });
+    }
   }
 
   // 原曲的吊镲落点叠加回来（乐句首的重音）
   for (const s of bar.slots.crash ?? []) {
     out.push({ step: s, part: "crash", velocity: bar.vel.crash?.[s] ?? 110 });
   }
-  // 踏板踩镲若原曲有，保留正拍上的
-  for (const s of bar.slots.pedalHat ?? []) {
-    if (s % stepsPerBeat === 0) out.push({ step: s, part: "pedalHat", velocity: 90 });
-  }
+  // 原曲的踏板踩镲不再单独出音符：左脚改由「闭镲长音符」统一表示
 
   return out;
 }
@@ -151,18 +164,20 @@ const ALTERNATE: Partial<Record<PartId, PartId>> = {
   highTom: "snare",
   midTom: "highTom",
   floorTom: "midTom",
-  kick: "pedalHat",
-  pedalHat: "kick",
 };
 
 const TOM_DOWN: readonly PartId[] = ["highTom", "midTom", "floorTom"];
 
 function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
-  const emits: Emit[] = clean.hits.map((h: CleanHit) => ({
-    step: h.step,
-    part: h.part,
-    velocity: h.velocity,
-  }));
+  const emits: Emit[] = clean.hits
+    // 原曲的踏板踩镲交给闭镲长音符表示
+    .filter((h: CleanHit) => h.part !== "pedalHat")
+    .map((h: CleanHit) => ({
+      step: h.step,
+      part: h.part,
+      velocity: h.velocity,
+      open: h.open ?? false,
+    }));
 
   // 1) 同一鼓件的快速连打拆成交替（间隔 ≤ 2 格、长度 ≥ 4）
   const byPart = new Map<PartId, Emit[]>();
