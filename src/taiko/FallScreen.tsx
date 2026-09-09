@@ -369,6 +369,32 @@ export function FallScreen({
         missCursorRef.current = c;
       }
 
+      // 长音符（左踏板踩住闭镲）：全程按住，中途松开立即判失误
+      if (ph === "playing" && playChart) {
+        const notes = playChart.notes;
+        for (const i of holdIndices) {
+          const n = notes[i]!;
+          const end = n.timeMs + (n.holdMs ?? 0);
+          if (t < n.timeMs || t > end) continue;
+          if (holdStateRef.current[i] !== 1) continue;
+          if (pedalHeldRef.current) continue;
+          holdStateRef.current[i] = 2;
+          statsRef.current.miss++;
+          comboRef.current = 0;
+          missFlashesRef.current["pedalHat"] = now + 240;
+          judgementRef.current = { text: "MISS", color: "#f87171", until: now + 500 };
+          if (survival) {
+            hpRef.current = clampHp(hpRef.current + HP_MISS);
+            if (hpRef.current <= 0) {
+              phaseRef.current = "ended";
+              setPhase("ended");
+              setDeadOut(true);
+              songPlayer.stop();
+            }
+          }
+        }
+      }
+
       const frameChart =
         playChart ?? {
           title: "",
