@@ -72,7 +72,7 @@ export function FallScreen({
   const parts = VISIBLE_PARTS[layout];
   const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
 
-  /** 谱面 = 鼓 MIDI 按当前难度加工（入门 5 分区 / 标准原样 / 困难加花） */
+  /** 谱面 = 鼓 MIDI 拆解后按当前难度重编（入门正拍 / 标准节奏型 / 困难手脚交替） */
   const playChart = useMemo(() => {
     if (!song.midi) return null;
     return buildPlayChart(
@@ -80,11 +80,19 @@ export function FallScreen({
       {
         title: song.fileName,
         offsetMs: song.offsetMs,
+        phaseBeatOffset: song.phaseBeatOffset,
         durationMs: durationMs || undefined,
       },
       song.difficulty,
     );
-  }, [song.midi, song.fileName, song.offsetMs, song.difficulty, durationMs]);
+  }, [
+    song.midi,
+    song.fileName,
+    song.offsetMs,
+    song.phaseBeatOffset,
+    song.difficulty,
+    durationMs,
+  ]);
 
 
 

@@ -34,6 +34,8 @@ export interface SongState {
   midi: ParsedMidi | null;
   /** MIDI 与音频对齐的整体偏移（毫秒，可手动微调） */
   offsetMs: number;
+  /** 小节相位手动微调（拍，自动检测之上的偏移） */
+  phaseBeatOffset: number;
   bpm: number;
   timeSignature: [number, number];
   difficulty: Difficulty;
@@ -68,6 +70,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
     midiFileName: "",
     midi: null,
     offsetMs: 0,
+    phaseBeatOffset: 0,
     bpm: 120,
     timeSignature: [4, 4],
     difficulty: "standard",

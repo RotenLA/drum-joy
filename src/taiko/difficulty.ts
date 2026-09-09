@@ -1,176 +1,291 @@
 /**
- * 游玩难度：入门 / 标准 / 困难。
- * - 入门：5 分区 + 原 MIDI（只保留 5 件，丢弃其余，并限制最小间隔）
- * - 标准：9 分区 + 原 MIDI，一音不改
- * - 困难：9 分区 + 原 MIDI + 适度加密加花（确定性，同曲每次一致）
+ * 三档难度：入门 / 标准 / 困难。
+ * 都不再直接吃原始 MIDI，而是走「量化降噪 → 小节骨架」后重新编写：
+ * - 入门（5 分区）：底鼓与军鼓大部分正拍，踩镲八分为主，过门用地通简单收尾
+ * - 标准（9 分区）：每小节归类到标准节奏型重写，过门小节保留原始细节
+ * - 困难（9 分区）：原样保留 + 手脚交替强化（确定性，同曲每次一致）
  */
 import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
 import { VISIBLE_PARTS, type LayoutMode, type PartId } from "./laneLayouts";
-import { noteForPart } from "./midiChart";
-import type { ParsedMidi } from "./midiFile";
-import { buildChartFromMidi, type MidiChartOptions } from "./midiChart";
+import { noteForPart, type MidiChartOptions } from "./midiChart";
+import { tickToMs, type ParsedMidi } from "./midiFile";
+import { cleanMidi, type CleanedMidi, type CleanHit } from "./midiClean";
+import { buildSkeleton, hasNear, type BarSkeleton, type Skeleton } from "./skeleton";
+import { matchPattern } from "./patternLib";
 
 export type Difficulty = "beginner" | "standard" | "hard";
 
 export const DIFFICULTIES: readonly { id: Difficulty; label: string; hint: string }[] = [
-  { id: "beginner", label: "入门", hint: "5 分区 · 原 MIDI" },
-  { id: "standard", label: "标准", hint: "9 分区 · 原 MIDI" },
-  { id: "hard", label: "困难", hint: "9 分区 · 加密加花" },
+  { id: "beginner", label: "入门", hint: "5 分区 · 正拍为主" },
+  { id: "standard", label: "标准", hint: "9 分区 · 节奏型重写" },
+  { id: "hard", label: "困难", hint: "9 分区 · 手脚交替" },
 ];
 
 export function layoutOf(diff: Difficulty): LayoutMode {
   return diff === "beginner" ? "five" : "nine";
 }
 
-/** 入门档最小间隔（毫秒），避免打不出的连打 */
-const BEGINNER_MIN_GAP = 120;
-/** 同一时刻视为和音的容差 */
-const CHORD_MS = 20;
-/** 困难档新增音符占原谱比例上限 */
-const HARD_ADD_RATIO = 0.15;
+const BIG_VELOCITY = 108;
 
-function partOfChartNote(n: TaikoNote, noteToPart: Map<number, PartId>): PartId | null {
-  return n.note !== undefined ? (noteToPart.get(n.note) ?? null) : null;
+export interface MidiAnalysis {
+  clean: CleanedMidi;
+  skeleton: Skeleton;
 }
 
-function buildNoteToPart(): Map<number, PartId> {
-  const m = new Map<number, PartId>();
-  for (const p of VISIBLE_PARTS.nine) m.set(noteForPart(p), p);
-  return m;
+export function analyzeMidi(midi: ParsedMidi, phaseBeatOffset = 0): MidiAnalysis {
+  const clean = cleanMidi(midi, { phaseBeatOffset });
+  return { clean, skeleton: buildSkeleton(clean) };
 }
 
-/** 32 位确定性伪随机 */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+interface Emit {
+  step: number;
+  part: PartId;
+  velocity: number;
 }
 
-function keepOnlyParts(chart: TaikoChart, parts: readonly PartId[]): TaikoNote[] {
-  const noteToPart = buildNoteToPart();
-  const allow = new Set(parts);
-  return chart.notes.filter((n) => {
-    const p = partOfChartNote(n, noteToPart);
-    return p !== null && allow.has(p);
-  });
-}
+// ================= 入门 =================
 
-/** 入门：限制最小间隔（同一时刻的和音最多保留 2 件，优先底鼓/军鼓） */
-function thinForBeginner(notes: TaikoNote[]): TaikoNote[] {
-  const noteToPart = buildNoteToPart();
-  const priority: Record<string, number> = {
-    kick: 0,
-    snare: 1,
-    hihat: 2,
-    pedalHat: 3,
-    floorTom: 4,
-  };
-  const out: TaikoNote[] = [];
-  let i = 0;
-  let lastGroupTime = -Infinity;
-  while (i < notes.length) {
-    const t = notes[i]!.timeMs;
-    const group: TaikoNote[] = [];
-    while (i < notes.length && notes[i]!.timeMs - t <= CHORD_MS) group.push(notes[i++]!);
-    if (t - lastGroupTime < BEGINNER_MIN_GAP) continue;
-    group.sort((a, b) => {
-      const pa = partOfChartNote(a, noteToPart) ?? "";
-      const pb = partOfChartNote(b, noteToPart) ?? "";
-      return (priority[pa] ?? 9) - (priority[pb] ?? 9);
-    });
-    out.push(...group.slice(0, 2));
-    lastGroupTime = t;
+function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number): Emit[] {
+  const out: Emit[] = [];
+  const beats = stepsPerBar / stepsPerBeat;
+
+  if (bar.isFill) {
+    // 过门小节：最后一拍用地通 2~3 下简单收尾
+    const start = stepsPerBar - stepsPerBeat;
+    const n = bar.noteCount >= 8 ? 3 : 2;
+    for (let k = 0; k < n; k++) {
+      out.push({ step: start + Math.round((k * stepsPerBeat) / n), part: "floorTom", velocity: 100 });
+    }
+    out.push({ step: 0, part: "kick", velocity: 110 });
+    return out;
   }
+
+  for (let b = 0; b < beats; b++) {
+    const local = b * stepsPerBeat;
+    // 军鼓：正拍（多在 2、4 拍）
+    const s = hasNear(bar, "snare", local, stepsPerBeat / 2);
+    if (s !== null) out.push({ step: local, part: "snare", velocity: bar.vel.snare?.[s] ?? 100 });
+    // 底鼓：只允许正拍。原谱正拍上/紧邻有底鼓就落一下；
+    // 只有切分底鼓（差半拍）时，仅在这一拍没有军鼓时才吸附过来，避免变成四踩。
+    const exact = hasNear(bar, "kick", local, 1);
+    const near = exact ?? (s === null ? hasNear(bar, "kick", local, stepsPerBeat / 2) : null);
+    if (near !== null)
+      out.push({ step: local, part: "kick", velocity: bar.vel.kick?.[near] ?? 100 });
+  }
+
+  // 偶尔的反拍军鼓：原谱在八分反拍有很强的军鼓时，每 4 小节最多保留一次
+  if (bar.index % 4 === 3) {
+    for (const s of bar.slots.snare ?? []) {
+      if (s % stepsPerBeat === stepsPerBeat / 2 && (bar.vel.snare?.[s] ?? 0) >= 105) {
+        out.push({ step: s, part: "snare", velocity: bar.vel.snare?.[s] ?? 105 });
+        break;
+      }
+    }
+  }
+
+  // 踩镲：八分结构为主，稀疏段落降为四分
+  if (bar.hatDiv !== 0) {
+    const div = bar.hatDiv >= 8 ? stepsPerBeat / 2 : stepsPerBeat;
+    for (let s = 0; s < stepsPerBar; s += div) out.push({ step: s, part: "hihat", velocity: 90 });
+  }
+
   return out;
 }
 
-/** 困难：乐句末过门 + 镲适度加密，新增量受 HARD_ADD_RATIO 限制 */
-function embellish(chart: TaikoChart): TaikoNote[] {
-  const noteToPart = buildNoteToPart();
-  const base = chart.notes;
-  if (base.length === 0) return base;
-  const beatMs = 60000 / chart.bpm;
-  const beatsPerBar = Math.max(1, chart.timeSignature[0] * (4 / chart.timeSignature[1]));
-  const barMs = beatMs * beatsPerBar;
-  const budget = Math.floor(base.length * HARD_ADD_RATIO);
-  if (budget <= 0) return base;
+// ================= 标准 =================
 
-  const times = base.map((n) => n.timeMs);
-  const occupied = (t: number): boolean => {
-    // 二分找最近音符
-    let lo = 0;
-    let hi = times.length - 1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      const d = times[mid]! - t;
-      if (Math.abs(d) < 45) return true;
-      if (d < 0) lo = mid + 1;
-      else hi = mid - 1;
+function standardBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number): Emit[] {
+  const out: Emit[] = [];
+  const cymbalPart: PartId = bar.ridePrimary ? "ride" : "hihat";
+
+  if (bar.isFill) {
+    // 过门小节不套模板：保留原始细节（量化后）并轻度简化
+    for (const part of Object.keys(bar.slots) as PartId[]) {
+      if (part === "hihat" && (bar.slots.hihat?.length ?? 0) > 4) continue;
+      for (const s of bar.slots[part]!) {
+        out.push({ step: s, part, velocity: bar.vel[part]?.[s] ?? 100 });
+      }
     }
-    return false;
-  };
-
-  const added: TaikoNote[] = [];
-  const rand = mulberry32(Math.round(chart.bpm * 1000) ^ base.length);
-
-  // 1) 镲加密：相邻同为踩镲/叮叮镲且间隔约一拍 → 补中间那一下
-  for (let i = 0; i + 1 < base.length && added.length < budget; i++) {
-    const a = base[i]!;
-    const b = base[i + 1]!;
-    const pa = partOfChartNote(a, noteToPart);
-    if (pa !== "hihat" && pa !== "ride") continue;
-    if (partOfChartNote(b, noteToPart) !== pa) continue;
-    const gap = b.timeMs - a.timeMs;
-    if (gap < beatMs * 0.45 || gap > beatMs * 1.15) continue;
-    if (rand() > 0.55) continue;
-    const t = a.timeMs + gap / 2;
-    if (occupied(t)) continue;
-    added.push({ timeMs: t, lane: "ka", note: noteForPart(pa) });
+    return out;
   }
 
-  // 2) 乐句末过门：每 4 小节最后一拍加 3 连通鼓下行
-  const firstMs = base[0]!.timeMs;
-  const lastMs = base[base.length - 1]!.timeMs;
-  const fillParts: PartId[] = ["highTom", "midTom", "floorTom"];
-  for (let bar = 0; added.length < budget; bar++) {
-    const barStart = firstMs + bar * barMs;
-    if (barStart > lastMs) break;
-    if (bar % 4 !== 3) continue;
-    if (rand() > 0.8) continue;
-    const fillStart = barStart + barMs - beatMs;
-    for (let k = 0; k < 3 && added.length < budget; k++) {
-      const t = fillStart + (k * beatMs) / 3;
-      if (occupied(t)) continue;
-      added.push({
-        timeMs: t,
-        lane: "ka",
-        note: noteForPart(fillParts[k]!),
-      });
+  const pattern = matchPattern(bar, stepsPerBar);
+  if (!pattern) {
+    for (const part of Object.keys(bar.slots) as PartId[]) {
+      for (const s of bar.slots[part]!) {
+        out.push({ step: s, part, velocity: bar.vel[part]?.[s] ?? 100 });
+      }
     }
+    return out;
   }
 
-  return [...base, ...added].sort((a, b) => a.timeMs - b.timeMs);
+  for (const s of pattern.kick) out.push({ step: s, part: "kick", velocity: bar.vel.kick?.[s] ?? 105 });
+  for (const s of pattern.snare)
+    out.push({ step: s, part: "snare", velocity: bar.vel.snare?.[s] ?? 105 });
+
+  const div = bar.hatDiv === 0 ? 0 : bar.hatDiv === 16 ? 1 : bar.hatDiv === 8 ? 2 : 4;
+  const useDiv = div === 0 ? (pattern.hatDiv === 16 ? 1 : pattern.hatDiv === 8 ? 2 : 4) : div;
+  if (bar.hatDiv !== 0) {
+    for (let s = 0; s < stepsPerBar; s += useDiv)
+      out.push({ step: s, part: cymbalPart, velocity: 90 });
+  }
+
+  // 原曲的吊镲落点叠加回来（乐句首的重音）
+  for (const s of bar.slots.crash ?? []) {
+    out.push({ step: s, part: "crash", velocity: bar.vel.crash?.[s] ?? 110 });
+  }
+  // 踏板踩镲若原曲有，保留正拍上的
+  for (const s of bar.slots.pedalHat ?? []) {
+    if (s % stepsPerBeat === 0) out.push({ step: s, part: "pedalHat", velocity: 90 });
+  }
+
+  return out;
 }
 
-/** 按难度加工谱面 */
-export function applyDifficulty(chart: TaikoChart, diff: Difficulty): TaikoChart {
-  const layout = layoutOf(diff);
-  let notes = keepOnlyParts(chart, VISIBLE_PARTS[layout]);
-  if (diff === "beginner") notes = thinForBeginner(notes);
-  const shaped = { ...chart, notes };
-  if (diff === "hard") return { ...shaped, notes: embellish(shaped) };
-  return shaped;
+// ================= 困难 =================
+
+const ALTERNATE: Partial<Record<PartId, PartId>> = {
+  hihat: "ride",
+  ride: "hihat",
+  snare: "highTom",
+  highTom: "snare",
+  midTom: "highTom",
+  floorTom: "midTom",
+  kick: "pedalHat",
+  pedalHat: "kick",
+};
+
+const TOM_DOWN: readonly PartId[] = ["highTom", "midTom", "floorTom"];
+
+function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
+  const emits: Emit[] = clean.hits.map((h: CleanHit) => ({
+    step: h.step,
+    part: h.part,
+    velocity: h.velocity,
+  }));
+
+  // 1) 同一鼓件的快速连打拆成交替（间隔 ≤ 2 格、长度 ≥ 4）
+  const byPart = new Map<PartId, Emit[]>();
+  for (const e of emits) {
+    const list = byPart.get(e.part) ?? [];
+    list.push(e);
+    byPart.set(e.part, list);
+  }
+  for (const [part, list] of byPart) {
+    const partner = ALTERNATE[part];
+    if (!partner) continue;
+    list.sort((a, b) => a.step - b.step);
+    let runStart = 0;
+    for (let i = 1; i <= list.length; i++) {
+      const broken = i === list.length || list[i]!.step - list[i - 1]!.step > 2;
+      if (!broken) continue;
+      const len = i - runStart;
+      if (len >= 4) {
+        for (let k = runStart + 1; k < i; k += 2) list[k]!.part = partner;
+      }
+      runStart = i;
+    }
+  }
+
+  // 2) 过门小节的通鼓改成下行分配
+  const fillBars = skeleton.bars.filter((b) => b.isFill);
+  for (const bar of fillBars) {
+    const inBar = emits
+      .filter(
+        (e) =>
+          e.step >= bar.startStep &&
+          e.step < bar.startStep + skeleton.stepsPerBar &&
+          (e.part === "highTom" || e.part === "midTom" || e.part === "floorTom"),
+      )
+      .sort((a, b) => a.step - b.step);
+    inBar.forEach((e, i) => {
+      e.part = TOM_DOWN[Math.min(TOM_DOWN.length - 1, Math.floor((i * TOM_DOWN.length) / Math.max(1, inBar.length)))]!;
+    });
+  }
+
+  return emits;
+}
+
+// ================= 组装 =================
+
+function emitsToNotes(
+  emits: Emit[],
+  midi: ParsedMidi,
+  clean: CleanedMidi,
+  layout: LayoutMode,
+  offsetMs: number,
+): TaikoNote[] {
+  const allow = new Set(VISIBLE_PARTS[layout]);
+  const seen = new Set<string>();
+  const notes: TaikoNote[] = [];
+  for (const e of emits) {
+    if (!allow.has(e.part)) continue;
+    const key = `${e.step}:${e.part}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const timeMs = tickToMs(midi, e.step * clean.stepTicks) + offsetMs;
+    if (timeMs < 0) continue;
+    notes.push({
+      timeMs,
+      lane: e.part === "kick" || e.part === "pedalHat" ? "don" : "ka",
+      big: e.velocity >= BIG_VELOCITY,
+      note: noteForPart(e.part),
+    });
+  }
+  notes.sort((a, b) => a.timeMs - b.timeMs);
+  return notes;
+}
+
+export interface PlayChartOptions extends MidiChartOptions {
+  /** 小节相位手动微调（拍） */
+  phaseBeatOffset?: number | undefined;
 }
 
 /** MIDI → 按难度成谱（谱面屏与游玩屏共用） */
 export function buildPlayChart(
   midi: ParsedMidi,
-  opts: MidiChartOptions,
+  opts: PlayChartOptions,
   diff: Difficulty,
 ): TaikoChart {
-  return applyDifficulty(buildChartFromMidi(midi, opts), diff);
+  const { clean, skeleton } = analyzeMidi(midi, opts.phaseBeatOffset ?? 0);
+  const offset = opts.offsetMs ?? 0;
+  const layout = layoutOf(diff);
+
+  let emits: Emit[];
+  if (diff === "hard") {
+    emits = hardEmits(clean, skeleton);
+  } else {
+    emits = [];
+    for (const bar of skeleton.bars) {
+      const local =
+        diff === "beginner"
+          ? beginnerBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat)
+          : standardBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat);
+      for (const e of local) emits.push({ ...e, step: bar.startStep + e.step });
+    }
+  }
+
+  const notes = emitsToNotes(emits, midi, clean, layout, offset);
+  const last = notes[notes.length - 1]?.timeMs ?? 0;
+  return {
+    title: opts.title,
+    bpm: Math.round(midi.bpm * 100) / 100,
+    timeSignature: midi.timeSignature,
+    durationMs: opts.durationMs ?? Math.max(last + 2000, midi.durationMs + offset),
+    notes,
+  };
+}
+
+/** 兼容旧接口：按难度加工已有谱面（现只用于渲染层测试） */
+export function applyDifficulty(chart: TaikoChart, diff: Difficulty): TaikoChart {
+  const allow = new Set(VISIBLE_PARTS[layoutOf(diff)]);
+  const noteToPart = new Map<number, PartId>();
+  for (const p of VISIBLE_PARTS.nine) noteToPart.set(noteForPart(p), p);
+  return {
+    ...chart,
+    notes: chart.notes.filter((n) => {
+      const p = n.note !== undefined ? noteToPart.get(n.note) : undefined;
+      return p !== undefined && allow.has(p);
+    }),
+  };
 }
