@@ -12,11 +12,20 @@ import midiAsset from "@/assets/sample/jiandanai.mid.asset.json";
 
 export const SAMPLE_TITLE = "简单爱";
 
+/** 打包成桌面端（file://）时，相对资源路径回落到线上地址 */
+const ASSET_HOST = "https://drum-joy.lovable.app";
+
+function assetUrl(url: string): string {
+  if (/^https?:/i.test(url)) return url;
+  if (typeof location !== "undefined" && location.protocol.startsWith("http")) return url;
+  return ASSET_HOST + url;
+}
+
 const SAMPLE_STEMS: Record<StemKind, { url: string; fileName: string }> = {
-  vocals: { url: vocals.url, fileName: "简单爱_Vocals.mp3" },
-  bass: { url: bass.url, fileName: "简单爱_Bass.mp3" },
-  drums: { url: drums.url, fileName: "简单爱_Drums.mp3" },
-  other: { url: other.url, fileName: "简单爱_Other.mp3" },
+  vocals: { url: assetUrl(vocals.url), fileName: "简单爱_Vocals.mp3" },
+  bass: { url: assetUrl(bass.url), fileName: "简单爱_Bass.mp3" },
+  drums: { url: assetUrl(drums.url), fileName: "简单爱_Drums.mp3" },
+  other: { url: assetUrl(other.url), fileName: "简单爱_Other.mp3" },
 };
 
 export interface LoadedSample {
