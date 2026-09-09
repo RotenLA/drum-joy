@@ -5,7 +5,7 @@
  * 这里统一把音符吸附到 16 分网格上，得到「网格步 + 部件 + 力度」的干净事件表，
  * 后续的骨架、三档难度都基于它工作，不再直接吃原始音符。
  */
-import { GM_TO_PART } from "./midiChart";
+import { GM_TO_PART, OPEN_HAT_NOTES } from "./midiChart";
 import type { PartId } from "./laneLayouts";
 import { tickToMs, type ParsedMidi } from "./midiFile";
 
@@ -14,6 +14,8 @@ export interface CleanHit {
   step: number;
   part: PartId;
   velocity: number;
+  /** 踩镲为开镲（左脚松开）；其余部件恒为 false */
+  open?: boolean;
 }
 
 export interface CleanedMidi {
@@ -57,8 +59,13 @@ export function cleanMidi(midi: ParsedMidi, opts: CleanOptions = {}): CleanedMid
     if (step < 0) continue;
     const key = `${step}:${part}`;
     const prev = byKey.get(key);
-    // 2) 降噪之一：同一格同一鼓件只留最响的一下
-    if (!prev || ev.velocity > prev.velocity) byKey.set(key, { step, part, velocity: ev.velocity });
+    const open = part === "hihat" && OPEN_HAT_NOTES.has(ev.note);
+    // 2) 降噪之一：同一格同一鼓件只留最响的一下（开镲标记做或运算保留）
+    if (!prev || ev.velocity > prev.velocity) {
+      byKey.set(key, { step, part, velocity: ev.velocity, open: open || (prev?.open ?? false) });
+    } else if (open && prev) {
+      prev.open = true;
+    }
   }
 
   let hits = [...byKey.values()].sort((a, b) => a.step - b.step || a.part.localeCompare(b.part));
