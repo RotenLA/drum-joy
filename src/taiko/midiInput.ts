@@ -147,9 +147,9 @@ export const midiManager = new MidiManager();
 export function installExternalBridge(): void {
   if (typeof window === "undefined") return;
   const w = window as unknown as Record<string, unknown>;
-  if (w.__pd2uBridgeInstalled) return;
-  w.__pd2uBridgeInstalled = true;
-  w.__pd2uNoteOn = (note: number, velocity: number) =>
+  if (w["__pd2uBridgeInstalled"]) return;
+  w["__pd2uBridgeInstalled"] = true;
+  w["__pd2uNoteOn"] = (note: number, velocity: number) =>
     midiManager.injectNoteOn(note, velocity);
-  w.__pd2uNoteOff = (note: number) => midiManager.injectNoteOff(note);
+  w["__pd2uNoteOff"] = (note: number) => midiManager.injectNoteOff(note);
 }
