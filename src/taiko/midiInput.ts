@@ -95,6 +95,24 @@ class MidiManager {
     }
   }
 
+  /**
+   * 宿主（Unity 等）注入 note-on：与硬件消息走同一套 listener，
+   * 因此映射、判定、鼓盘闪光行为完全一致。
+   */
+  injectNoteOn(note: number, velocity: number): void {
+    const n = Math.round(note);
+    const v = Math.round(velocity);
+    if (n < 0 || n > 127 || v < 1 || v > 127) return;
+    for (const f of this.noteListeners) f(n, v);
+  }
+
+  /** 宿主注入 note-off（长音符判定用） */
+  injectNoteOff(note: number): void {
+    const n = Math.round(note);
+    if (n < 0 || n > 127) return;
+    for (const f of this.noteOffListeners) f(n);
+  }
+
   onNote(fn: NoteListener): () => void {
     this.noteListeners.add(fn);
     return () => {
@@ -119,3 +137,19 @@ class MidiManager {
 }
 
 export const midiManager = new MidiManager();
+
+/**
+ * 暴露给 Unity 等宿主的 JS 桥：
+ *   __pd2uNoteOn(note, velocity)  敲击，note 0-127，velocity 1-127
+ *   __pd2uNoteOff(note)           松开（长音符判定用）
+ * 幂等，可重复调用。仅浏览器环境挂载。
+ */
+export function installExternalBridge(): void {
+  if (typeof window === "undefined") return;
+  const w = window as unknown as Record<string, unknown>;
+  if (w["__pd2uBridgeInstalled"]) return;
+  w["__pd2uBridgeInstalled"] = true;
+  w["__pd2uNoteOn"] = (note: number, velocity: number) =>
+    midiManager.injectNoteOn(note, velocity);
+  w["__pd2uNoteOff"] = (note: number) => midiManager.injectNoteOff(note);
+}
