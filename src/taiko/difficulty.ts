@@ -17,12 +17,12 @@ export type Difficulty = "beginner" | "standard" | "hard";
 
 export const DIFFICULTIES: readonly { id: Difficulty; label: string; hint: string }[] = [
   { id: "beginner", label: "入门", hint: "5 分区 · 正拍为主" },
-  { id: "standard", label: "标准", hint: "9 分区 · 节奏型重写" },
+  { id: "standard", label: "标准", hint: "7 分区 · 节奏型重写" },
   { id: "hard", label: "困难", hint: "9 分区 · 手脚交替" },
 ];
 
 export function layoutOf(diff: Difficulty): LayoutMode {
-  return diff === "beginner" ? "five" : "nine";
+  return diff === "beginner" ? "five" : diff === "standard" ? "seven" : "nine";
 }
 
 const BIG_VELOCITY = 108;
