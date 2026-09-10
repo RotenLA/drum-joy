@@ -259,6 +259,13 @@ function noteItems(
     const alpha = (0.35 + 0.65 * p) * fadeIn;
     const headVisible = t < 1;
 
+    if (headVisible) {
+      const key = Math.round(n.timeMs / (CHORD_TOL_MS * 2));
+      const arr = chords.get(key);
+      if (arr) arr.push({ x, y, color, p });
+      else chords.set(key, [{ x, y, color, p }]);
+    }
+
     items.push({
       // 同深度时音符压在鼓盘上层（+ε），保证判定点处不被自己的鼓面吃掉
       depth: y / h + 0.0015,
