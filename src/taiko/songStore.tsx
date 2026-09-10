@@ -15,7 +15,7 @@ import {
 import type { TaikoChart } from "@/shared/taikoChart";
 import type { ParsedMidi } from "./midiFile";
 import type { Difficulty } from "./difficulty";
-import { emptyStems, type StemMap } from "./stems";
+import { STEM_KINDS, emptyStems, type StemKind, type StemMap } from "./stems";
 
 const SETTINGS_KEY = "taiko.settings.v4";
 
@@ -73,7 +73,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
     bpm: 120,
     timeSignature: [4, 4],
     difficulty: "standard",
-    mix: { vocals: 1, drums: 0 },
+    mix: { ...DEFAULT_MIX },
     chart: null,
   });
 
@@ -89,7 +89,9 @@ export function SongProvider({ children }: { children: ReactNode }) {
         ...s,
         difficulty: d === "beginner" || d === "standard" || d === "hard" ? d : s.difficulty,
         mix: mix
-          ? { vocals: clamp01(mix["vocals"], 1), drums: clamp01(mix["drums"], 0) }
+          ? (Object.fromEntries(
+              STEM_KINDS.map((k) => [k, clamp01(mix[k], DEFAULT_MIX[k])]),
+            ) as MixState)
           : s.mix,
       }));
     } catch {
