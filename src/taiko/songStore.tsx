@@ -17,13 +17,17 @@ import type { ParsedMidi } from "./midiFile";
 import type { Difficulty } from "./difficulty";
 import { emptyStems, type StemMap } from "./stems";
 
-const SETTINGS_KEY = "taiko.settings.v3";
+const SETTINGS_KEY = "taiko.settings.v4";
 
+/** 四轨调音台音量，0~1，1 = 原始文件音量 */
 export interface MixState {
-  /** 0~1，1 = 原始文件音量 */
   vocals: number;
   drums: number;
+  bass: number;
+  other: number;
 }
+
+export const DEFAULT_MIX: MixState = { vocals: 1, drums: 0, bass: 1, other: 1 };
 
 export interface SongState {
   /** 各条 stem 音轨（可缺，全缺则静音试玩） */
@@ -74,7 +78,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
     bpm: 120,
     timeSignature: [4, 4],
     difficulty: "standard",
-    mix: { vocals: 1, drums: 0 },
+    mix: { ...DEFAULT_MIX },
     chart: null,
   });
 
@@ -90,7 +94,12 @@ export function SongProvider({ children }: { children: ReactNode }) {
         ...s,
         difficulty: d === "beginner" || d === "standard" || d === "hard" ? d : s.difficulty,
         mix: mix
-          ? { vocals: clamp01(mix["vocals"], 1), drums: clamp01(mix["drums"], 0) }
+          ? {
+              vocals: clamp01(mix["vocals"], DEFAULT_MIX.vocals),
+              drums: clamp01(mix["drums"], DEFAULT_MIX.drums),
+              bass: clamp01(mix["bass"], DEFAULT_MIX.bass),
+              other: clamp01(mix["other"], DEFAULT_MIX.other),
+            }
           : s.mix,
       }));
     } catch {

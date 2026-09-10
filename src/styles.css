@@ -96,13 +96,15 @@
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
 
-  /* 太鼓模块：极简纸墨 */
-  --taiko-paper: oklch(0.966 0.008 85);
-  --taiko-surface: oklch(0.918 0.011 82);
-  --taiko-line: oklch(0.82 0.012 82);
-  --taiko-ink: oklch(0.24 0.011 65);
-  --taiko-don: oklch(0.56 0.181 26);
-  --taiko-ka: oklch(0.52 0.122 249);
+  /* PD2U 模块：深色 synthwave */
+  --taiko-paper: oklch(0.16 0.045 295);
+  --taiko-surface: oklch(0.22 0.055 297);
+  --taiko-line: oklch(0.38 0.075 300);
+  --taiko-ink: oklch(0.93 0.025 300);
+  --taiko-accent: oklch(0.7 0.24 350);
+  --taiko-accent-2: oklch(0.78 0.14 200);
+  --taiko-don: oklch(0.66 0.23 15);
+  --taiko-ka: oklch(0.72 0.15 220);
 }
 
 .dark {

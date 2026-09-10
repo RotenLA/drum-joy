@@ -10,7 +10,7 @@ import { renderStage } from "./stageRenderer";
 import { renderRunway } from "./runwayRenderer";
 import { useSong } from "./songStore";
 import { songPlayer } from "./player";
-import { hasAnyStem, stemsDurationMs } from "./stems";
+import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
 import { click as metronomeClick } from "./metronome";
 import { DIFFICULTIES, layoutOf } from "./difficulty";
@@ -49,7 +49,7 @@ export function FallScreen({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [mixerOpen, setMixerOpen] = useState(false);
+  
   const phaseRef = useRef<Phase>("idle");
   const timeRef = useRef(0);
   const flashesRef = useRef<Record<string, number>>({});
@@ -149,8 +149,7 @@ export function FallScreen({
 
   // 调音台音量 → 播放器（实时生效）
   useEffect(() => {
-    songPlayer.setStemGain("vocals", song.mix.vocals);
-    songPlayer.setStemGain("drums", song.mix.drums);
+    for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
   }, [song.mix, stems]);
 
   useEffect(() => {
@@ -470,59 +469,6 @@ export function FallScreen({
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
 
-        {/* 调音台：Vocals / Drums 音量，100% = 原始文件音量 */}
-        <div className="absolute right-3 top-3 z-20 flex flex-col items-end gap-2">
-          <button
-            onClick={() => setMixerOpen((v) => !v)}
-            className="border border-white/35 bg-black/40 px-3 py-1 text-[11px] tracking-wide text-white/80 backdrop-blur transition-colors hover:border-white/80 hover:text-white"
-          >
-            调音台
-          </button>
-          {mixerOpen && (
-            <div className="flex w-56 flex-col gap-3 border border-white/25 bg-black/55 px-3 py-3 backdrop-blur">
-              {(
-                [
-                  ["vocals", "Vocals"],
-                  ["drums", "Drums"],
-                ] as const
-              ).map(([key, label]) => {
-                const track = stems[key];
-                const value = song.mix[key];
-                return (
-                  <label key={key} className="flex flex-col gap-1">
-                    <span className="flex items-center justify-between text-[11px] text-white/70">
-                      <span className={track ? "" : "text-white/35"}>
-                        {label}
-                        {track ? "" : "（无此轨）"}
-                      </span>
-                      <span className="tabular-nums text-white/55">
-                        {Math.round(value * 100)}%
-                      </span>
-                    </span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={Math.round(value * 100)}
-                      disabled={!track}
-                      onChange={(e) =>
-                        song.setSong({
-                          mix: { ...song.mix, [key]: Number(e.target.value) / 100 },
-                        })
-                      }
-                      className="h-1 w-full cursor-pointer appearance-none rounded bg-white/25 accent-white disabled:cursor-not-allowed disabled:opacity-40"
-                    />
-                  </label>
-                );
-              })}
-              <p className="text-[10px] leading-snug text-white/40">
-                100% = 原始文件音量；Drums 开出来可当参考
-              </p>
-            </div>
-          )}
-        </div>
-
         {/* 空态 / 开始 / 暂停 / 结算遮罩 */}
         {!song.midi && (
           <Overlay>
@@ -593,6 +539,52 @@ export function FallScreen({
             </button>
           </Overlay>
         )}
+      </div>
+
+      {/* 调音台：四轨常驻，100% = 原始文件音量 */}
+      <div
+        className="mx-auto w-full border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-4 py-3"
+        style={{ maxWidth: "calc(min(70vh, 720px) * 16 / 9)" }}
+      >
+        <div className="mb-2 flex items-baseline gap-3">
+          <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">调音台</span>
+          <span className="text-[10px] text-[var(--taiko-ink)]/45">
+            100% = 原始文件音量
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
+          {STEM_KINDS.map((key) => {
+            const track = stems[key];
+            const value = song.mix[key];
+            return (
+              <label key={key} className="flex flex-col gap-1">
+                <span className="flex items-center justify-between text-[11px] text-[var(--taiko-ink)]/70">
+                  <span className={track ? "" : "text-[var(--taiko-ink)]/35"}>
+                    {STEM_LABEL[key]}
+                    {track ? "" : "（无此轨）"}
+                  </span>
+                  <span className="tabular-nums text-[var(--taiko-ink)]/55">
+                    {Math.round(value * 100)}%
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(value * 100)}
+                  disabled={!track}
+                  onChange={(e) =>
+                    song.setSong({
+                      mix: { ...song.mix, [key]: Number(e.target.value) / 100 },
+                    })
+                  }
+                  className="h-1 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+                />
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

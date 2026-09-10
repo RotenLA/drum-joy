@@ -78,7 +78,9 @@ function ShellInner() {
     <div className="taiko-root flex min-h-screen bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
       <nav className="flex w-40 shrink-0 flex-col border-r border-[var(--taiko-line)]">
         <div className="border-b border-[var(--taiko-line)] px-4 py-5">
-          <div className="text-lg font-semibold tracking-[0.3em]">太鼓</div>
+          <div className="text-lg font-semibold tracking-[0.3em] text-[var(--taiko-accent)]">
+            PD2U
+          </div>
           <div className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[var(--taiko-ink)]/45">
             LovableSynth
           </div>
@@ -90,8 +92,8 @@ function ShellInner() {
                 onClick={() => setScreen(item.key)}
                 className={`flex w-full items-baseline gap-2 border-b border-[var(--taiko-line)] px-4 py-3 text-left text-sm transition-colors ${
                   screen === item.key
-                    ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                    : "hover:bg-[var(--taiko-ink)]/5"
+                    ? "bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+                    : "hover:bg-[var(--taiko-ink)]/10"
                 }`}
               >
                 <span>{item.label}</span>
