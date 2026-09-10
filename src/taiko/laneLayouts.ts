@@ -153,7 +153,7 @@ export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
 
 // ================= 分区显示集 =================
 
-export type LayoutMode = "five" | "nine";
+export type LayoutMode = "five" | "seven" | "nine";
 
 /**
  * 各分区模式显示的鼓盘：
@@ -162,6 +162,8 @@ export type LayoutMode = "five" | "nine";
  */
 export const VISIBLE_PARTS: Record<LayoutMode, readonly PartId[]> = {
   five: ["hihat", "snare", "floorTom", "pedalHat", "kick"],
+  // 标准 7 分区：入门 5 件 + 吊镲、叮叮镲（不含高通、中通）
+  seven: ["hihat", "snare", "floorTom", "pedalHat", "kick", "crash", "ride"],
   nine: [
     "pedalHat",
     "kick",
