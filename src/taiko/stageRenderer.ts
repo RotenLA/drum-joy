@@ -109,11 +109,14 @@ function padPixels(a: PadAnchor, w: number, h: number) {
 }
 
 
-/** 车道起点（本排收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
+/**
+ * 车道起点：横向按鼓盘 cx 等比映射进本排收束段（保持左右顺序不交叉），
+ * 纵向统一取「鼓盘上方 TRAVEL_H」，让所有车道行程等高。
+ */
 function gatePoint(anchor: PadAnchor, w: number, h: number) {
-  const g = ROW_GATES[anchor.row];
+  const g = ROW_GATES[anchor.row]!;
   const x = (0.5 + (anchor.cx - 0.5) * (g.halfW / PAD_SPREAD)) * w;
-  return { x, y: g.y * h };
+  return { x, y: (anchor.cy - TRAVEL_H) * h };
 }
 
 /**
