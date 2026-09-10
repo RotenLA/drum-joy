@@ -15,7 +15,7 @@ import {
 import type { TaikoChart } from "@/shared/taikoChart";
 import type { ParsedMidi } from "./midiFile";
 import type { Difficulty } from "./difficulty";
-import { STEM_KINDS, emptyStems, type StemKind, type StemMap } from "./stems";
+import { emptyStems, type StemMap } from "./stems";
 
 const SETTINGS_KEY = "taiko.settings.v4";
 
