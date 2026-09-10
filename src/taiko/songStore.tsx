@@ -17,13 +17,12 @@ import type { ParsedMidi } from "./midiFile";
 import type { Difficulty } from "./difficulty";
 import { emptyStems, type StemMap } from "./stems";
 
-const SETTINGS_KEY = "taiko.settings.v3";
+const SETTINGS_KEY = "taiko.settings.v4";
 
-export interface MixState {
-  /** 0~1，1 = 原始文件音量 */
-  vocals: number;
-  drums: number;
-}
+/** 四轨调音台音量，0~1，1 = 原始文件音量 */
+export type MixState = Record<StemKind, number>;
+
+export const DEFAULT_MIX: MixState = { vocals: 1, drums: 0, bass: 1, other: 1 };
 
 export interface SongState {
   /** 各条 stem 音轨（可缺，全缺则静音试玩） */
