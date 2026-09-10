@@ -30,10 +30,19 @@ if (wallImg) wallImg.src = stageWallUrl;
  * 不再长距离重叠；同列部件（高通↔踩镲踏板、中通↔底鼓）的车道接近平行。
  */
 const ROW_GATES = [
-  { y: 0.13, halfW: 0.044 },
-  { y: 0.3, halfW: 0.044 },
-  { y: 0.46, halfW: 0.044 },
+  { halfW: 0.044 },
+  { halfW: 0.044 },
+  { halfW: 0.044 },
 ] as const;
+
+/**
+ * 统一等高时间线：每个部件的车道出发点固定在「自己鼓盘正上方 TRAVEL_H 屏高」处，
+ * 而不是三条固定高度的横线。这样同一时刻的所有音符离各自鼓盘的距离与缩放完全一致，
+ * 消除「同刻多部件看起来有先后」的错觉。
+ */
+const TRAVEL_H = 0.44;
+/** 同刻判定容差（毫秒）：组内音符画同刻连线 */
+const CHORD_TOL_MS = 15;
 
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
@@ -100,11 +109,14 @@ function padPixels(a: PadAnchor, w: number, h: number) {
 }
 
 
-/** 车道起点（本排收束段内）：按鼓盘 cx 等比映射，保持左右顺序不交叉 */
+/**
+ * 车道起点：横向按鼓盘 cx 等比映射进本排收束段（保持左右顺序不交叉），
+ * 纵向统一取「鼓盘上方 TRAVEL_H」，让所有车道行程等高。
+ */
 function gatePoint(anchor: PadAnchor, w: number, h: number) {
-  const g = ROW_GATES[anchor.row];
+  const g = ROW_GATES[anchor.row]!;
   const x = (0.5 + (anchor.cx - 0.5) * (g.halfW / PAD_SPREAD)) * w;
-  return { x, y: g.y * h };
+  return { x, y: (anchor.cy - TRAVEL_H) * h };
 }
 
 /**
@@ -210,6 +222,8 @@ function noteItems(
   f: StageFrame,
 ): DepthItem[] {
   const items: DepthItem[] = [];
+  // 同刻连线：按时间分桶收集飞行中音符的屏幕位置
+  const chords = new Map<number, { x: number; y: number; color: string; p: number }[]>();
   for (const n of f.chart.notes) {
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
@@ -244,6 +258,13 @@ function noteItems(
     const fadeIn = Math.min(1, t / 0.1);
     const alpha = (0.35 + 0.65 * p) * fadeIn;
     const headVisible = t < 1;
+
+    if (headVisible) {
+      const key = Math.round(n.timeMs / (CHORD_TOL_MS * 2));
+      const arr = chords.get(key);
+      if (arr) arr.push({ x, y, color, p });
+      else chords.set(key, [{ x, y, color, p }]);
+    }
 
     items.push({
       // 同深度时音符压在鼓盘上层（+ε），保证判定点处不被自己的鼓面吃掉
@@ -302,6 +323,37 @@ function noteItems(
       },
     });
   }
+
+  // 同刻连线：两个及以上音符时按 x 排序连成一条发光细线，越近越清晰
+  for (const group of chords.values()) {
+    if (group.length < 2) continue;
+    const pts = [...group].sort((a, b) => a.x - b.x);
+    const p = pts.reduce((m, q) => Math.max(m, q.p), 0);
+    const maxY = pts.reduce((m, q) => Math.max(m, q.y), 0);
+    items.push({
+      // 略低于最前音符的深度：连线不会盖住前排鼓面
+      depth: maxY / h - 0.0005,
+      draw: () => {
+        ctx.save();
+        ctx.globalAlpha = 0.1 + 0.55 * p;
+        const first = pts[0]!;
+        const last = pts[pts.length - 1]!;
+        const grad = ctx.createLinearGradient(first.x, first.y, last.x, last.y);
+        pts.forEach((q, i) => grad.addColorStop(i / (pts.length - 1), q.color));
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = Math.max(1, (1 + 2.2 * p) * (h / 650));
+        ctx.lineJoin = "round";
+        ctx.shadowColor = first.color;
+        ctx.shadowBlur = 10 * p;
+        ctx.beginPath();
+        ctx.moveTo(first.x, first.y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]!.x, pts[i]!.y);
+        ctx.stroke();
+        ctx.restore();
+      },
+    });
+  }
+
   return items;
 }
 
