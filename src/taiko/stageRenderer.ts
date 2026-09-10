@@ -323,6 +323,37 @@ function noteItems(
       },
     });
   }
+
+  // 同刻连线：两个及以上音符时按 x 排序连成一条发光细线，越近越清晰
+  for (const group of chords.values()) {
+    if (group.length < 2) continue;
+    const pts = [...group].sort((a, b) => a.x - b.x);
+    const p = pts.reduce((m, q) => Math.max(m, q.p), 0);
+    const maxY = pts.reduce((m, q) => Math.max(m, q.y), 0);
+    items.push({
+      // 略低于最前音符的深度：连线不会盖住前排鼓面
+      depth: maxY / h - 0.0005,
+      draw: () => {
+        ctx.save();
+        ctx.globalAlpha = 0.1 + 0.55 * p;
+        const first = pts[0]!;
+        const last = pts[pts.length - 1]!;
+        const grad = ctx.createLinearGradient(first.x, first.y, last.x, last.y);
+        pts.forEach((q, i) => grad.addColorStop(i / (pts.length - 1), q.color));
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = Math.max(1, (1 + 2.2 * p) * (h / 650));
+        ctx.lineJoin = "round";
+        ctx.shadowColor = first.color;
+        ctx.shadowBlur = 10 * p;
+        ctx.beginPath();
+        ctx.moveTo(first.x, first.y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]!.x, pts[i]!.y);
+        ctx.stroke();
+        ctx.restore();
+      },
+    });
+  }
+
   return items;
 }
 
