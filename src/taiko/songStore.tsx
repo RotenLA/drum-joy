@@ -20,7 +20,12 @@ import { STEM_KINDS, emptyStems, type StemKind, type StemMap } from "./stems";
 const SETTINGS_KEY = "taiko.settings.v4";
 
 /** 四轨调音台音量，0~1，1 = 原始文件音量 */
-export type MixState = Record<StemKind, number>;
+export interface MixState {
+  vocals: number;
+  drums: number;
+  bass: number;
+  other: number;
+}
 
 export const DEFAULT_MIX: MixState = { vocals: 1, drums: 0, bass: 1, other: 1 };
 
