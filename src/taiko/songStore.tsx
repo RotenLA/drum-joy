@@ -94,9 +94,12 @@ export function SongProvider({ children }: { children: ReactNode }) {
         ...s,
         difficulty: d === "beginner" || d === "standard" || d === "hard" ? d : s.difficulty,
         mix: mix
-          ? (Object.fromEntries(
-              STEM_KINDS.map((k) => [k, clamp01(mix[k], DEFAULT_MIX[k])]),
-            ) as MixState)
+          ? {
+              vocals: clamp01(mix["vocals"], DEFAULT_MIX.vocals),
+              drums: clamp01(mix["drums"], DEFAULT_MIX.drums),
+              bass: clamp01(mix["bass"], DEFAULT_MIX.bass),
+              other: clamp01(mix["other"], DEFAULT_MIX.other),
+            }
           : s.mix,
       }));
     } catch {
