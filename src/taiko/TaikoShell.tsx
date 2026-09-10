@@ -3,7 +3,7 @@ import { SongProvider, useSong } from "./songStore";
 import { FallScreen, type PlayMode } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
-import { midiManager } from "./midiInput";
+import { midiManager, installExternalBridge } from "./midiInput";
 
 type ScreenKey = "play" | "chart" | "mapping";
 
@@ -54,6 +54,11 @@ function ShellInner() {
     } catch {
       // 忽略损坏的本地设置
     }
+  }, []);
+
+  // 暴露 __pd2uNoteOn/__pd2uNoteOff 给 Unity 等宿主注入 MIDI 事件
+  useEffect(() => {
+    installExternalBridge();
   }, []);
 
   // MIDI 初始化 + 应用已保存的输入设备
