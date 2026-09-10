@@ -377,7 +377,8 @@ export function buildPlayChart(
   }
 
   emits = limitHands(emits);
-  const holds = pedalHolds(emits, diff, skeleton.stepsPerBar, skeleton.stepsPerBeat);
+  // 暂时停用左踏板长音符（代码保留，恢复时改回调用 pedalHolds 即可）
+  const holds: HoldSeg[] = [];
 
   const notes = [
     ...emitsToNotes(emits, midi, clean, layout, offset),
