@@ -255,8 +255,30 @@ function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
     });
   }
 
-  return emits;
+  // 3) 高通 / 中通低概率出现：非过门处每 3 个只留 1 个（确定性）
+  const fillRanges = fillBars.map((b) => [b.startStep, b.startStep + skeleton.stepsPerBar]);
+  const inFill = (step: number) => fillRanges.some(([a, b]) => step >= a! && step < b!);
+  let tomSeen = 0;
+  const kept: Emit[] = [];
+  for (const e of emits.slice().sort((a, b) => a.step - b.step)) {
+    if ((e.part === "highTom" || e.part === "midTom") && !inFill(e.step)) {
+      if (tomSeen++ % 3 !== 0) continue;
+    }
+    kept.push(e);
+  }
+
+  return kept;
 }
+
+/** 踩镲与低通/吊镲/叮叮镲不可同刻：同刻时丢掉踩镲 */
+function excludeHihatClashes(emits: Emit[]): Emit[] {
+  const clash = new Set<number>();
+  for (const e of emits) {
+    if (HIHAT_EXCLUSIVE.includes(e.part)) clash.add(e.step);
+  }
+  return emits.filter((e) => !(e.part === "hihat" && clash.has(e.step)));
+}
+
 
 // ================= 组装 =================
 
