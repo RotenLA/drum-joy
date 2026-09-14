@@ -19,10 +19,56 @@ import {
   type PadAnchor,
   type PartId,
 } from "./laneLayouts";
+import { quality } from "./perf";
 
 /** 专辑封面背景（浏览器侧懒加载；SSR 无 Image，退回纯色背景） */
 const wallImg = typeof Image !== "undefined" ? new Image() : null;
 if (wallImg) wallImg.src = stageWallUrl;
+
+/**
+ * 当前帧的画质开关（每帧进入 renderStage / renderPadArray 时刷新）。
+ * GLOW=false 时全部 shadowBlur 走 0，安卓中低端机上这一项能省掉大半开销。
+ */
+let GLOW = true;
+/** 单次命中喷出的粒子数（低档为 0） */
+let SPARKS = 12;
+/** 粒子总量上限，超出丢弃最旧的 */
+const PARTICLE_CAP = 120;
+
+/** 逐尺寸缓存的鼓盘几何（像素位置、半径、车道起点、旋转角） */
+interface PadGeom {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  gx: number;
+  gy: number;
+  rot: number;
+}
+let geomKey = "";
+let geomCache: Partial<Record<PartId, PadGeom>> = {};
+
+/** 鼓盘几何：只在画布尺寸变化时重算一次 */
+function geomOf(id: PartId, w: number, h: number): PadGeom {
+  const key = `${Math.round(w)}x${Math.round(h)}`;
+  if (key !== geomKey) {
+    geomKey = key;
+    geomCache = {};
+  }
+  const hit = geomCache[id];
+  if (hit) return hit;
+  const a = PAD_ANCHORS[id];
+  const p = padPixels(a, w, h);
+  const g = gatePoint(a, w, h);
+  const geom: PadGeom = {
+    ...p,
+    gx: g.x,
+    gy: g.y,
+    rot: Math.atan2(p.cy - g.y, p.cx - g.x) - Math.PI / 2,
+  };
+  geomCache[id] = geom;
+  return geom;
+}
 
 /**
  * 车道收束段：三排（上/中/下）各自独立，横向半宽 0.05 → 总宽 0.10w
