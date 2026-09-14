@@ -509,14 +509,7 @@ export function FallScreen({
       };
       const countText =
         ph === "countdown"
-          ? String(
-              Math.max(
-                1,
-                Math.ceil(
-                  (countdownMsRef.current - (now - countdownStartRef.current)) / beatMsRef.current,
-                ),
-              ),
-            )
+          ? String(Math.min(COUNT_IN_BEATS, Math.max(1, Math.ceil(-t / beatMsRef.current))))
           : null;
 
       const frame = {
