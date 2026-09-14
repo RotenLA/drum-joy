@@ -364,20 +364,21 @@ export function FallScreen({
     resetRun();
     const beatMs = 60000 / playChart.bpm;
     beatMsRef.current = beatMs;
-    countdownMsRef.current = COUNT_IN_BEATS * beatMs;
+    const countdownMs = COUNT_IN_BEATS * beatMs;
+    countdownMsRef.current = countdownMs;
+    // 一次算好歌曲的绝对起播时刻，倒计时由同一时钟倒推 → 切换时不跳位
+    const ctx = getAudioContext();
+    const LEAD_SEC = 0.15;
+    const songStartSec = ctx.currentTime + LEAD_SEC + countdownMs / 1000;
     countdownStartRef.current = performance.now();
-    timeRef.current = -countdownMsRef.current;
+    timeRef.current = -countdownMs;
+    if (hasAudio) songPlayer.play(0, songStartSec);
+    else silentStartRef.current = performance.now() + LEAD_SEC * 1000 + countdownMs;
     setPhaseBoth("countdown");
+    // 倒计时滴答挂在同一条音频时间轴上
     for (let i = 0; i < COUNT_IN_BEATS; i++) {
-      timersRef.current.push(window.setTimeout(() => metronomeClick(i === 0), i * beatMs));
+      metronomeClick(i === 0, songStartSec - countdownMs / 1000 + (i * beatMs) / 1000);
     }
-    timersRef.current.push(
-      window.setTimeout(() => {
-        if (hasAudio) songPlayer.play(0);
-        else silentStartRef.current = performance.now();
-        setPhaseBoth("playing");
-      }, COUNT_IN_BEATS * beatMs),
-    );
   }, [hasAudio, playChart, resetRun, setPhaseBoth]);
 
   const togglePause = useCallback(() => {
