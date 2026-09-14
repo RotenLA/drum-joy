@@ -772,7 +772,13 @@ export function renderStage(
   for (const it of items) it.draw();
 
   drawParticles(ctx, f.now);
+  // 鼓棒画在鼓盘/音符上层
+  if (f.sticks) {
+    if (f.sticks.l) drawStick(ctx, v.w, v.h, f.sticks.l, "l");
+    if (f.sticks.r) drawStick(ctx, v.w, v.h, f.sticks.r, "r");
+  }
   ctx.restore();
+
 
   drawVignette(ctx, w, h);
   ctx.save();
