@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KEY_BY_PART, PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
-import { renderRunway } from "./runwayRenderer";
 import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
@@ -11,7 +10,7 @@ import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick } from "./metronome";
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
-import { HP_GOOD, HP_MAX, HP_MISS, HP_PERFECT, clampHp, survivalSpeed } from "./survival";
+
 import { TIER_LABEL, quality, type QualityMode, type QualityTier } from "./perf";
 import {
   CALIB_RANGE,
@@ -32,20 +31,14 @@ const COUNT_IN_BEATS = 4;
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
-/** 游玩模式：舞台下落 / 节奏跑道 / 生存 */
-export type PlayMode = "stage" | "runway" | "survival";
-
 export function FallScreen({
   speed,
-  playMode,
   onSpeedChange,
-  onPlayModeChange,
 }: {
   speed: number;
-  playMode: PlayMode;
   onSpeedChange: (s: number) => void;
-  onPlayModeChange: (m: PlayMode) => void;
 }) {
+
   const song = useSong();
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
@@ -75,9 +68,7 @@ export function FallScreen({
   const beatMsRef = useRef(500);
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
-  /** 生存模式血量 */
-  const hpRef = useRef(HP_MAX);
-  const [deadOut, setDeadOut] = useState(false);
+
 
   // 画质档位（auto 会自动降档；tier 变化时重设画布分辨率）
   const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
@@ -112,7 +103,7 @@ export function FallScreen({
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
   const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
-  const survival = playMode === "survival";
+
 
   /**
    * 谱面 = 鼓 MIDI 拆解后按当前难度重编，并按「文件名 + MIDI 指纹」固化，
@@ -147,8 +138,7 @@ export function FallScreen({
     flashesRef.current = {};
     missFlashesRef.current = {};
     judgementRef.current = null;
-    hpRef.current = HP_MAX;
-    setDeadOut(false);
+  }, [playChart]);
   }, [playChart]);
 
   useEffect(() => {
@@ -239,16 +229,14 @@ export function FallScreen({
       comboRef.current++;
       maxComboRef.current = Math.max(maxComboRef.current, comboRef.current);
       scoreRef.current += perfect ? 300 : 100;
-      if (survival) {
-        hpRef.current = clampHp(hpRef.current + (perfect ? HP_PERFECT : HP_GOOD));
-      }
       judgementRef.current = {
         text: perfect ? "PERFECT" : "GOOD",
         color: perfect ? "#ffd75e" : "#7dd3fc",
         until: now + 500,
       };
     },
-    [playChart, survival, readTimeMs],
+    [playChart, readTimeMs],
+
   );
 
   // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
@@ -432,15 +420,7 @@ export function FallScreen({
             judgedRef.current[c] = 2;
             statsRef.current.miss++;
             comboRef.current = 0;
-            if (survival) {
-              hpRef.current = clampHp(hpRef.current + HP_MISS);
-              if (hpRef.current <= 0) {
-                phaseRef.current = "ended";
-                setPhase("ended");
-                setDeadOut(true);
-                songPlayer.stop();
-              }
-            }
+
             const note = notes[c]!.note;
             const p = note !== undefined ? partOfNote(note) : null;
             if (p) missFlashesRef.current[p] = now + 240;
@@ -465,17 +445,9 @@ export function FallScreen({
           comboRef.current = 0;
           missFlashesRef.current["pedalHat"] = now + 240;
           judgementRef.current = { text: "MISS", color: "#f87171", until: now + 500 };
-          if (survival) {
-            hpRef.current = clampHp(hpRef.current + HP_MISS);
-            if (hpRef.current <= 0) {
-              phaseRef.current = "ended";
-              setPhase("ended");
-              setDeadOut(true);
-              songPlayer.stop();
-            }
-          }
         }
       }
+
 
       const frameChart = playChart ?? {
         title: "",
@@ -500,8 +472,7 @@ export function FallScreen({
         chart: frameChart,
         // 视觉偏移：只影响画面，不影响判定
         timeMs: t + calibRef.current.visualMs,
-        // 生存模式：连击越高下落越快
-        speed: survival ? survivalSpeed(speed, comboRef.current) : speed,
+        speed,
         now,
         flashes: flashesRef.current,
         missFlashes: missFlashesRef.current,
@@ -511,24 +482,20 @@ export function FallScreen({
         judgement: judgementRef.current,
         countText,
         stats: statsRef.current,
-        hp: survival ? hpRef.current / HP_MAX : null,
         // 宿主实时注入的鼓棒姿态（无数据时为 null，不绘制）
         sticks: stickManager.latest(),
       };
 
-      if (playMode === "runway") {
-        renderRunway(ctx, canvas.clientWidth, canvas.clientHeight, frame);
-      } else {
-        renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
-      }
+      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
     };
+
     raf = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [playChart, speed, parts, playMode, hasAudio, survival, readTimeMs, tier]);
+  }, [playChart, speed, parts, hasAudio, readTimeMs, tier]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
@@ -600,9 +567,8 @@ export function FallScreen({
         )}
         {phase === "ended" && (
           <Overlay>
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">
-              {deadOut ? "Failed · 体力耗尽" : "Result"}
-            </p>
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Result</p>
+
             <p className="text-3xl font-bold tabular-nums text-white">
               {String(scoreRef.current).padStart(7, "0")}
             </p>
@@ -741,26 +707,7 @@ export function FallScreen({
         </button>
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-        <span className="text-xs text-[var(--taiko-ink)]/50">模式</span>
-        {(
-          [
-            ["stage", "舞台下落"],
-            ["runway", "节奏跑道"],
-            ["survival", "生存"],
-          ] as const
-        ).map(([mode, label]) => (
-          <button
-            key={mode}
-            onClick={() => onPlayModeChange(mode)}
-            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
-              playMode === mode
-                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
         <span className="text-xs text-[var(--taiko-ink)]/50">速度</span>
