@@ -8,6 +8,8 @@ import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick } from "./metronome";
+import { loadKitEnabled, playDrum, saveKitEnabled } from "./drumKit";
+
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
 
@@ -96,7 +98,26 @@ export function FallScreen({
   }, []);
   /** 跟拍校准状态 */
   const calibRunRef = useRef<{ startMs: number; beatMs: number; taps: number[] } | null>(null);
+  const calibTimerRef = useRef<number | null>(null);
   const [calibrating, setCalibrating] = useState(false);
+  const [calibTaps, setCalibTaps] = useState(0);
+
+  // 内置鼓音色（默认开启）
+  const [kitOn, setKitOn] = useState(true);
+  const kitOnRef = useRef(true);
+  useEffect(() => {
+    const on = loadKitEnabled();
+    setKitOn(on);
+    kitOnRef.current = on;
+  }, []);
+  const toggleKit = useCallback(() => {
+    setKitOn((on) => {
+      const next = !on;
+      kitOnRef.current = next;
+      saveKitEnabled(next);
+      return next;
+    });
+  }, []);
 
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
@@ -188,18 +209,21 @@ export function FallScreen({
     [hasAudio],
   );
 
-  // 击打：闪光 + 命中判定（空击只闪光不惩罚）
+  // 击打：鼓音色 + 闪光 + 命中判定（空击只出声闪光，不惩罚）
   const hitPart = useCallback(
-    (part: PartId, atMs?: number) => {
+    (part: PartId, atMs?: number, velocity = 100) => {
       const now = performance.now();
       const at = atMs !== undefined && Number.isFinite(atMs) ? atMs : now;
       flashesRef.current[part] = now + FLASH_MS;
+      if (kitOnRef.current) playDrum(part, velocity);
       // 跟拍校准中：只收集敲击时刻
       const run = calibRunRef.current;
       if (run) {
         run.taps.push(at);
+        setCalibTaps(run.taps.length);
         return;
       }
+
       if (phaseRef.current !== "playing" || !playChart) return;
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
       const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
@@ -237,12 +261,13 @@ export function FallScreen({
   // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
   useEffect(() => {
     void midiManager.init();
-    const offNote = midiManager.onNote((note, _vel, atMs) => {
+    const offNote = midiManager.onNote((note, vel, atMs) => {
       const part = partOfNote(note);
       if (!part) return;
       if (part === "pedalHat") pedalHeldRef.current = true;
-      if (parts.includes(part)) hitPart(part, atMs);
+      if (parts.includes(part)) hitPart(part, atMs, vel);
     });
+
     const offUp = midiManager.onNoteOff((note) => {
       if (partOfNote(note) === "pedalHat") pedalHeldRef.current = false;
     });
@@ -277,33 +302,60 @@ export function FallScreen({
     };
   }, [hitPart, parts]);
 
-  /** 跟拍校准：120BPM 敲 8 下，取偏差中位数写入判定偏移 */
+  /** 校准结束：够 3 下就算偏差中位数写入判定偏移，否则原值不动 */
+  const finishCalibration = useCallback(() => {
+    if (calibTimerRef.current !== null) {
+      window.clearInterval(calibTimerRef.current);
+      calibTimerRef.current = null;
+    }
+    const run = calibRunRef.current;
+    calibRunRef.current = null;
+    setCalibrating(false);
+    setCalibTaps(0);
+    if (!run || run.taps.length < 3) return;
+    const off = tapOffsetMs(run.taps, run.startMs, run.beatMs);
+    setCalib((c) => saveCalibration({ ...c, judgeMs: -off }));
+  }, []);
+
+  /**
+   * 跟拍校准：120BPM 节拍器一直响，直到敲满 8 下自动结束（也可手动停止），
+   * 取偏差中位数写入判定偏移。
+   */
   const startCalibration = useCallback(() => {
     if (calibRunRef.current) return;
     songPlayer.pause();
     const beatMs = 500;
-    const beats = 8;
+    const target = 8;
     const startMs = performance.now() + 600;
     calibRunRef.current = { startMs, beatMs, taps: [] };
     setCalibrating(true);
-    for (let i = 0; i < beats; i++) {
-      timersRef.current.push(
-        window.setTimeout(() => metronomeClick(i % 4 === 0), 600 + i * beatMs),
-      );
-    }
+    setCalibTaps(0);
+    let beat = 0;
+    const tick = () => {
+      const run = calibRunRef.current;
+      if (!run) return;
+      // 敲满 8 下 → 结算（在下一拍到来时收工，保证最后一下也被记到）
+      if (run.taps.length >= target) {
+        finishCalibration();
+        return;
+      }
+      metronomeClick(beat % 4 === 0);
+      beat++;
+    };
     timersRef.current.push(
-      window.setTimeout(
-        () => {
-          const run = calibRunRef.current;
-          calibRunRef.current = null;
-          setCalibrating(false);
-          if (!run || run.taps.length < 3) return;
-          const off = tapOffsetMs(run.taps, run.startMs, run.beatMs);
-          setCalib((c) => saveCalibration({ ...c, judgeMs: -off }));
-        },
-        600 + beats * beatMs + 400,
-      ),
+      window.setTimeout(() => {
+        if (!calibRunRef.current) return;
+        tick();
+        calibTimerRef.current = window.setInterval(tick, beatMs);
+      }, 600),
     );
+  }, [finishCalibration]);
+
+  // 离开界面时确保校准节拍器停止
+  useEffect(() => {
+    return () => {
+      if (calibTimerRef.current !== null) window.clearInterval(calibTimerRef.current);
+    };
   }, []);
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
@@ -476,6 +528,9 @@ export function FallScreen({
         judgement: judgementRef.current,
         countText,
         stats: statsRef.current,
+        // 未开始（idle）时不画音符，只显示鼓阵
+        showNotes: ph !== "idle",
+
         // 宿主实时注入的鼓棒姿态（无数据时为 null，不绘制）
         sticks: stickManager.latest(),
       };
@@ -679,15 +734,28 @@ export function FallScreen({
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
-            onClick={startCalibration}
-            disabled={calibrating || phase === "playing"}
+            onClick={calibrating ? finishCalibration : startCalibration}
+            disabled={!calibrating && phase === "playing"}
             className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {calibrating ? "跟着节拍敲 8 下…" : "自动校准"}
+            {calibrating ? `停止校准（${calibTaps}/8）` : "自动校准"}
           </button>
           <span className="text-[10px] text-[var(--taiko-ink)]/45">
-            跟着节拍器敲 8 下，自动算出你这台机器的延迟
+            节拍器会一直响，跟着敲 8 下自动算出你这台机器的延迟，也可随时停止
           </span>
+
+          <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
+          <button
+            onClick={toggleKit}
+            className={`border px-3 py-1.5 text-xs transition-colors ${
+              kitOn
+                ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+            }`}
+          >
+            鼓音色 {kitOn ? "开" : "关"}
+          </button>
+          <span className="text-[10px] text-[var(--taiko-ink)]/45">内置鼓音色，敲击即出声</span>
         </div>
       </div>
 
