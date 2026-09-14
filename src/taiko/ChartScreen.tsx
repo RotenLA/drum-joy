@@ -1,156 +1,63 @@
 /**
- * 谱面屏：导入一组 stem（xxx_Vocals/_Bass/_Drums/_Other.mp3）+ 鼓 MIDI（xxx.mid），
- * 同主文件名自动配对；展示 MIDI 的速度/拍号/变速信息，提供偏移微调、播放与节拍器试听，
+ * 谱面屏：五首预设曲，点一首即加载（四条 stem 音轨 + 鼓 MIDI 都在 CDN）。
+ * 加载完成后展示 MIDI 的速度/拍号/变速信息，提供偏移微调、播放与节拍器试听，
  * 以及当前难度下的谱面统计预览。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSong } from "./songStore";
-import { parseMidi, type ParsedMidi } from "./midiFile";
 import { analyzeMidi } from "./difficulty";
 import { clearChartCache, getPlayChart } from "./chartCache";
 import { DIFFICULTIES } from "./difficulty";
 import { countByPart } from "./midiChart";
 import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
 import { layoutOf } from "./difficulty";
-import { loadSampleSong, SAMPLE_TITLE } from "./sampleSong";
+import { PRESET_SONGS, loadPresetSong, type PresetSong } from "./presetSongs";
 import { songPlayer } from "./player";
-import { Metronome, getAudioContext } from "./metronome";
-import {
-  STEM_KINDS,
-  STEM_LABEL,
-  baseOfMidiName,
-  emptyStems,
-  hasAnyStem,
-  parseStemName,
-  peakOf,
-  stemsDurationMs,
-  type StemMap,
-} from "./stems";
-
-const AUDIO_RE = /\.(mp3|wav|m4a|ogg|flac)$/i;
-const MIDI_RE = /\.(mid|midi)$/i;
+import { Metronome } from "./metronome";
+import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 
 export function ChartScreen() {
   const song = useSong();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [percent, setPercent] = useState(0);
+  const [ready, setReady] = useState(false);
   const [warn, setWarn] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [posMs, setPosMs] = useState(0);
   const [metroOn, setMetroOn] = useState(false);
 
-  // ---- 导入：按 stem 后缀分轨，MIDI 单独收，主文件名配对 ----
-  const importFiles = async (files: File[]) => {
-    if (files.length === 0) return;
-    const audioFiles = files.filter((f) => AUDIO_RE.test(f.name));
-    const midiFile = files.find((f) => MIDI_RE.test(f.name)) ?? null;
-    if (audioFiles.length === 0 && !midiFile) {
-      setWarn("只支持 mp3 / wav 等音频与 mid / midi 文件");
-      return;
-    }
+  // ---- 选歌：下载 + 解码，只对外给一个百分比 ----
+  const pickSong = async (preset: PresetSong) => {
+    if (loadingId) return;
     setWarn(null);
-    setBusy("读取文件…");
+    setReady(false);
+    setPercent(0);
+    setLoadingId(preset.id);
+    songPlayer.stop();
     try {
-      let midi: ParsedMidi | null = song.midi;
-      let midiFileName = song.midiFileName;
-      const stems: StemMap = { ...song.stems };
-      const bases = new Set<string>();
-
-      if (midiFile) {
-        setBusy("解析 MIDI…");
-        midi = parseMidi(await midiFile.arrayBuffer());
-        midiFileName = midiFile.name;
-        bases.add(baseOfMidiName(midiFile.name));
-      } else if (midiFileName) {
-        bases.add(baseOfMidiName(midiFileName));
-      }
-
-      // 新导入一组音轨时，先清掉旧的音轨，避免混入上一首
-      if (audioFiles.length > 0) {
-        const fresh = emptyStems();
-        for (const k of STEM_KINDS) fresh[k] = null;
-        Object.assign(stems, fresh);
-      }
-
-      for (const f of audioFiles) {
-        const { base, kind } = parseStemName(f.name);
-        bases.add(base);
-        setBusy(`解码 ${STEM_LABEL[kind]}…`);
-        const buffer = await getAudioContext().decodeAudioData(await f.arrayBuffer());
-        stems[kind] = { buffer, fileName: f.name, peak: peakOf(buffer) };
-      }
-
-      const baseList = [...bases].filter(Boolean);
-      const base = baseList[0] ?? song.fileName;
-      if (baseList.length > 1) {
-        setWarn(`文件名主名不一致：${baseList.join(" / ")}，仍按当前组合使用`);
-      }
-
-      // 时长一致性校验（stem 应对齐首尾）
-      const durations = STEM_KINDS.map((k) => stems[k]?.buffer.duration).filter(
-        (d): d is number => typeof d === "number",
-      );
-      if (durations.length > 1) {
-        const spread = Math.max(...durations) - Math.min(...durations);
-        if (spread > 0.15) {
-          setWarn(`各音轨时长相差 ${spread.toFixed(2)}s，可能未对齐首尾`);
-        }
-      }
-
-      songPlayer.load(stems);
-      songPlayer.setStemGain("vocals", song.mix.vocals);
-      songPlayer.setStemGain("drums", song.mix.drums);
+      const loaded = await loadPresetSong(preset, (p) => setPercent(p));
+      songPlayer.load(loaded.stems);
+      for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
       setPlaying(false);
       setPosMs(0);
       setMetroOn(false);
       song.setSong({
-        stems,
-        midi,
-        midiFileName,
-        fileName: base,
+        stems: loaded.stems,
+        midi: loaded.midi,
+        midiFileName: loaded.midiFileName,
+        fileName: loaded.title,
         offsetMs: 0,
         phaseBeatOffset: 0,
-        bpm: midi ? Math.round(midi.bpm * 100) / 100 : 120,
-        timeSignature: midi ? midi.timeSignature : [4, 4],
+        bpm: Math.round(loaded.midi.bpm * 100) / 100,
+        timeSignature: loaded.midi.timeSignature,
         chart: null,
       });
+      setReady(true);
     } catch (err) {
       console.error(err);
-      window.alert("导入失败：无法解析该文件（音频需可解码，MIDI 需为标准 SMF）");
+      setWarn("加载失败，请检查网络后重试");
     } finally {
-      setBusy(null);
-    }
-  };
-
-  // ---- 内置示例曲 ----
-  const importSample = async () => {
-    setWarn(null);
-    setBusy("载入示例曲…");
-    try {
-      const sample = await loadSampleSong((label) => setBusy(label));
-      songPlayer.load(sample.stems);
-      songPlayer.setStemGain("vocals", song.mix.vocals);
-      songPlayer.setStemGain("drums", song.mix.drums);
-      setPlaying(false);
-      setPosMs(0);
-      setMetroOn(false);
-      song.setSong({
-        stems: sample.stems,
-        midi: sample.midi,
-        midiFileName: sample.midiFileName,
-        fileName: sample.title,
-        offsetMs: 0,
-        phaseBeatOffset: 0,
-        bpm: Math.round(sample.midi.bpm * 100) / 100,
-        timeSignature: sample.midi.timeSignature,
-        chart: null,
-      });
-    } catch (err) {
-      console.error(err);
-      window.alert("示例曲载入失败，请检查网络后重试");
-    } finally {
-      setBusy(null);
+      setLoadingId(null);
     }
   };
 
@@ -235,74 +142,56 @@ export function ChartScreen() {
     return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   };
 
-  const fileInput = (
-    <input
-      ref={fileInputRef}
-      type="file"
-      multiple
-      accept=".mp3,.wav,.m4a,.ogg,.flac,.mid,.midi,audio/*"
-      className="hidden"
-      onChange={(e) => {
-        const list = Array.from(e.target.files ?? []);
-        if (list.length > 0) void importFiles(list);
-        e.target.value = "";
-      }}
-    />
+  const songList = (
+    <div className="border border-[var(--taiko-line)] px-4 py-3">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="text-sm font-medium">选择歌曲</span>
+        {ready && !loadingId && <span className="text-xs text-emerald-400">已就绪</span>}
+        {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {PRESET_SONGS.map((p) => {
+          const active = song.fileName === p.title;
+          const busyThis = loadingId === p.id;
+          return (
+            <button
+              key={p.id}
+              onClick={() => void pickSong(p)}
+              disabled={loadingId !== null}
+              className={`relative overflow-hidden border px-3 py-2 text-left text-sm transition-colors disabled:opacity-60 ${
+                active
+                  ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/10"
+                  : "border-[var(--taiko-line)] hover:border-[var(--taiko-ink)]"
+              }`}
+            >
+              <span className="relative z-10 block truncate">{p.title}</span>
+              <span className="relative z-10 block text-xs tabular-nums text-[var(--taiko-ink)]/50">
+                {busyThis ? `${percent}%` : active ? "已加载" : "点击加载"}
+              </span>
+              {busyThis && (
+                <span
+                  className="absolute inset-y-0 left-0 bg-[var(--taiko-ink)]/15 transition-[width] duration-200"
+                  style={{ width: `${percent}%` }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 
-  // ---- 空态：拖放区 ----
-  if (!song.midi && !anyStem) {
-    return (
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          void importFiles(Array.from(e.dataTransfer.files ?? []));
-        }}
-        className={`flex h-64 flex-col items-center justify-center gap-3 border border-dashed transition-colors ${
-          dragOver
-            ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/5"
-            : "border-[var(--taiko-line)]"
-        }`}
-      >
-        <p className="text-sm text-[var(--taiko-ink)]/70">
-          把这首歌的 stem 音轨和鼓 MIDI 一起拖到这里
-        </p>
-        <p className="text-xs text-[var(--taiko-ink)]/45">
-          xxx_Vocals / _Bass / _Drums / _Other.mp3（可缺）+ xxx.mid（必需）
-        </p>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="border border-[var(--taiko-ink)] px-6 py-2 text-sm text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
-          >
-            选择文件
-          </button>
-          <button
-            onClick={() => void importSample()}
-            disabled={busy !== null}
-            className="border border-[var(--taiko-line)] px-6 py-2 text-sm text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
-          >
-            载入示例曲：{SAMPLE_TITLE}
-          </button>
-        </div>
-        {busy && <p className="text-xs text-[var(--taiko-ink)]/50">{busy}</p>}
-        {warn && <p className="text-xs text-[var(--taiko-ink)]/60">{warn}</p>}
-        {fileInput}
-      </div>
-    );
+  if (!song.midi && !hasAnyStem(song.stems)) {
+    return <div className="flex flex-col gap-6">{songList}</div>;
   }
 
   const tempoChanges = song.midi ? Math.max(0, song.midi.tempos.length - 1) : 0;
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 配对信息 */}
+      {songList}
+
+      {/* 当前歌曲信息 */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">{song.fileName || "未命名"}</div>
@@ -319,36 +208,11 @@ export function ChartScreen() {
                 key={k}
                 className={t ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/30"}
               >
-                {STEM_LABEL[k]}：{t ? t.fileName : "未导入"}
+                {STEM_LABEL[k]}：{t ? "已就绪" : "无"}
               </span>
             );
           })}
-          <span
-            className={
-              song.midiFileName ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/35"
-            }
-          >
-            MIDI：{song.midiFileName || "未导入（无法生成谱面）"}
-          </span>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => void importSample()}
-            disabled={busy !== null}
-            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
-          >
-            示例曲
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-          >
-            导入 / 补充文件
-          </button>
-        </div>
-        {busy && <span className="text-xs text-[var(--taiko-ink)]/50">{busy}</span>}
-        {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
-        {fileInput}
       </div>
 
       {/* MIDI 拆解结果 */}
