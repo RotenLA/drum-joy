@@ -305,6 +305,32 @@ export function FallScreen({
     };
   }, [hitPart, parts]);
 
+  /** 跟拍校准：120BPM 敲 8 下，取偏差中位数写入判定偏移 */
+  const startCalibration = useCallback(() => {
+    if (calibRunRef.current) return;
+    songPlayer.pause();
+    const beatMs = 500;
+    const beats = 8;
+    const startMs = performance.now() + 600;
+    calibRunRef.current = { startMs, beatMs, taps: [] };
+    setCalibrating(true);
+    for (let i = 0; i < beats; i++) {
+      timersRef.current.push(
+        window.setTimeout(() => metronomeClick(i % 4 === 0), 600 + i * beatMs),
+      );
+    }
+    timersRef.current.push(
+      window.setTimeout(() => {
+        const run = calibRunRef.current;
+        calibRunRef.current = null;
+        setCalibrating(false);
+        if (!run || run.taps.length < 3) return;
+        const off = tapOffsetMs(run.taps, run.startMs, run.beatMs);
+        setCalib((c) => saveCalibration({ ...c, judgeMs: -off }));
+      }, 600 + beats * beatMs + 400),
+    );
+  }, []);
+
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
   const start = useCallback(() => {
     if (!playChart || playChart.notes.length === 0) return;
@@ -653,6 +679,71 @@ export function FallScreen({
               </label>
             );
           })}
+        </div>
+      </div>
+
+      {/* 性能与手感：画质档位 + 延迟校准 */}
+      <div
+        className="mx-auto w-full border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-4 py-3"
+        style={{ maxWidth: "calc(min(70vh, 720px) * 16 / 9)" }}
+      >
+        <div className="mb-2 flex flex-wrap items-center gap-3">
+          <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">画质</span>
+          {(["auto", "high", "medium", "low"] as QualityMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => quality.setMode(m)}
+              className={`-ml-px border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors first:ml-0 ${
+                qualityMode === m
+                  ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                  : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+              }`}
+            >
+              {TIER_LABEL[m]}
+            </button>
+          ))}
+          <span className="text-[10px] text-[var(--taiko-ink)]/45">
+            当前实际：{TIER_LABEL[tier]}（卡顿时自动降档）
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2">
+          {(
+            [
+              ["visualMs", "音符视觉偏移"],
+              ["judgeMs", "判定偏移"],
+            ] as const
+          ).map(([key, label]) => (
+            <label key={key} className="flex flex-col gap-1">
+              <span className="flex items-center justify-between text-[11px] text-[var(--taiko-ink)]/70">
+                <span>{label}</span>
+                <span className="tabular-nums text-[var(--taiko-ink)]/55">
+                  {calib[key] > 0 ? "+" : ""}
+                  {calib[key]} ms
+                </span>
+              </span>
+              <input
+                type="range"
+                min={-CALIB_RANGE}
+                max={CALIB_RANGE}
+                step={1}
+                value={calib[key]}
+                onChange={(e) => updateCalib({ [key]: Number(e.target.value) })}
+                className="h-1 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)]"
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            onClick={startCalibration}
+            disabled={calibrating || phase === "playing"}
+            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {calibrating ? "跟着节拍敲 8 下…" : "自动校准"}
+          </button>
+          <span className="text-[10px] text-[var(--taiko-ink)]/45">
+            跟着节拍器敲 8 下，自动算出你这台机器的延迟
+          </span>
         </div>
       </div>
 
