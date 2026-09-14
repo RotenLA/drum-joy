@@ -328,7 +328,22 @@ function noteItems(
   f: StageFrame,
 ): DepthItem[] {
   const items: DepthItem[] = [];
-  for (const n of f.chart.notes) {
+  const notes = f.chart.notes;
+  // 只处理可见时间窗内的音符：二分定位起点，右边界一到就跳出，
+  // 不再每帧遍历整首歌上千个音符。
+  const span = LEAD_MS / Math.max(0.1, f.speed);
+  const from = f.timeMs - HOLD_WINDOW_MS;
+  const until = f.timeMs + span;
+  let lo = 0;
+  let hi = notes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (notes[mid]!.timeMs < from) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < notes.length; i++) {
+    const n = notes[i]!;
+    if (n.timeMs > until) break;
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
     if (!part) continue;
@@ -340,8 +355,8 @@ function noteItems(
     if (tTail >= 1) continue;
 
     const anchor = PAD_ANCHORS[part];
-    const pad = padPixels(anchor, w, h);
-    const g0 = gatePoint(anchor, w, h);
+    const pad = geomOf(part, w, h);
+    const g0 = { x: pad.gx, y: pad.gy };
     const at = (tt: number) => {
       const p = Math.pow(Math.max(0.02, Math.min(1, tt)), EASE);
       return {
