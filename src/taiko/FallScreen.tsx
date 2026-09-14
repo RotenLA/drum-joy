@@ -8,6 +8,8 @@ import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick } from "./metronome";
+import { loadKitEnabled, playDrum, saveKitEnabled } from "./drumKit";
+
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
 
@@ -96,7 +98,27 @@ export function FallScreen({
   }, []);
   /** 跟拍校准状态 */
   const calibRunRef = useRef<{ startMs: number; beatMs: number; taps: number[] } | null>(null);
+  const calibTimerRef = useRef<number | null>(null);
   const [calibrating, setCalibrating] = useState(false);
+  const [calibTaps, setCalibTaps] = useState(0);
+
+  // 内置鼓音色（默认开启）
+  const [kitOn, setKitOn] = useState(true);
+  const kitOnRef = useRef(true);
+  useEffect(() => {
+    const on = loadKitEnabled();
+    setKitOn(on);
+    kitOnRef.current = on;
+  }, []);
+  const toggleKit = useCallback(() => {
+    setKitOn((on) => {
+      const next = !on;
+      kitOnRef.current = next;
+      saveKitEnabled(next);
+      return next;
+    });
+  }, []);
+
 
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
