@@ -15,7 +15,12 @@ export function DebugLogPanel() {
   const [items, setItems] = useState<readonly DebugEntry[]>([]);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
-  // 关闭时不订阅，零开销
+  // 关闭时既不订阅也不记录，零开销
+  useEffect(() => {
+    debugLog.setEnabled(open);
+    return () => debugLog.setEnabled(false);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     setItems([...debugLog.list()]);

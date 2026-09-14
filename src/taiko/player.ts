@@ -122,11 +122,23 @@ class SongPlayer {
     else this.positionMs = t;
   }
 
+  /**
+   * 设备输出延迟（毫秒）：安卓 WebView 上常有 100~200ms，
+   * 计入后「听到的位置」才与判定时钟一致。
+   */
+  outputLatencyMs(): number {
+    const ctx = getAudioContext() as AudioContext & { outputLatency?: number };
+    const l = ctx.outputLatency ?? ctx.baseLatency ?? 0;
+    return Number.isFinite(l) ? Math.min(0.5, Math.max(0, l)) * 1000 : 0;
+  }
+
   timeMs(): number {
     if (!this.playing) return this.positionMs;
     return Math.min(
       this.durationMs,
-      this.startOffsetMs + (getAudioContext().currentTime - this.startCtxSec) * 1000,
+      this.startOffsetMs +
+        (getAudioContext().currentTime - this.startCtxSec) * 1000 -
+        this.outputLatencyMs(),
     );
   }
 

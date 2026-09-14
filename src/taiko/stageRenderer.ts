@@ -19,10 +19,56 @@ import {
   type PadAnchor,
   type PartId,
 } from "./laneLayouts";
+import { quality } from "./perf";
 
 /** 专辑封面背景（浏览器侧懒加载；SSR 无 Image，退回纯色背景） */
 const wallImg = typeof Image !== "undefined" ? new Image() : null;
 if (wallImg) wallImg.src = stageWallUrl;
+
+/**
+ * 当前帧的画质开关（每帧进入 renderStage / renderPadArray 时刷新）。
+ * GLOW=false 时全部 shadowBlur 走 0，安卓中低端机上这一项能省掉大半开销。
+ */
+let GLOW = true;
+/** 单次命中喷出的粒子数（低档为 0） */
+let SPARKS = 12;
+/** 粒子总量上限，超出丢弃最旧的 */
+const PARTICLE_CAP = 120;
+
+/** 逐尺寸缓存的鼓盘几何（像素位置、半径、车道起点、旋转角） */
+interface PadGeom {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  gx: number;
+  gy: number;
+  rot: number;
+}
+let geomKey = "";
+let geomCache: Partial<Record<PartId, PadGeom>> = {};
+
+/** 鼓盘几何：只在画布尺寸变化时重算一次 */
+function geomOf(id: PartId, w: number, h: number): PadGeom {
+  const key = `${Math.round(w)}x${Math.round(h)}`;
+  if (key !== geomKey) {
+    geomKey = key;
+    geomCache = {};
+  }
+  const hit = geomCache[id];
+  if (hit) return hit;
+  const a = PAD_ANCHORS[id];
+  const p = padPixels(a, w, h);
+  const g = gatePoint(a, w, h);
+  const geom: PadGeom = {
+    ...p,
+    gx: g.x,
+    gy: g.y,
+    rot: Math.atan2(p.cy - g.y, p.cx - g.x) - Math.PI / 2,
+  };
+  geomCache[id] = geom;
+  return geom;
+}
 
 /**
  * 车道收束段：三排（上/中/下）各自独立，横向半宽 0.05 → 总宽 0.10w
@@ -54,6 +100,8 @@ const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
 
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
+/** 长音符最长时长的余量（可见窗左边界） */
+const HOLD_WINDOW_MS = 4000;
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
 const LEAD_MS = 2400;
 /** 透视加速指数：>1 让音符近大远小的同时近处加速 */
@@ -131,20 +179,30 @@ function gatePoint(anchor: PadAnchor, w: number, h: number) {
   return { x, y: (anchor.cy - TRAVEL_H) * h };
 }
 
-/**
- * 鼓盘随车道旋转角（相对垂直方向的偏角）：长轴垂直于车道，与飞来音符同向，
- * 扇形鼓阵「面向消失点」。中间列 ≈0°，最外侧（吊镲/叮叮镲）约 ±41°，左右镜像对称。
- * 踏板不适用（保持外八斜放）。
+/*
+ * 鼓盘随车道旋转角在 geomOf() 里按尺寸缓存（长轴垂直于车道，面向消失点）。
  */
-function padRotation(anchor: PadAnchor, w: number, h: number): number {
-  const g = gatePoint(anchor, w, h);
-  return Math.atan2(anchor.cy * h - g.y, anchor.cx * w - g.x) - Math.PI / 2;
-}
 
 
-export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  ctx.fillStyle = "#0a0a0c";
-  ctx.fillRect(0, 0, w, h);
+/**
+ * 背景（封面铺满 + 压灰 + 遮罩 + 聚光）预先画到离屏画布，之后每帧只贴一次图。
+ * 原实现每帧都跑一次图像滤镜 + 两个渐变，是安卓上最重的一项。
+ */
+let bgCanvas: HTMLCanvasElement | null = null;
+let bgKey = "";
+
+function buildBackground(w: number, h: number, scale: number, filter: boolean) {
+  const cw = Math.max(1, Math.round(w * scale));
+  const ch = Math.max(1, Math.round(h * scale));
+  const cv = bgCanvas ?? document.createElement("canvas");
+  bgCanvas = cv;
+  cv.width = cw;
+  cv.height = ch;
+  const c = cv.getContext("2d");
+  if (!c) return;
+  c.setTransform(scale, 0, 0, scale, 0, 0);
+  c.fillStyle = "#0a0a0c";
+  c.fillRect(0, 0, w, h);
 
   if (wallImg && wallImg.complete && wallImg.naturalWidth > 0) {
     const iw = wallImg.naturalWidth;
@@ -156,39 +214,68 @@ export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: numb
     const dx = (w - dw) / 2;
     const dy = (h - dh) / 2;
 
-    // 压灰压暗（「灰一点点」）
-    ctx.filter = "saturate(0.55) brightness(0.65)";
-    ctx.drawImage(wallImg, dx, dy, dw, dh);
-    ctx.filter = "none";
+    // 压灰压暗（「灰一点点」）；低档跳过滤镜，用一层暗色叠加代替
+    if (filter) c.filter = "saturate(0.55) brightness(0.65)";
+    c.drawImage(wallImg, dx, dy, dw, dh);
+    c.filter = "none";
+    if (!filter) {
+      c.fillStyle = "rgba(8,8,10,0.35)";
+      c.fillRect(0, 0, w, h);
+    }
     // 全屏纵向遮罩：顶部压暗保 HUD/车道可读，中段最浅展示封面，底部略压暗衬托鼓盘泛光
-    const veil = ctx.createLinearGradient(0, 0, 0, h);
+    const veil = c.createLinearGradient(0, 0, 0, h);
     veil.addColorStop(0, "rgba(6,6,8,0.55)");
     veil.addColorStop(0.45, "rgba(6,6,8,0.18)");
     veil.addColorStop(1, "rgba(6,6,8,0.4)");
-    ctx.fillStyle = veil;
-    ctx.fillRect(0, 0, w, h);
+    c.fillStyle = veil;
+    c.fillRect(0, 0, w, h);
   }
 
   // 顶部聚光灯
-  const spot = ctx.createRadialGradient(
-    w * 0.5,
-    h * 0.18,
-    0,
-    w * 0.5,
-    h * 0.18,
-    h * 0.8,
-  );
+  const spot = c.createRadialGradient(w * 0.5, h * 0.18, 0, w * 0.5, h * 0.18, h * 0.8);
   spot.addColorStop(0, "rgba(80,110,255,0.12)");
   spot.addColorStop(1, "rgba(80,110,255,0)");
-  ctx.fillStyle = spot;
-  ctx.fillRect(0, 0, w, h);
+  c.fillStyle = spot;
+  c.fillRect(0, 0, w, h);
+}
+
+export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const filter = quality.params.bgFilter;
+  // 画布已带 dpr 变换，按同一比例烘焙背景，避免贴图被放大发虚
+  const scale = Math.min(2, Math.max(1, ctx.getTransform().a || 1));
+  const ready = !!(wallImg && wallImg.complete && wallImg.naturalWidth > 0);
+  const key = `${Math.round(w)}x${Math.round(h)}@${scale}:${filter ? 1 : 0}:${ready ? 1 : 0}`;
+  if (typeof document === "undefined") return;
+  if (key !== bgKey || !bgCanvas) {
+    buildBackground(w, h, scale, filter);
+    bgKey = key;
+  }
+  if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0, w, h);
+}
+
+/** 渐变缓存：尺寸不变就复用同一批渐变对象 */
+let gradKey = "";
+let vignetteGrad: CanvasGradient | null = null;
+let laneGrads: Partial<Record<PartId, CanvasGradient>> = {};
+
+function ensureGradCache(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const key = `${Math.round(w)}x${Math.round(h)}`;
+  if (key === gradKey) return;
+  gradKey = key;
+  vignetteGrad = null;
+  laneGrads = {};
+  void ctx;
 }
 
 export function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const g = ctx.createLinearGradient(0, h * 0.72, 0, h);
-  g.addColorStop(0, "rgba(0,0,0,0)");
-  g.addColorStop(1, "rgba(0,0,0,0.55)");
-  ctx.fillStyle = g;
+  ensureGradCache(ctx, w, h);
+  if (!vignetteGrad) {
+    const g = ctx.createLinearGradient(0, h * 0.72, 0, h);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.55)");
+    vignetteGrad = g;
+  }
+  ctx.fillStyle = vignetteGrad;
   ctx.fillRect(0, h * 0.72, w, h * 0.28);
 }
 
@@ -198,18 +285,21 @@ function drawLanes(
   h: number,
   parts: readonly PartId[],
 ) {
+  ensureGradCache(ctx, w, h);
   ctx.save();
   ctx.lineWidth = 1.5;
   for (const id of parts) {
-    const anchor = PAD_ANCHORS[id];
-    const p = padPixels(anchor, w, h);
-    const g0 = gatePoint(anchor, w, h);
-    const g = ctx.createLinearGradient(g0.x, g0.y, p.cx, p.cy);
-    g.addColorStop(0, "rgba(255,255,255,0)");
-    g.addColorStop(1, "rgba(255,255,255,0.2)");
+    const p = geomOf(id, w, h);
+    let g = laneGrads[id];
+    if (!g) {
+      g = ctx.createLinearGradient(p.gx, p.gy, p.cx, p.cy);
+      g.addColorStop(0, "rgba(255,255,255,0)");
+      g.addColorStop(1, "rgba(255,255,255,0.2)");
+      laneGrads[id] = g;
+    }
     ctx.strokeStyle = g;
     ctx.beginPath();
-    ctx.moveTo(g0.x, g0.y);
+    ctx.moveTo(p.gx, p.gy);
     ctx.lineTo(p.cx, p.cy);
     ctx.stroke();
   }
@@ -234,7 +324,22 @@ function noteItems(
   f: StageFrame,
 ): DepthItem[] {
   const items: DepthItem[] = [];
-  for (const n of f.chart.notes) {
+  const notes = f.chart.notes;
+  // 只处理可见时间窗内的音符：二分定位起点，右边界一到就跳出，
+  // 不再每帧遍历整首歌上千个音符。
+  const span = LEAD_MS / Math.max(0.1, f.speed);
+  const from = f.timeMs - HOLD_WINDOW_MS;
+  const until = f.timeMs + span;
+  let lo = 0;
+  let hi = notes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (notes[mid]!.timeMs < from) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < notes.length; i++) {
+    const n = notes[i]!;
+    if (n.timeMs > until) break;
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
     if (!part) continue;
@@ -246,8 +351,8 @@ function noteItems(
     if (tTail >= 1) continue;
 
     const anchor = PAD_ANCHORS[part];
-    const pad = padPixels(anchor, w, h);
-    const g0 = gatePoint(anchor, w, h);
+    const pad = geomOf(part, w, h);
+    const g0 = { x: pad.gx, y: pad.gy };
     const at = (tt: number) => {
       const p = Math.pow(Math.max(0.02, Math.min(1, tt)), EASE);
       return {
@@ -287,7 +392,7 @@ function noteItems(
           const ny = dx / len;
           const wh = head.rx * 0.55;
           const wt = tail.rx * 0.55;
-          ctx.shadowBlur = 14 * scale;
+          ctx.shadowBlur = GLOW ? (14 * scale) : 0;
           ctx.fillStyle = hexToRgba(color, 0.28);
           ctx.strokeStyle = hexToRgba(color, 0.75);
           ctx.lineWidth = Math.max(1, rx * 0.08);
@@ -303,7 +408,7 @@ function noteItems(
 
         if (headVisible) {
           ctx.translate(x, y);
-          ctx.shadowBlur = 18 * scale;
+          ctx.shadowBlur = GLOW ? (18 * scale) : 0;
           ctx.lineWidth = Math.max(1.4, rx * 0.16);
           ctx.strokeStyle = color;
           ctx.fillStyle = hexToRgba(color, 0.34);
@@ -318,7 +423,7 @@ function noteItems(
             ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
             ctx.restore();
           } else {
-            ctx.ellipse(0, 0, rx, rx * 0.42, padRotation(anchor, w, h), 0, Math.PI * 2);
+            ctx.ellipse(0, 0, rx, rx * 0.42, pad.rot, 0, Math.PI * 2);
           }
           ctx.fill();
           ctx.stroke();
@@ -334,10 +439,11 @@ function noteItems(
 
 
 
-function spawnSparks(anchor: PadAnchor, color: string, w: number, h: number, now: number) {
-  const p = padPixels(anchor, w, h);
+function spawnSparks(id: PartId, color: string, w: number, h: number, now: number) {
+  const p = geomOf(id, w, h);
   const k = h / 650;
-  for (let i = 0; i < 12; i++) {
+  if (SPARKS <= 0) return;
+  for (let i = 0; i < SPARKS; i++) {
     const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
     const sp = (0.06 + Math.random() * 0.12) * k;
     particles.push({
@@ -350,6 +456,7 @@ function spawnSparks(anchor: PadAnchor, color: string, w: number, h: number, now
       color,
     });
   }
+  if (particles.length > PARTICLE_CAP) particles.splice(0, particles.length - PARTICLE_CAP);
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
@@ -366,7 +473,7 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
     const a = 1 - age / pt.life;
     ctx.globalAlpha = a;
     ctx.shadowColor = pt.color;
-    ctx.shadowBlur = 6;
+    ctx.shadowBlur = GLOW ? (6) : 0;
     ctx.fillStyle = pt.color;
     ctx.beginPath();
     ctx.arc(x, y, 2, 0, Math.PI * 2);
@@ -479,7 +586,7 @@ function drawSquarePad(
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
-  ctx.shadowBlur = 12 + 26 * intensity;
+  ctx.shadowBlur = GLOW ? (12 + 26 * intensity) : 0;
   ctx.strokeStyle = hexToRgba(color, 0.85);
   ctx.lineWidth = 2.5 + 2.5 * intensity;
   topPath();
@@ -522,7 +629,7 @@ function drawPad(
 ) {
   const anchor = PAD_ANCHORS[partId];
   const color = PART_BY_ID[partId].color;
-  const p = padPixels(anchor, w, h);
+  const p = geomOf(partId, w, h);
 
   if (anchor.square) {
     // 左右踏板镜像「外八」斜放
@@ -536,7 +643,7 @@ function drawPad(
   ctx.save();
   ctx.translate(p.cx, p.cy);
   // 鼓盘整体随车道旋转：鼓腔/盘面/描边/命中闪一起转，等效鼓面朝向来球方向倾斜
-  ctx.rotate(padRotation(anchor, w, h));
+  ctx.rotate(p.rot);
 
   // 鼓腔侧面：强纵向明暗 + 部件色淡染
   const depth = RY * 0.9;
@@ -580,7 +687,7 @@ function drawPad(
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
-  ctx.shadowBlur = 12 + 26 * intensity;
+  ctx.shadowBlur = GLOW ? (12 + 26 * intensity) : 0;
   ctx.strokeStyle = hexToRgba(color, 0.85);
   ctx.lineWidth = 2.5 + 2.5 * intensity;
   ctx.beginPath();
@@ -620,7 +727,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.fillStyle = "rgba(255,255,255,0.08)";
   ctx.fillRect(0, 0, w, 3);
   ctx.shadowColor = "#5D8CF4";
-  ctx.shadowBlur = 8;
+  ctx.shadowBlur = GLOW ? (8) : 0;
   ctx.fillStyle = "#5D8CF4";
   ctx.fillRect(0, 0, w * Math.min(1, progress), 3);
   ctx.shadowBlur = 0;
@@ -635,7 +742,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     const low = f.hp < 0.3;
     const col = low ? "#f87171" : f.hp < 0.6 ? "#fbbf24" : "#4ade80";
     ctx.shadowColor = col;
-    ctx.shadowBlur = low ? 14 + 8 * Math.sin(f.now / 120) : 10;
+    ctx.shadowBlur = GLOW ? (low ? 14 + 8 * Math.sin(f.now / 120) : 10) : 0;
     ctx.fillStyle = col;
     ctx.fillRect(bx, by, bw * Math.max(0, f.hp), 8);
     ctx.shadowBlur = 0;
@@ -654,7 +761,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.fillStyle = "#ffffff";
   ctx.font = "800 26px system-ui, sans-serif";
   ctx.shadowColor = "rgba(255,255,255,0.3)";
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = GLOW ? (10) : 0;
   ctx.fillText(String(f.score).padStart(7, "0"), 28, 58);
   ctx.shadowBlur = 0;
 
@@ -672,7 +779,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     const size = Math.round(h * 0.062);
     ctx.textAlign = "left";
     ctx.shadowColor = "rgba(255,255,255,0.4)";
-    ctx.shadowBlur = 16;
+    ctx.shadowBlur = GLOW ? (16) : 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = `italic 900 ${size}px system-ui, sans-serif`;
     ctx.fillText(String(f.combo), 28, 58 + size + 10);
@@ -703,7 +810,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     ctx.textAlign = "center";
     ctx.globalAlpha = a;
     ctx.shadowColor = f.judgement.color;
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = GLOW ? (18) : 0;
     ctx.fillStyle = f.judgement.color;
     ctx.font = `800 ${Math.round(h * 0.045)}px system-ui, sans-serif`;
     ctx.fillText(f.judgement.text, w / 2, h * 0.3);
@@ -715,7 +822,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   if (f.countText) {
     ctx.textAlign = "center";
     ctx.shadowColor = "rgba(255,255,255,0.5)";
-    ctx.shadowBlur = 30;
+    ctx.shadowBlur = GLOW ? (30) : 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = `900 ${Math.round(h * 0.22)}px system-ui, sans-serif`;
     ctx.fillText(f.countText, w / 2, h * 0.45);
@@ -775,7 +882,7 @@ function drawStick(
   grad.addColorStop(0.55, hexToRgba(color, 0.7));
   grad.addColorStop(1, hexToRgba(color, 0.95));
   ctx.shadowColor = color;
-  ctx.shadowBlur = h * 0.03;
+  ctx.shadowBlur = GLOW ? (h * 0.03) : 0;
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(buttX + nx * wButt, buttY + ny * wButt);
@@ -796,7 +903,7 @@ function drawStick(
 
   // 棒头：小球 + 落点光圈
   ctx.shadowColor = color;
-  ctx.shadowBlur = h * 0.04;
+  ctx.shadowBlur = GLOW ? (h * 0.04) : 0;
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(tipX, tipY, wTip * 1.5, 0, Math.PI * 2);
@@ -827,6 +934,9 @@ export function renderStage(
   h: number,
   f: StageFrame,
 ) {
+  const q = quality.params;
+  GLOW = q.glow;
+  SPARKS = q.particles;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
@@ -842,7 +952,7 @@ export function renderStage(
     const expiry = f.flashes[id] ?? 0;
     const intensity = Math.max(0, Math.min(1, (expiry - f.now) / FLASH_MS));
     if (expiry > (lastFlash[id] ?? 0)) {
-      spawnSparks(PAD_ANCHORS[id], PART_BY_ID[id].color, v.w, v.h, f.now);
+      spawnSparks(id, PART_BY_ID[id].color, v.w, v.h, f.now);
       lastFlash[id] = expiry;
     }
     const missExpiry = f.missFlashes?.[id] ?? 0;
@@ -890,6 +1000,7 @@ export function renderPadArray(
   h: number,
   opts: PadArrayOptions,
 ) {
+  GLOW = quality.params.glow;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   ctx.save();
@@ -903,7 +1014,7 @@ export function renderPadArray(
     drawPad(ctx, id, intensity, v.w, v.h);
     if (opts.selected === id) {
       const a = PAD_ANCHORS[id];
-      const p = padPixels(a, v.w, v.h);
+      const p = geomOf(id, v.w, v.h);
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.lineWidth = 2;
@@ -941,7 +1052,7 @@ export function partAtPoint(
   const sorted = [...parts].sort((a, b) => PAD_ANCHORS[b].cy - PAD_ANCHORS[a].cy);
   for (const id of sorted) {
     const a = PAD_ANCHORS[id];
-    const p = padPixels(a, v.w, v.h);
+    const p = geomOf(id, v.w, v.h);
     const ry = a.square ? p.rx : p.ry; // 方形踏板纵向按全半径判定
     const dx = (lx - p.cx) / (p.rx * 1.15);
     const dy = (ly - p.cy) / (ry * 1.6);
