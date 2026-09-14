@@ -729,6 +729,87 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
  * 演奏区固定 16:9：背景铺满整个画布，鼓阵/车道/音符/HUD 全部布局在
  * 画布内居中的 16:9 逻辑区域里，窗口比例变化时构图不变形。
  */
+/**
+ * 鼓棒（立体棒身）：宿主给的俯仰/偏航角映射到鼓阵上的棒尖落点，
+ * 棒身沿「由玩家手部指向棒尖」的方向绘制，近端粗、棒尖细，带高光与泛光。
+ */
+function drawStick(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  pose: { p: number; y: number },
+  side: "l" | "r",
+) {
+  const clamp = (v: number) => Math.max(-1, Math.min(1, v));
+  const yaw = clamp(pose.y / STICK_YAW_RANGE);
+  const pitch = clamp(pose.p / STICK_PITCH_RANGE);
+  const color = STICK_COLORS[side];
+
+  // 棒尖落点：偏航 → 横向，俯仰 → 纵向（抬头往上）
+  const tipX = (0.5 + yaw * STICK_X_SPREAD) * w;
+  const tipY = (STICK_Y_CENTER - pitch * STICK_Y_SPREAD) * h;
+
+  // 棒身方向：由屏幕下方玩家手部指向棒尖，左右手各自外偏
+  const handX = (side === "l" ? 0.3 : 0.7) * w + yaw * 0.06 * w;
+  const handY = h * 1.06 + pitch * 0.05 * h;
+  const dx = tipX - handX;
+  const dy = tipY - handY;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  // 棒长：屏幕高度的一半左右，随俯仰略变（抬起看起来更短）
+  const stickLen = Math.min(len, h * (0.52 - pitch * 0.06));
+  const buttX = tipX - ux * stickLen;
+  const buttY = tipY - uy * stickLen;
+  const nx = -uy;
+  const ny = ux;
+  const wTip = Math.max(1.6, h * 0.006);
+  const wButt = Math.max(2.6, h * 0.013);
+
+  ctx.save();
+  ctx.lineJoin = "round";
+
+  // 棒身：锥形四边形 + 纵向渐变（木色偏冷/暖由棒色染）
+  const grad = ctx.createLinearGradient(buttX, buttY, tipX, tipY);
+  grad.addColorStop(0, hexToRgba(color, 0.35));
+  grad.addColorStop(0.55, hexToRgba(color, 0.7));
+  grad.addColorStop(1, hexToRgba(color, 0.95));
+  ctx.shadowColor = color;
+  ctx.shadowBlur = h * 0.03;
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(buttX + nx * wButt, buttY + ny * wButt);
+  ctx.lineTo(tipX + nx * wTip, tipY + ny * wTip);
+  ctx.lineTo(tipX - nx * wTip, tipY - ny * wTip);
+  ctx.lineTo(buttX - nx * wButt, buttY - ny * wButt);
+  ctx.closePath();
+  ctx.fill();
+
+  // 高光：偏一侧的细亮线，制造圆柱体感
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.lineWidth = Math.max(1, wTip * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(buttX + nx * wButt * 0.35, buttY + ny * wButt * 0.35);
+  ctx.lineTo(tipX + nx * wTip * 0.35, tipY + ny * wTip * 0.35);
+  ctx.stroke();
+
+  // 棒头：小球 + 落点光圈
+  ctx.shadowColor = color;
+  ctx.shadowBlur = h * 0.04;
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(tipX, tipY, wTip * 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = hexToRgba(color, 0.55);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(tipX, tipY, wTip * 4.2, wTip * 4.2 * 0.42, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function stageViewport(w: number, h: number) {
   const target = 16 / 9;
   let vw = w;
