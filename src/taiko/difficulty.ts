@@ -318,44 +318,30 @@ interface HoldSeg {
 }
 
 /**
- * 闭镲期间左脚要一直踩住：把连续的闭镲段落转成左踏板长音符。
- * 开镲处断开，开镲之后再出现闭镲则重新踩下。
+ * 左踏板：整曲踩住。
+ * 轻松 / 入门 → 第一个闭镲踩下后一直踩到结束，只有一条长音符；
+ * 标准 / 困难 → 开镲处松开断开，开镲之后重新踩下。
  */
-function pedalHolds(
-  emits: Emit[],
-  diff: Difficulty,
-  stepsPerBar: number,
-  stepsPerBeat: number,
-): HoldSeg[] {
+function pedalHolds(emits: Emit[], diff: Difficulty, endStep: number): HoldSeg[] {
   const hats = emits.filter((e) => e.part === "hihat").sort((a, b) => a.step - b.step);
-  if (hats.length === 0) return [];
-  // 入门：全部按闭镲处理
-  const isOpen = (e: Emit) => diff !== "beginner" && e.open === true;
-  const minLen = diff === "beginner" ? stepsPerBar : stepsPerBeat * 2;
-  const gapLimit = stepsPerBar;
-  /** 单条长音符最长 4 小节：太长的连续踩住在游玩上没有意义，乐句间换脚 */
-  const maxLen = stepsPerBar * 4;
-
-  const segs: HoldSeg[] = [];
-  let cur: HoldSeg | null = null;
-  const flush = (endStep: number) => {
-    if (cur && endStep - cur.startStep >= minLen) segs.push({ ...cur, endStep });
-    cur = null;
-  };
-  for (const e of hats) {
-    if (isOpen(e)) {
-      // 开镲前一格松脚
-      if (cur) flush(Math.max(cur.startStep, e.step - 1));
-      continue;
-    }
-    if (!cur) cur = { startStep: e.step, endStep: e.step };
-    else if (e.step - cur.endStep > gapLimit || e.step - cur.startStep >= maxLen) {
-      const prevEnd = cur.endStep + 1;
-      flush(prevEnd);
-      cur = { startStep: e.step, endStep: e.step };
-    } else cur.endStep = e.step;
+  const first = hats[0];
+  if (!first) return [];
+  const alwaysClosed = diff === "easy" || diff === "beginner";
+  if (alwaysClosed) {
+    return endStep > first.step ? [{ startStep: first.step, endStep }] : [];
   }
-  if (cur) flush((cur as HoldSeg).endStep + 1);
+
+  const opens = hats.filter((e) => e.open === true).map((e) => e.step);
+  const segs: HoldSeg[] = [];
+  let start = first.step;
+  for (const o of opens) {
+    if (o - 1 > start) segs.push({ startStep: start, endStep: o - 1 });
+    // 开镲之后的下一个闭镲重新踩下
+    const next = hats.find((e) => e.step > o && e.open !== true);
+    if (!next) return segs;
+    start = next.step;
+  }
+  if (endStep > start) segs.push({ startStep: start, endStep });
   return segs;
 }
 
@@ -363,10 +349,10 @@ function emitsToNotes(
   emits: Emit[],
   midi: ParsedMidi,
   clean: CleanedMidi,
-  layout: LayoutMode,
+  allowParts: readonly PartId[],
   offsetMs: number,
 ): TaikoNote[] {
-  const allow = new Set(VISIBLE_PARTS[layout]);
+  const allow = new Set(allowParts);
   const seen = new Set<string>();
   const notes: TaikoNote[] = [];
   for (const e of emits) {
@@ -391,10 +377,8 @@ function holdsToNotes(
   segs: HoldSeg[],
   midi: ParsedMidi,
   clean: CleanedMidi,
-  layout: LayoutMode,
   offsetMs: number,
 ): TaikoNote[] {
-  if (!VISIBLE_PARTS[layout].includes("pedalHat")) return [];
   const notes: TaikoNote[] = [];
   for (const s of segs) {
     const startMs = tickToMs(midi, s.startStep * clean.stepTicks) + offsetMs;
@@ -423,7 +407,6 @@ export function buildPlayChart(
 ): TaikoChart {
   const { clean, skeleton } = analyzeMidi(midi, opts.phaseBeatOffset ?? 0);
   const offset = opts.offsetMs ?? 0;
-  const layout = layoutOf(diff);
 
   let emits: Emit[];
   if (diff === "hard") {
@@ -432,21 +415,27 @@ export function buildPlayChart(
     emits = [];
     for (const bar of skeleton.bars) {
       const local =
-        diff === "beginner"
-          ? beginnerBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat)
-          : standardBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat);
+        diff === "standard"
+          ? standardBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat)
+          : beginnerBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat);
       for (const e of local) emits.push({ ...e, step: bar.startStep + e.step });
     }
   }
 
-  emits = limitHands(emits);
-  // 暂时停用左踏板长音符（代码保留，恢复时改回调用 pedalHolds 即可）
-  const holds: HoldSeg[] = [];
+  // 轻松 / 入门：全部按闭镲处理（不出开镲）
+  if (diff === "easy" || diff === "beginner") {
+    for (const e of emits) e.open = false;
+  }
+  emits = excludeHihatClashes(limitHands(emits));
+
+  const lastStep = emits.reduce((m, e) => Math.max(m, e.step), 0);
+  const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);
 
   const notes = [
-    ...emitsToNotes(emits, midi, clean, layout, offset),
-    ...holdsToNotes(holds, midi, clean, layout, offset),
+    ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset),
+    ...holdsToNotes(holds, midi, clean, offset),
   ].sort((a, b) => a.timeMs - b.timeMs);
+
   const last = notes[notes.length - 1]?.timeMs ?? 0;
   return {
     title: opts.title,
