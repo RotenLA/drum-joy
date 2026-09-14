@@ -474,7 +474,6 @@ function holdIndicesOf(chart: TaikoChart): number[] {
   return list;
 }
 
-
 function spawnSparks(id: PartId, color: string, w: number, h: number, now: number) {
   const p = geomOf(id, w, h);
   const k = h / 650;

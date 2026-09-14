@@ -119,7 +119,6 @@ export function FallScreen({
     });
   }, []);
 
-
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
   const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
@@ -358,7 +357,6 @@ export function FallScreen({
       if (calibTimerRef.current !== null) window.clearInterval(calibTimerRef.current);
     };
   }, []);
-
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
   const start = useCallback(() => {
@@ -757,11 +755,8 @@ export function FallScreen({
           >
             鼓音色 {kitOn ? "开" : "关"}
           </button>
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">
-            内置鼓音色，敲击即出声
-          </span>
+          <span className="text-[10px] text-[var(--taiko-ink)]/45">内置鼓音色，敲击即出声</span>
         </div>
-
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
