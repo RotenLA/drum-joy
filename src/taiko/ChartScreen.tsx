@@ -1,158 +1,66 @@
 /**
- * 谱面屏：导入一组 stem（xxx_Vocals/_Bass/_Drums/_Other.mp3）+ 鼓 MIDI（xxx.mid），
- * 同主文件名自动配对；展示 MIDI 的速度/拍号/变速信息，提供偏移微调、播放与节拍器试听，
+ * 谱面屏：五首预设曲，点一首即加载（四条 stem 音轨 + 鼓 MIDI 都在 CDN）。
+ * 加载完成后展示 MIDI 的速度/拍号/变速信息，提供偏移微调、播放与节拍器试听，
  * 以及当前难度下的谱面统计预览。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSong } from "./songStore";
-import { parseMidi, type ParsedMidi } from "./midiFile";
 import { analyzeMidi } from "./difficulty";
 import { clearChartCache, getPlayChart } from "./chartCache";
 import { DIFFICULTIES } from "./difficulty";
 import { countByPart } from "./midiChart";
 import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
 import { layoutOf } from "./difficulty";
-import { loadSampleSong, SAMPLE_TITLE } from "./sampleSong";
+import { PRESET_SONGS, loadPresetSong, type PresetSong } from "./presetSongs";
 import { songPlayer } from "./player";
-import { Metronome, getAudioContext } from "./metronome";
-import {
-  STEM_KINDS,
-  STEM_LABEL,
-  baseOfMidiName,
-  emptyStems,
-  hasAnyStem,
-  parseStemName,
-  peakOf,
-  stemsDurationMs,
-  type StemMap,
-} from "./stems";
-
-const AUDIO_RE = /\.(mp3|wav|m4a|ogg|flac)$/i;
-const MIDI_RE = /\.(mid|midi)$/i;
+import { Metronome } from "./metronome";
+import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 
 export function ChartScreen() {
   const song = useSong();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [percent, setPercent] = useState(0);
+  const [ready, setReady] = useState(false);
   const [warn, setWarn] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [posMs, setPosMs] = useState(0);
   const [metroOn, setMetroOn] = useState(false);
 
-  // ---- 导入：按 stem 后缀分轨，MIDI 单独收，主文件名配对 ----
-  const importFiles = async (files: File[]) => {
-    if (files.length === 0) return;
-    const audioFiles = files.filter((f) => AUDIO_RE.test(f.name));
-    const midiFile = files.find((f) => MIDI_RE.test(f.name)) ?? null;
-    if (audioFiles.length === 0 && !midiFile) {
-      setWarn("只支持 mp3 / wav 等音频与 mid / midi 文件");
-      return;
-    }
+  // ---- 选歌：下载 + 解码，只对外给一个百分比 ----
+  const pickSong = async (preset: PresetSong) => {
+    if (loadingId) return;
     setWarn(null);
-    setBusy("读取文件…");
+    setReady(false);
+    setPercent(0);
+    setLoadingId(preset.id);
+    songPlayer.stop();
     try {
-      let midi: ParsedMidi | null = song.midi;
-      let midiFileName = song.midiFileName;
-      const stems: StemMap = { ...song.stems };
-      const bases = new Set<string>();
-
-      if (midiFile) {
-        setBusy("解析 MIDI…");
-        midi = parseMidi(await midiFile.arrayBuffer());
-        midiFileName = midiFile.name;
-        bases.add(baseOfMidiName(midiFile.name));
-      } else if (midiFileName) {
-        bases.add(baseOfMidiName(midiFileName));
-      }
-
-      // 新导入一组音轨时，先清掉旧的音轨，避免混入上一首
-      if (audioFiles.length > 0) {
-        const fresh = emptyStems();
-        for (const k of STEM_KINDS) fresh[k] = null;
-        Object.assign(stems, fresh);
-      }
-
-      for (const f of audioFiles) {
-        const { base, kind } = parseStemName(f.name);
-        bases.add(base);
-        setBusy(`解码 ${STEM_LABEL[kind]}…`);
-        const buffer = await getAudioContext().decodeAudioData(await f.arrayBuffer());
-        stems[kind] = { buffer, fileName: f.name, peak: peakOf(buffer) };
-      }
-
-      const baseList = [...bases].filter(Boolean);
-      const base = baseList[0] ?? song.fileName;
-      if (baseList.length > 1) {
-        setWarn(`文件名主名不一致：${baseList.join(" / ")}，仍按当前组合使用`);
-      }
-
-      // 时长一致性校验（stem 应对齐首尾）
-      const durations = STEM_KINDS.map((k) => stems[k]?.buffer.duration).filter(
-        (d): d is number => typeof d === "number",
-      );
-      if (durations.length > 1) {
-        const spread = Math.max(...durations) - Math.min(...durations);
-        if (spread > 0.15) {
-          setWarn(`各音轨时长相差 ${spread.toFixed(2)}s，可能未对齐首尾`);
-        }
-      }
-
-      songPlayer.load(stems);
-      songPlayer.setStemGain("vocals", song.mix.vocals);
-      songPlayer.setStemGain("drums", song.mix.drums);
+      const loaded = await loadPresetSong(preset, (p) => setPercent(p));
+      songPlayer.load(loaded.stems);
+      for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
       setPlaying(false);
       setPosMs(0);
       setMetroOn(false);
       song.setSong({
-        stems,
-        midi,
-        midiFileName,
-        fileName: base,
+        stems: loaded.stems,
+        midi: loaded.midi,
+        midiFileName: loaded.midiFileName,
+        fileName: loaded.title,
         offsetMs: 0,
         phaseBeatOffset: 0,
-        bpm: midi ? Math.round(midi.bpm * 100) / 100 : 120,
-        timeSignature: midi ? midi.timeSignature : [4, 4],
+        bpm: Math.round(loaded.midi.bpm * 100) / 100,
+        timeSignature: loaded.midi.timeSignature,
         chart: null,
       });
+      setReady(true);
     } catch (err) {
       console.error(err);
-      window.alert("导入失败：无法解析该文件（音频需可解码，MIDI 需为标准 SMF）");
+      setWarn("加载失败，请检查网络后重试");
     } finally {
-      setBusy(null);
+      setLoadingId(null);
     }
   };
 
-  // ---- 内置示例曲 ----
-  const importSample = async () => {
-    setWarn(null);
-    setBusy("载入示例曲…");
-    try {
-      const sample = await loadSampleSong((label) => setBusy(label));
-      songPlayer.load(sample.stems);
-      songPlayer.setStemGain("vocals", song.mix.vocals);
-      songPlayer.setStemGain("drums", song.mix.drums);
-      setPlaying(false);
-      setPosMs(0);
-      setMetroOn(false);
-      song.setSong({
-        stems: sample.stems,
-        midi: sample.midi,
-        midiFileName: sample.midiFileName,
-        fileName: sample.title,
-        offsetMs: 0,
-        phaseBeatOffset: 0,
-        bpm: Math.round(sample.midi.bpm * 100) / 100,
-        timeSignature: sample.midi.timeSignature,
-        chart: null,
-      });
-    } catch (err) {
-      console.error(err);
-      window.alert("示例曲载入失败，请检查网络后重试");
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const audioDurationMs = stemsDurationMs(song.stems);
   const durationMs = audioDurationMs || (song.midi?.durationMs ?? 0);
