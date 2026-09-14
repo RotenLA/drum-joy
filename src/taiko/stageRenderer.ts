@@ -188,9 +188,25 @@ function padRotation(anchor: PadAnchor, w: number, h: number): number {
 }
 
 
-export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  ctx.fillStyle = "#0a0a0c";
-  ctx.fillRect(0, 0, w, h);
+/**
+ * 背景（封面铺满 + 压灰 + 遮罩 + 聚光）预先画到离屏画布，之后每帧只贴一次图。
+ * 原实现每帧都跑一次图像滤镜 + 两个渐变，是安卓上最重的一项。
+ */
+let bgCanvas: HTMLCanvasElement | null = null;
+let bgKey = "";
+
+function buildBackground(w: number, h: number, scale: number, filter: boolean) {
+  const cw = Math.max(1, Math.round(w * scale));
+  const ch = Math.max(1, Math.round(h * scale));
+  const cv = bgCanvas ?? document.createElement("canvas");
+  bgCanvas = cv;
+  cv.width = cw;
+  cv.height = ch;
+  const c = cv.getContext("2d");
+  if (!c) return;
+  c.setTransform(scale, 0, 0, scale, 0, 0);
+  c.fillStyle = "#0a0a0c";
+  c.fillRect(0, 0, w, h);
 
   if (wallImg && wallImg.complete && wallImg.naturalWidth > 0) {
     const iw = wallImg.naturalWidth;
@@ -202,39 +218,68 @@ export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: numb
     const dx = (w - dw) / 2;
     const dy = (h - dh) / 2;
 
-    // 压灰压暗（「灰一点点」）
-    ctx.filter = "saturate(0.55) brightness(0.65)";
-    ctx.drawImage(wallImg, dx, dy, dw, dh);
-    ctx.filter = "none";
+    // 压灰压暗（「灰一点点」）；低档跳过滤镜，用一层暗色叠加代替
+    if (filter) c.filter = "saturate(0.55) brightness(0.65)";
+    c.drawImage(wallImg, dx, dy, dw, dh);
+    c.filter = "none";
+    if (!filter) {
+      c.fillStyle = "rgba(8,8,10,0.35)";
+      c.fillRect(0, 0, w, h);
+    }
     // 全屏纵向遮罩：顶部压暗保 HUD/车道可读，中段最浅展示封面，底部略压暗衬托鼓盘泛光
-    const veil = ctx.createLinearGradient(0, 0, 0, h);
+    const veil = c.createLinearGradient(0, 0, 0, h);
     veil.addColorStop(0, "rgba(6,6,8,0.55)");
     veil.addColorStop(0.45, "rgba(6,6,8,0.18)");
     veil.addColorStop(1, "rgba(6,6,8,0.4)");
-    ctx.fillStyle = veil;
-    ctx.fillRect(0, 0, w, h);
+    c.fillStyle = veil;
+    c.fillRect(0, 0, w, h);
   }
 
   // 顶部聚光灯
-  const spot = ctx.createRadialGradient(
-    w * 0.5,
-    h * 0.18,
-    0,
-    w * 0.5,
-    h * 0.18,
-    h * 0.8,
-  );
+  const spot = c.createRadialGradient(w * 0.5, h * 0.18, 0, w * 0.5, h * 0.18, h * 0.8);
   spot.addColorStop(0, "rgba(80,110,255,0.12)");
   spot.addColorStop(1, "rgba(80,110,255,0)");
-  ctx.fillStyle = spot;
-  ctx.fillRect(0, 0, w, h);
+  c.fillStyle = spot;
+  c.fillRect(0, 0, w, h);
+}
+
+export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const filter = quality.params.bgFilter;
+  // 画布已带 dpr 变换，按同一比例烘焙背景，避免贴图被放大发虚
+  const scale = Math.min(2, Math.max(1, ctx.getTransform().a || 1));
+  const ready = !!(wallImg && wallImg.complete && wallImg.naturalWidth > 0);
+  const key = `${Math.round(w)}x${Math.round(h)}@${scale}:${filter ? 1 : 0}:${ready ? 1 : 0}`;
+  if (typeof document === "undefined") return;
+  if (key !== bgKey || !bgCanvas) {
+    buildBackground(w, h, scale, filter);
+    bgKey = key;
+  }
+  if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0, w, h);
+}
+
+/** 渐变缓存：尺寸不变就复用同一批渐变对象 */
+let gradKey = "";
+let vignetteGrad: CanvasGradient | null = null;
+let laneGrads: Partial<Record<PartId, CanvasGradient>> = {};
+
+function ensureGradCache(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const key = `${Math.round(w)}x${Math.round(h)}`;
+  if (key === gradKey) return;
+  gradKey = key;
+  vignetteGrad = null;
+  laneGrads = {};
+  void ctx;
 }
 
 export function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const g = ctx.createLinearGradient(0, h * 0.72, 0, h);
-  g.addColorStop(0, "rgba(0,0,0,0)");
-  g.addColorStop(1, "rgba(0,0,0,0.55)");
-  ctx.fillStyle = g;
+  ensureGradCache(ctx, w, h);
+  if (!vignetteGrad) {
+    const g = ctx.createLinearGradient(0, h * 0.72, 0, h);
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(1, "rgba(0,0,0,0.55)");
+    vignetteGrad = g;
+  }
+  ctx.fillStyle = vignetteGrad;
   ctx.fillRect(0, h * 0.72, w, h * 0.28);
 }
 
@@ -244,18 +289,21 @@ function drawLanes(
   h: number,
   parts: readonly PartId[],
 ) {
+  ensureGradCache(ctx, w, h);
   ctx.save();
   ctx.lineWidth = 1.5;
   for (const id of parts) {
-    const anchor = PAD_ANCHORS[id];
-    const p = padPixels(anchor, w, h);
-    const g0 = gatePoint(anchor, w, h);
-    const g = ctx.createLinearGradient(g0.x, g0.y, p.cx, p.cy);
-    g.addColorStop(0, "rgba(255,255,255,0)");
-    g.addColorStop(1, "rgba(255,255,255,0.2)");
+    const p = geomOf(id, w, h);
+    let g = laneGrads[id];
+    if (!g) {
+      g = ctx.createLinearGradient(p.gx, p.gy, p.cx, p.cy);
+      g.addColorStop(0, "rgba(255,255,255,0)");
+      g.addColorStop(1, "rgba(255,255,255,0.2)");
+      laneGrads[id] = g;
+    }
     ctx.strokeStyle = g;
     ctx.beginPath();
-    ctx.moveTo(g0.x, g0.y);
+    ctx.moveTo(p.gx, p.gy);
     ctx.lineTo(p.cx, p.cy);
     ctx.stroke();
   }
