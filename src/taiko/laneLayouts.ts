@@ -8,15 +8,7 @@
  */
 
 export type PartId =
-  | "pedalHat"
-  | "kick"
-  | "hihat"
-  | "crash"
-  | "snare"
-  | "highTom"
-  | "midTom"
-  | "floorTom"
-  | "ride";
+  "pedalHat" | "kick" | "hihat" | "crash" | "snare" | "highTom" | "midTom" | "floorTom" | "ride";
 
 export interface DrumPart {
   id: PartId;
@@ -38,9 +30,10 @@ export const DRUM_PARTS: readonly DrumPart[] = [
   { id: "ride", label: "叮叮镲", notes: [51], color: "#8341F1" },
 ];
 
-export const PART_BY_ID = Object.fromEntries(
-  DRUM_PARTS.map((p) => [p.id, p]),
-) as Record<PartId, DrumPart>;
+export const PART_BY_ID = Object.fromEntries(DRUM_PARTS.map((p) => [p.id, p])) as Record<
+  PartId,
+  DrumPart
+>;
 
 // ================= 部件映射（note → part） =================
 
@@ -65,8 +58,7 @@ function loadMapping(): DrumMapping {
       const v = parsed[p.id];
       if (Array.isArray(v)) {
         base[p.id] = v.filter(
-          (n): n is number =>
-            Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 127,
+          (n): n is number => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 127,
         );
       }
     }
@@ -142,14 +134,25 @@ export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
   midTom: { cx: TOP_CX.midTom, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
   ride: { cx: TOP_CX.ride, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
   // 中排（row 1，车道端点分别处于吊镲/高通与中通/叮叮镲端点的正中）
-  hihat: { cx: (TOP_CX.crash + TOP_CX.highTom) / 2, cy: MID_ROW_CY, r: PAD_R, kind: "drum", row: 1 },
+  hihat: {
+    cx: (TOP_CX.crash + TOP_CX.highTom) / 2,
+    cy: MID_ROW_CY,
+    r: PAD_R,
+    kind: "drum",
+    row: 1,
+  },
   snare: { cx: 0.5, cy: MID_ROW_CY, r: PAD_R, kind: "drum", row: 1 },
-  floorTom: { cx: (TOP_CX.midTom + TOP_CX.ride) / 2, cy: MID_ROW_CY, r: PAD_R, kind: "drum", row: 1 },
+  floorTom: {
+    cx: (TOP_CX.midTom + TOP_CX.ride) / 2,
+    cy: MID_ROW_CY,
+    r: PAD_R,
+    kind: "drum",
+    row: 1,
+  },
   // 下排（row 2，方形踏板与手击鼓盘区分，两踏板等大）
   pedalHat: { cx: 0.35, cy: 0.92, r: PEDAL_R, kind: "pedal", square: true, row: 2 },
   kick: { cx: 0.65, cy: 0.92, r: PEDAL_R, kind: "drum", square: true, row: 2 },
 };
-
 
 // ================= 分区显示集 =================
 
@@ -164,17 +167,7 @@ export const VISIBLE_PARTS: Record<LayoutMode, readonly PartId[]> = {
   five: ["hihat", "snare", "floorTom", "pedalHat", "kick"],
   // 标准 7 分区：入门 5 件 + 吊镲、叮叮镲（不含高通、中通）
   seven: ["hihat", "snare", "floorTom", "pedalHat", "kick", "crash", "ride"],
-  nine: [
-    "pedalHat",
-    "kick",
-    "hihat",
-    "crash",
-    "snare",
-    "highTom",
-    "midTom",
-    "floorTom",
-    "ride",
-  ],
+  nine: ["pedalHat", "kick", "hihat", "crash", "snare", "highTom", "midTom", "floorTom", "ride"],
 };
 
 /** 键盘调试按键（无 MIDI 设备时模拟击打；两模式一致） */

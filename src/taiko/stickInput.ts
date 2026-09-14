@@ -41,8 +41,7 @@ const parsePose = (raw: unknown): StickPose | null => {
   return { p, y };
 };
 
-const now = () =>
-  typeof performance !== "undefined" ? performance.now() : Date.now();
+const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
 class StickManager {
   private snap: StickSnapshot | null = null;
@@ -66,8 +65,7 @@ class StickManager {
     // 每帧都来，按 100ms 节流打印，避免刷屏
     if (at - this.lastLog >= 100) {
       this.lastLog = at;
-      const f = (s: StickPose | null) =>
-        s ? `p${s.p.toFixed(1)}/y${s.y.toFixed(1)}` : "—";
+      const f = (s: StickPose | null) => (s ? `p${s.p.toFixed(1)}/y${s.y.toFixed(1)}` : "—");
       debugLog.push("stick", `L ${f(l)}  R ${f(r)}`);
     }
   }

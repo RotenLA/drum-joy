@@ -78,10 +78,7 @@ export class Metronome {
           const beatPos = offset + nextBeatIdx * beatMs;
           if (beatPos > pos + 150) break;
           if (beatPos >= pos - 20) {
-            click(
-              nextBeatIdx % barBeats === 0,
-              nowSec + Math.max(0, (beatPos - pos) / 1000),
-            );
+            click(nextBeatIdx % barBeats === 0, nowSec + Math.max(0, (beatPos - pos) / 1000));
           }
           nextBeatIdx++;
         }

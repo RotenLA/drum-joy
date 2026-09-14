@@ -96,7 +96,10 @@ class SongPlayer {
           this.endedCb?.();
         };
       }
-      src.start(this.startCtxSec, Math.min(offset / 1000, Math.max(0, track.buffer.duration - 0.01)));
+      src.start(
+        this.startCtxSec,
+        Math.min(offset / 1000, Math.max(0, track.buffer.duration - 0.01)),
+      );
       this.sources[k] = src;
       this.gains[k] = gain;
     }

@@ -100,7 +100,7 @@ function detectPhase(hits: CleanHit[], stepsPerBar: number, beatOffset: number):
   for (let o = 0; o < stepsPerBar; o++) {
     let score = 0;
     for (const h of hits) {
-      const local = ((h.step - o) % stepsPerBar + stepsPerBar) % stepsPerBar;
+      const local = (((h.step - o) % stepsPerBar) + stepsPerBar) % stepsPerBar;
       const onBeat = local % STEPS_PER_BEAT === 0;
       if (!onBeat) continue;
       const beat = local / STEPS_PER_BEAT;

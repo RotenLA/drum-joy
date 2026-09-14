@@ -75,11 +75,7 @@ function geomOf(id: PartId, w: number, h: number): PadGeom {
  * ≈ 高通/中通鼓面宽度（2×0.048w）。分层后各排车道在屏幕上按高度分开，
  * 不再长距离重叠；同列部件（高通↔踩镲踏板、中通↔底鼓）的车道接近平行。
  */
-const ROW_GATES = [
-  { halfW: 0.044 },
-  { halfW: 0.044 },
-  { halfW: 0.044 },
-] as const;
+const ROW_GATES = [{ halfW: 0.044 }, { halfW: 0.044 }, { halfW: 0.044 }] as const;
 
 /**
  * 统一等高时间线：每个部件的车道出发点固定在「自己鼓盘正上方 TRAVEL_H 屏高」处，
@@ -96,7 +92,6 @@ const STICK_Y_CENTER = 0.6;
 const STICK_Y_SPREAD = 0.26;
 /** 左右鼓棒颜色 */
 const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
-
 
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
@@ -168,7 +163,6 @@ function padPixels(a: PadAnchor, w: number, h: number) {
   return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * 0.42 };
 }
 
-
 /**
  * 车道起点：横向按鼓盘 cx 等比映射进本排收束段（保持左右顺序不交叉），
  * 纵向统一取「鼓盘上方 TRAVEL_H」，让所有车道行程等高。
@@ -182,7 +176,6 @@ function gatePoint(anchor: PadAnchor, w: number, h: number) {
 /*
  * 鼓盘随车道旋转角在 geomOf() 里按尺寸缓存（长轴垂直于车道，面向消失点）。
  */
-
 
 /**
  * 背景（封面铺满 + 压灰 + 遮罩 + 聚光）预先画到离屏画布，之后每帧只贴一次图。
@@ -279,12 +272,7 @@ export function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number
   ctx.fillRect(0, h * 0.72, w, h * 0.28);
 }
 
-function drawLanes(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  parts: readonly PartId[],
-) {
+function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number, parts: readonly PartId[]) {
   ensureGradCache(ctx, w, h);
   ctx.save();
   ctx.lineWidth = 1.5;
@@ -374,7 +362,6 @@ function noteItems(
     const alpha = (0.35 + 0.65 * p) * fadeIn;
     const headVisible = t < 1;
 
-
     items.push({
       // 同深度时音符压在鼓盘上层（+ε），保证判定点处不被自己的鼓面吃掉
       depth: y / h + 0.0015,
@@ -392,7 +379,7 @@ function noteItems(
           const ny = dx / len;
           const wh = head.rx * 0.55;
           const wt = tail.rx * 0.55;
-          ctx.shadowBlur = GLOW ? (14 * scale) : 0;
+          ctx.shadowBlur = GLOW ? 14 * scale : 0;
           ctx.fillStyle = hexToRgba(color, 0.28);
           ctx.strokeStyle = hexToRgba(color, 0.75);
           ctx.lineWidth = Math.max(1, rx * 0.08);
@@ -408,7 +395,7 @@ function noteItems(
 
         if (headVisible) {
           ctx.translate(x, y);
-          ctx.shadowBlur = GLOW ? (18 * scale) : 0;
+          ctx.shadowBlur = GLOW ? 18 * scale : 0;
           ctx.lineWidth = Math.max(1.4, rx * 0.16);
           ctx.strokeStyle = color;
           ctx.fillStyle = hexToRgba(color, 0.34);
@@ -433,11 +420,8 @@ function noteItems(
     });
   }
 
-
   return items;
 }
-
-
 
 function spawnSparks(id: PartId, color: string, w: number, h: number, now: number) {
   const p = geomOf(id, w, h);
@@ -473,7 +457,7 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
     const a = 1 - age / pt.life;
     ctx.globalAlpha = a;
     ctx.shadowColor = pt.color;
-    ctx.shadowBlur = GLOW ? (6) : 0;
+    ctx.shadowBlur = GLOW ? 6 : 0;
     ctx.fillStyle = pt.color;
     ctx.beginPath();
     ctx.arc(x, y, 2, 0, Math.PI * 2);
@@ -586,7 +570,7 @@ function drawSquarePad(
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
-  ctx.shadowBlur = GLOW ? (12 + 26 * intensity) : 0;
+  ctx.shadowBlur = GLOW ? 12 + 26 * intensity : 0;
   ctx.strokeStyle = hexToRgba(color, 0.85);
   ctx.lineWidth = 2.5 + 2.5 * intensity;
   topPath();
@@ -687,7 +671,7 @@ function drawPad(
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
-  ctx.shadowBlur = GLOW ? (12 + 26 * intensity) : 0;
+  ctx.shadowBlur = GLOW ? 12 + 26 * intensity : 0;
   ctx.strokeStyle = hexToRgba(color, 0.85);
   ctx.lineWidth = 2.5 + 2.5 * intensity;
   ctx.beginPath();
@@ -727,7 +711,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.fillStyle = "rgba(255,255,255,0.08)";
   ctx.fillRect(0, 0, w, 3);
   ctx.shadowColor = "#5D8CF4";
-  ctx.shadowBlur = GLOW ? (8) : 0;
+  ctx.shadowBlur = GLOW ? 8 : 0;
   ctx.fillStyle = "#5D8CF4";
   ctx.fillRect(0, 0, w * Math.min(1, progress), 3);
   ctx.shadowBlur = 0;
@@ -751,8 +735,6 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     ctx.strokeRect(bx, by, bw, 8);
   }
 
-
-
   // 左上得分
   ctx.textAlign = "left";
   ctx.fillStyle = "rgba(255,255,255,0.4)";
@@ -761,7 +743,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.fillStyle = "#ffffff";
   ctx.font = "800 26px system-ui, sans-serif";
   ctx.shadowColor = "rgba(255,255,255,0.3)";
-  ctx.shadowBlur = GLOW ? (10) : 0;
+  ctx.shadowBlur = GLOW ? 10 : 0;
   ctx.fillText(String(f.score).padStart(7, "0"), 28, 58);
   ctx.shadowBlur = 0;
 
@@ -779,7 +761,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     const size = Math.round(h * 0.062);
     ctx.textAlign = "left";
     ctx.shadowColor = "rgba(255,255,255,0.4)";
-    ctx.shadowBlur = GLOW ? (16) : 0;
+    ctx.shadowBlur = GLOW ? 16 : 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = `italic 900 ${size}px system-ui, sans-serif`;
     ctx.fillText(String(f.combo), 28, 58 + size + 10);
@@ -810,7 +792,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     ctx.textAlign = "center";
     ctx.globalAlpha = a;
     ctx.shadowColor = f.judgement.color;
-    ctx.shadowBlur = GLOW ? (18) : 0;
+    ctx.shadowBlur = GLOW ? 18 : 0;
     ctx.fillStyle = f.judgement.color;
     ctx.font = `800 ${Math.round(h * 0.045)}px system-ui, sans-serif`;
     ctx.fillText(f.judgement.text, w / 2, h * 0.3);
@@ -822,7 +804,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   if (f.countText) {
     ctx.textAlign = "center";
     ctx.shadowColor = "rgba(255,255,255,0.5)";
-    ctx.shadowBlur = GLOW ? (30) : 0;
+    ctx.shadowBlur = GLOW ? 30 : 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = `900 ${Math.round(h * 0.22)}px system-ui, sans-serif`;
     ctx.fillText(f.countText, w / 2, h * 0.45);
@@ -882,7 +864,7 @@ function drawStick(
   grad.addColorStop(0.55, hexToRgba(color, 0.7));
   grad.addColorStop(1, hexToRgba(color, 0.95));
   ctx.shadowColor = color;
-  ctx.shadowBlur = GLOW ? (h * 0.03) : 0;
+  ctx.shadowBlur = GLOW ? h * 0.03 : 0;
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(buttX + nx * wButt, buttY + ny * wButt);
@@ -903,7 +885,7 @@ function drawStick(
 
   // 棒头：小球 + 落点光圈
   ctx.shadowColor = color;
-  ctx.shadowBlur = GLOW ? (h * 0.04) : 0;
+  ctx.shadowBlur = GLOW ? h * 0.04 : 0;
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(tipX, tipY, wTip * 1.5, 0, Math.PI * 2);
@@ -928,12 +910,7 @@ export function stageViewport(w: number, h: number) {
   return { x: (w - vw) / 2, y: (h - vh) / 2, w: vw, h: vh };
 }
 
-export function renderStage(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  f: StageFrame,
-) {
+export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
   const q = quality.params;
   GLOW = q.glow;
   SPARKS = q.particles;
@@ -974,14 +951,12 @@ export function renderStage(
   }
   ctx.restore();
 
-
   drawVignette(ctx, w, h);
   ctx.save();
   ctx.translate(v.x, v.y);
   drawHud(ctx, v.w, v.h, f);
   ctx.restore();
 }
-
 
 // ================= 映射屏复用：静态鼓盘阵 =================
 
@@ -1005,9 +980,7 @@ export function renderPadArray(
   const v = stageViewport(w, h);
   ctx.save();
   ctx.translate(v.x, v.y);
-  const sorted = [...opts.parts].sort(
-    (a, b) => PAD_ANCHORS[a].cy - PAD_ANCHORS[b].cy,
-  );
+  const sorted = [...opts.parts].sort((a, b) => PAD_ANCHORS[a].cy - PAD_ANCHORS[b].cy);
   for (const id of sorted) {
     const expiry = opts.flashes[id] ?? 0;
     const intensity = Math.max(0, Math.min(1, (expiry - opts.now) / FLASH_MS));
@@ -1020,15 +993,7 @@ export function renderPadArray(
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
       ctx.beginPath();
-      ctx.ellipse(
-        p.cx,
-        p.cy,
-        p.rx + 8,
-        (a.square ? p.rx : p.ry) + 8,
-        0,
-        0,
-        Math.PI * 2,
-      );
+      ctx.ellipse(p.cx, p.cy, p.rx + 8, (a.square ? p.rx : p.ry) + 8, 0, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -1036,7 +1001,6 @@ export function renderPadArray(
   ctx.restore();
   drawVignette(ctx, w, h);
 }
-
 
 /** 点击命中测试：返回命中的鼓盘（近处优先） */
 export function partAtPoint(

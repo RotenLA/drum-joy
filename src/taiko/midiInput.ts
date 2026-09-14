@@ -46,9 +46,7 @@ class MidiManager {
   private selectedId: string | null = null;
 
   get supported(): boolean {
-    return (
-      typeof navigator !== "undefined" && "requestMIDIAccess" in navigator
-    );
+    return typeof navigator !== "undefined" && "requestMIDIAccess" in navigator;
   }
 
   async init(): Promise<boolean> {
@@ -88,9 +86,7 @@ class MidiManager {
     if (!this.access) return;
     for (const input of this.access.inputs.values()) {
       input.onmidimessage =
-        !this.selectedId || input.id === this.selectedId
-          ? (e) => this.handle(e)
-          : null;
+        !this.selectedId || input.id === this.selectedId ? (e) => this.handle(e) : null;
     }
   }
 
