@@ -446,8 +446,14 @@ export function FallScreen({
       last = now;
       quality.sample(dt, now);
 
-      const ph = phaseRef.current;
+      let ph = phaseRef.current;
       const t = readTimeMs(now);
+      // 倒计时走到 0 → 直接进入演奏（时钟不重设，音符不跳位）
+      if (ph === "countdown" && t >= 0) {
+        ph = "playing";
+        phaseRef.current = "playing";
+        setPhase("playing");
+      }
       if (ph === "playing") {
         if (!hasAudio && playChart && t > playChart.durationMs) {
           phaseRef.current = "ended";
