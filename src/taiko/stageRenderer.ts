@@ -992,7 +992,7 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
       draw: () => drawPad(ctx, id, intensity, v.w, v.h, miss),
     });
   }
-  items.push(...noteItems(ctx, v.w, v.h, f));
+  if (f.showNotes !== false) items.push(...noteItems(ctx, v.w, v.h, f));
   items.sort((a, b) => a.depth - b.depth);
   for (const it of items) it.draw();
 
