@@ -13,17 +13,43 @@ import { cleanMidi, type CleanedMidi, type CleanHit } from "./midiClean";
 import { buildSkeleton, hasNear, type BarSkeleton, type Skeleton } from "./skeleton";
 import { matchPattern } from "./patternLib";
 
-export type Difficulty = "beginner" | "standard" | "hard";
+export type Difficulty = "easy" | "beginner" | "standard" | "hard";
 
 export const DIFFICULTIES: readonly { id: Difficulty; label: string; hint: string }[] = [
-  { id: "beginner", label: "入门", hint: "5 分区 · 正拍为主" },
-  { id: "standard", label: "标准", hint: "7 分区 · 节奏型重写" },
-  { id: "hard", label: "困难", hint: "9 分区 · 手脚交替" },
+  { id: "easy", label: "轻松", hint: "军鼓 · 踩镲 · 左踏板踩住" },
+  { id: "beginner", label: "入门", hint: "轻松 + 右踏板" },
+  { id: "standard", label: "标准", hint: "加入低通 / 吊镲 / 叮叮镲" },
+  { id: "hard", label: "困难", hint: "全部鼓件，含高通 / 中通" },
 ];
 
 export function layoutOf(diff: Difficulty): LayoutMode {
-  return diff === "beginner" ? "five" : diff === "standard" ? "seven" : "nine";
+  return diff === "easy" || diff === "beginner" ? "five" : diff === "standard" ? "seven" : "nine";
 }
+
+/**
+ * 各难度允许出现「音符」的部件（与显示的鼓盘不同：
+ * 轻松/入门显示 5 个鼓盘，但轻松不出右踏板音符）。
+ */
+export const NOTE_PARTS: Record<Difficulty, readonly PartId[]> = {
+  easy: ["snare", "hihat", "pedalHat"],
+  beginner: ["snare", "hihat", "pedalHat", "kick"],
+  standard: ["snare", "hihat", "pedalHat", "kick", "floorTom", "crash", "ride"],
+  hard: [
+    "snare",
+    "hihat",
+    "pedalHat",
+    "kick",
+    "floorTom",
+    "crash",
+    "ride",
+    "highTom",
+    "midTom",
+  ],
+};
+
+/** 踩镲与这些部件不可同刻出现（同刻时踩镲让位） */
+const HIHAT_EXCLUSIVE: readonly PartId[] = ["floorTom", "crash", "ride"];
+
 
 const BIG_VELOCITY = 108;
 
