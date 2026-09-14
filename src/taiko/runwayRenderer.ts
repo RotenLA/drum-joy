@@ -15,6 +15,10 @@ import {
   stageViewport,
   type StageFrame,
 } from "./stageRenderer";
+import { quality } from "./perf";
+
+/** 当前帧是否使用发光模糊（低/中档关闭，安卓上省一大截） */
+let GLOW = true;
 
 /** 音符从右侧入场到判定线的时间（1x 速度，毫秒） */
 const LEAD_MS = 2200;
@@ -31,6 +35,7 @@ export function renderRunway(
   h: number,
   f: StageFrame,
 ) {
+  GLOW = quality.params.glow;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   const parts = f.parts ?? [];
@@ -108,8 +113,21 @@ export function renderRunway(
   ctx.stroke();
   ctx.restore();
 
-  // 音符：右 → 左推进的圆角方块
-  for (const n of f.chart.notes) {
+  // 音符：右 → 左推进的圆角方块（只处理可见时间窗，二分定位起点）
+  const notes = f.chart.notes;
+  const span = LEAD_MS / Math.max(0.1, f.speed);
+  const from = f.timeMs - 4000;
+  const until = f.timeMs + span;
+  let lo = 0;
+  let hiIdx = notes.length;
+  while (lo < hiIdx) {
+    const mid = (lo + hiIdx) >> 1;
+    if (notes[mid]!.timeMs < from) lo = mid + 1;
+    else hiIdx = mid;
+  }
+  for (let i = lo; i < notes.length; i++) {
+    const n = notes[i]!;
+    if (n.timeMs > until) break;
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
     if (part === null) continue;

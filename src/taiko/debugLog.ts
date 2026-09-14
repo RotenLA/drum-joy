@@ -20,8 +20,20 @@ class DebugLog {
   private items: DebugEntry[] = [];
   private seq = 0;
   private listeners = new Set<() => void>();
+  /** 面板关闭时完全不记录，避免白白消耗性能 */
+  private enabled = false;
+
+  setEnabled(on: boolean): void {
+    this.enabled = on;
+    if (!on) this.items = [];
+  }
+
+  get on(): boolean {
+    return this.enabled;
+  }
 
   push(kind: DebugKind, text: string): void {
+    if (!this.enabled) return;
     this.items.push({ id: ++this.seq, t: Date.now(), kind, text });
     if (this.items.length > MAX) this.items.splice(0, this.items.length - MAX);
     for (const f of this.listeners) f();
