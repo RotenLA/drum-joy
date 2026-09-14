@@ -222,8 +222,6 @@ function noteItems(
   f: StageFrame,
 ): DepthItem[] {
   const items: DepthItem[] = [];
-  // 同刻连线：按时间分桶收集飞行中音符的屏幕位置
-  const chords = new Map<number, { x: number; y: number; color: string; p: number }[]>();
   for (const n of f.chart.notes) {
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
