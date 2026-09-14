@@ -18,6 +18,14 @@ import { click as metronomeClick } from "./metronome";
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
 import { HP_GOOD, HP_MAX, HP_MISS, HP_PERFECT, clampHp, survivalSpeed } from "./survival";
+import { TIER_LABEL, quality, type QualityMode } from "./perf";
+import {
+  CALIB_RANGE,
+  loadCalibration,
+  saveCalibration,
+  tapOffsetMs,
+  type Calibration,
+} from "./calibration";
 
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
@@ -77,6 +85,30 @@ export function FallScreen({
   /** 生存模式血量 */
   const hpRef = useRef(HP_MAX);
   const [deadOut, setDeadOut] = useState(false);
+
+  // 画质档位（auto 会自动降档；tier 变化时重设画布分辨率）
+  const [qualityMode, setQualityMode] = useState<QualityMode>(() => quality.getMode());
+  const [tier, setTier] = useState(() => quality.tier);
+  useEffect(() => {
+    const off = quality.subscribe(() => {
+      setQualityMode(quality.getMode());
+      setTier(quality.tier);
+    });
+    return off;
+  }, []);
+
+  // 延迟校准（视觉 / 判定偏移）
+  const [calib, setCalib] = useState<Calibration>(() => loadCalibration());
+  const calibRef = useRef<Calibration>(calib);
+  useEffect(() => {
+    calibRef.current = calib;
+  }, [calib]);
+  const updateCalib = useCallback((patch: Partial<Calibration>) => {
+    setCalib((c) => saveCalibration({ ...c, ...patch }));
+  }, []);
+  /** 跟拍校准状态 */
+  const calibRunRef = useRef<{ startMs: number; beatMs: number; taps: number[] } | null>(null);
+  const [calibrating, setCalibrating] = useState(false);
 
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
@@ -165,13 +197,37 @@ export function FallScreen({
     };
   }, []);
 
+  /** 当前谱面时间（毫秒）：随时可读，不等下一帧，低帧率下判定也不被推迟 */
+  const readTimeMs = useCallback(
+    (now: number) => {
+      const ph = phaseRef.current;
+      if (ph === "playing") {
+        return hasAudio ? songPlayer.timeMs() : now - silentStartRef.current;
+      }
+      if (ph === "countdown") {
+        return now - countdownStartRef.current - countdownMsRef.current;
+      }
+      if (ph === "idle") return 0;
+      return timeRef.current;
+    },
+    [hasAudio],
+  );
+
   // 击打：闪光 + 命中判定（空击只闪光不惩罚）
   const hitPart = useCallback(
-    (part: PartId) => {
+    (part: PartId, atMs?: number) => {
       const now = performance.now();
+      const at = atMs !== undefined && Number.isFinite(atMs) ? atMs : now;
       flashesRef.current[part] = now + FLASH_MS;
+      // 跟拍校准中：只收集敲击时刻
+      const run = calibRunRef.current;
+      if (run) {
+        run.taps.push(at);
+        return;
+      }
       if (phaseRef.current !== "playing" || !playChart) return;
-      const t = timeRef.current;
+      // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
+      const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
       const notes = playChart.notes;
       let best = -1;
       let bestDiff = Infinity;
@@ -203,17 +259,17 @@ export function FallScreen({
         until: now + 500,
       };
     },
-    [playChart, survival],
+    [playChart, survival, readTimeMs],
   );
 
   // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
   useEffect(() => {
     void midiManager.init();
-    const offNote = midiManager.onNote((note) => {
+    const offNote = midiManager.onNote((note, _vel, atMs) => {
       const part = partOfNote(note);
       if (!part) return;
       if (part === "pedalHat") pedalHeldRef.current = true;
-      if (parts.includes(part)) hitPart(part);
+      if (parts.includes(part)) hitPart(part, atMs);
     });
     const offUp = midiManager.onNoteOff((note) => {
       if (partOfNote(note) === "pedalHat") pedalHeldRef.current = false;
@@ -320,8 +376,9 @@ export function FallScreen({
     });
 
     let raf = 0;
+    let last = 0;
     const resize = () => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, quality.params.maxDpr);
       canvas.width = wrap.clientWidth * dpr;
       canvas.height = wrap.clientHeight * dpr;
       canvas.style.width = `${wrap.clientWidth}px`;
@@ -333,17 +390,22 @@ export function FallScreen({
     ro.observe(wrap);
 
     const draw = (now: number) => {
+      raf = requestAnimationFrame(draw);
+      // 帧率上限（低档 30 帧）+ 帧时间采样喂给自动降档
+      const dt = last ? now - last : 0;
+      const minFrame = 1000 / quality.params.maxFps - 2;
+      if (dt && dt < minFrame) return;
+      last = now;
+      quality.sample(dt, now);
+
       const ph = phaseRef.current;
-      let t = timeRef.current;
+      let t = readTimeMs(now);
       if (ph === "playing") {
-        t = hasAudio ? songPlayer.timeMs() : now - silentStartRef.current;
         if (!hasAudio && playChart && t > playChart.durationMs) {
           phaseRef.current = "ended";
           setPhase("ended");
         }
-      } else if (ph === "countdown") {
-        t = now - countdownStartRef.current - countdownMsRef.current;
-      } else if (ph === "idle") t = 0;
+      }
       // paused / ended：冻结
       timeRef.current = t;
 
@@ -422,7 +484,8 @@ export function FallScreen({
 
       const frame = {
         chart: frameChart,
-        timeMs: t,
+        // 视觉偏移：只影响画面，不影响判定
+        timeMs: t + calibRef.current.visualMs,
         // 生存模式：连击越高下落越快
         speed: survival ? survivalSpeed(speed, comboRef.current) : speed,
         now,
@@ -444,7 +507,6 @@ export function FallScreen({
       } else {
         renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
       }
-      raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
 
@@ -452,7 +514,7 @@ export function FallScreen({
       cancelAnimationFrame(raf);
       ro.disconnect();
     };
-  }, [playChart, speed, parts, playMode, hasAudio, survival]);
+  }, [playChart, speed, parts, playMode, hasAudio, survival, readTimeMs, tier]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
