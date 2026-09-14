@@ -369,9 +369,12 @@ function holdsToNotes(
 ): TaikoNote[] {
   const notes: TaikoNote[] = [];
   for (const s of segs) {
-    const startMs = tickToMs(midi, s.startStep * clean.stepTicks) + offsetMs;
+    // 相位微调可能让首个闭镲落在 0 之前，长音符起点夹到曲首
+    const startStep = Math.max(0, s.startStep);
+    const startMs = Math.max(0, tickToMs(midi, startStep * clean.stepTicks) + offsetMs);
     const endMs = tickToMs(midi, s.endStep * clean.stepTicks) + offsetMs;
-    if (startMs < 0 || endMs <= startMs) continue;
+    if (endMs <= startMs) continue;
+
     notes.push({
       timeMs: startMs,
       lane: "don",
