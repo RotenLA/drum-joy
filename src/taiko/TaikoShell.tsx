@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { SongProvider, useSong } from "./songStore";
-import { FallScreen, type PlayMode } from "./FallScreen";
+import { FallScreen } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
@@ -11,16 +11,14 @@ type ScreenKey = "play" | "chart" | "mapping";
 interface TaikoSettings {
   speed: number;
   midiDeviceId: string | null;
-  /** 游玩模式：舞台下落 / 节奏跑道 / 生存 */
-  playMode: PlayMode;
 }
 
-const SETTINGS_KEY = "taiko.settings.v3";
+const SETTINGS_KEY = "taiko.settings.v5";
 const DEFAULT_SETTINGS: TaikoSettings = {
-  speed: 1,
+  speed: 1.5,
   midiDeviceId: null,
-  playMode: "stage",
 };
+
 
 const NAV: { key: ScreenKey; label: string; hint: string }[] = [
   { key: "play", label: "游玩", hint: "PLAY" },
@@ -47,12 +45,9 @@ function ShellInner() {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw) as Partial<TaikoSettings>;
-      // 旧版本存过 "osu"，已下线 → 回落到舞台下落
-      const modes: PlayMode[] = ["stage", "runway", "survival"];
-      const playMode =
-        parsed.playMode && modes.includes(parsed.playMode) ? parsed.playMode : "stage";
-      setSettings((s) => ({ ...s, ...parsed, playMode }));
+      setSettings((s) => ({ ...s, ...parsed }));
     } catch {
+
       // 忽略损坏的本地设置
     }
   }, []);
@@ -145,11 +140,10 @@ function ShellInner() {
           {screen === "play" && (
             <FallScreen
               speed={settings.speed}
-              playMode={settings.playMode}
               onSpeedChange={(speed) => updateSettings({ speed })}
-              onPlayModeChange={(playMode) => updateSettings({ playMode })}
             />
           )}
+
           {screen === "chart" && <ChartScreen />}
           {screen === "mapping" && (
             <MappingScreen
