@@ -61,7 +61,6 @@ export function ChartScreen() {
     }
   };
 
-
   const audioDurationMs = stemsDurationMs(song.stems);
   const durationMs = audioDurationMs || (song.midi?.durationMs ?? 0);
   const anyStem = hasAnyStem(song.stems);
@@ -215,7 +214,6 @@ export function ChartScreen() {
           })}
         </div>
       </div>
-
 
       {/* MIDI 拆解结果 */}
       {analysis && (

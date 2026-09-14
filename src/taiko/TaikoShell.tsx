@@ -19,7 +19,6 @@ const DEFAULT_SETTINGS: TaikoSettings = {
   midiDeviceId: null,
 };
 
-
 const NAV: { key: ScreenKey; label: string; hint: string }[] = [
   { key: "play", label: "游玩", hint: "PLAY" },
   { key: "chart", label: "谱面", hint: "CHART" },
@@ -47,7 +46,6 @@ function ShellInner() {
       const parsed = JSON.parse(raw) as Partial<TaikoSettings>;
       setSettings((s) => ({ ...s, ...parsed }));
     } catch {
-
       // 忽略损坏的本地设置
     }
   }, []);

@@ -38,7 +38,6 @@ export function FallScreen({
   speed: number;
   onSpeedChange: (s: number) => void;
 }) {
-
   const song = useSong();
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
@@ -68,7 +67,6 @@ export function FallScreen({
   const beatMsRef = useRef(500);
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
-
 
   // 画质档位（auto 会自动降档；tier 变化时重设画布分辨率）
   const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
@@ -103,7 +101,6 @@ export function FallScreen({
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
   const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
-
 
   /**
    * 谱面 = 鼓 MIDI 拆解后按当前难度重编，并按「文件名 + MIDI 指纹」固化，
@@ -235,7 +232,6 @@ export function FallScreen({
       };
     },
     [playChart, readTimeMs],
-
   );
 
   // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
@@ -446,7 +442,6 @@ export function FallScreen({
           judgementRef.current = { text: "MISS", color: "#f87171", until: now + 500 };
         }
       }
-
 
       const frameChart = playChart ?? {
         title: "",
@@ -706,7 +701,6 @@ export function FallScreen({
         </button>
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
         <span className="text-xs text-[var(--taiko-ink)]/50">速度</span>

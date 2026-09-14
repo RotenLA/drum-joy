@@ -93,9 +93,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
       setState((s) => ({
         ...s,
         difficulty:
-          d === "easy" || d === "beginner" || d === "standard" || d === "hard"
-            ? d
-            : s.difficulty,
+          d === "easy" || d === "beginner" || d === "standard" || d === "hard" ? d : s.difficulty,
         mix: mix
           ? {
               vocals: clamp01(mix["vocals"], DEFAULT_MIX.vocals),

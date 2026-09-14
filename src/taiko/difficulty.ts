@@ -34,22 +34,11 @@ export const NOTE_PARTS: Record<Difficulty, readonly PartId[]> = {
   easy: ["snare", "hihat", "pedalHat"],
   beginner: ["snare", "hihat", "pedalHat", "kick"],
   standard: ["snare", "hihat", "pedalHat", "kick", "floorTom", "crash", "ride"],
-  hard: [
-    "snare",
-    "hihat",
-    "pedalHat",
-    "kick",
-    "floorTom",
-    "crash",
-    "ride",
-    "highTom",
-    "midTom",
-  ],
+  hard: ["snare", "hihat", "pedalHat", "kick", "floorTom", "crash", "ride", "highTom", "midTom"],
 };
 
 /** 踩镲与这些部件不可同刻出现（同刻时踩镲让位） */
 const HIHAT_EXCLUSIVE: readonly PartId[] = ["floorTom", "crash", "ride"];
-
 
 const BIG_VELOCITY = 108;
 
@@ -278,7 +267,6 @@ function excludeHihatClashes(emits: Emit[]): Emit[] {
   }
   return emits.filter((e) => !(e.part === "hihat" && clash.has(e.step)));
 }
-
 
 // ================= 组装 =================
 

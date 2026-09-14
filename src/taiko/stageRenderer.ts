@@ -20,7 +20,6 @@ import {
 } from "./laneLayouts";
 import { quality } from "./perf";
 
-
 /**
  * 当前帧的画质开关（每帧进入 renderStage / renderPadArray 时刷新）。
  * GLOW=false 时全部 shadowBlur 走 0，安卓中低端机上这一项能省掉大半开销。
@@ -262,7 +261,6 @@ export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: numb
   }
   if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0, w, h);
 }
-
 
 /** 渐变缓存：尺寸不变就复用同一批渐变对象 */
 let gradKey = "";
