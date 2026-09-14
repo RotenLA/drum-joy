@@ -736,16 +736,32 @@ export function FallScreen({
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
-            onClick={startCalibration}
-            disabled={calibrating || phase === "playing"}
+            onClick={calibrating ? finishCalibration : startCalibration}
+            disabled={!calibrating && phase === "playing"}
             className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {calibrating ? "跟着节拍敲 8 下…" : "自动校准"}
+            {calibrating ? `停止校准（${calibTaps}/8）` : "自动校准"}
           </button>
           <span className="text-[10px] text-[var(--taiko-ink)]/45">
-            跟着节拍器敲 8 下，自动算出你这台机器的延迟
+            节拍器会一直响，跟着敲 8 下自动算出你这台机器的延迟，也可随时停止
+          </span>
+
+          <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
+          <button
+            onClick={toggleKit}
+            className={`border px-3 py-1.5 text-xs transition-colors ${
+              kitOn
+                ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+            }`}
+          >
+            鼓音色 {kitOn ? "开" : "关"}
+          </button>
+          <span className="text-[10px] text-[var(--taiko-ink)]/45">
+            内置鼓音色，敲击即出声
           </span>
         </div>
+
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
