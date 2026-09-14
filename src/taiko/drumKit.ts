@@ -117,7 +117,7 @@ export function playDrum(part: PartId, velocity = 100): void {
 
   switch (part) {
     case "kick":
-      // 音高下滑的躰 + 一层短促点击，低端喇叭上也能听清
+      // 音高下滑的鼓体 + 一层短促点击，低端喇叭上也能听清
       toneHit(ctx, { t, gain: 0.95 * v, decay: 0.26, from: 130, to: 45 });
       noiseHit(ctx, { t, gain: 0.18 * v, decay: 0.03, type: "lowpass", freq: 1800 });
       break;
