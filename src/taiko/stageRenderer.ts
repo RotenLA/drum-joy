@@ -329,30 +329,17 @@ function noteItems(
 ): DepthItem[] {
   const items: DepthItem[] = [];
   const notes = f.chart.notes;
-  // 只处理可见时间窗内的音符：二分定位起点，右边界一到就跳出，
-  // 不再每帧遍历整首歌上千个音符。
-  const span = LEAD_MS / Math.max(0.1, f.speed);
-  const from = f.timeMs - HOLD_WINDOW_MS;
-  const until = f.timeMs + span;
-  let lo = 0;
-  let hi = notes.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (notes[mid]!.timeMs < from) lo = mid + 1;
-    else hi = mid;
-  }
-  for (let i = lo; i < notes.length; i++) {
-    const n = notes[i]!;
-    if (n.timeMs > until) break;
-    if (n.note === undefined) continue;
+
+  const pushNote = (n: TaikoChart["notes"][number]) => {
+    if (n.note === undefined) return;
     const part = partOfNote(n.note);
-    if (!part) continue;
+    if (!part) return;
     const hold = n.holdMs && n.holdMs > 0 ? n.holdMs : 0;
     // t: 0 = 收束段，1 = 鼓盘（到达即命中，不再绘制）
     const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
     const tTail = hold ? 1 - ((n.timeMs + hold - f.timeMs) * f.speed) / LEAD_MS : t;
-    if (t <= 0.02) continue;
-    if (tTail >= 1) continue;
+    if (t <= 0.02) return;
+    if (tTail >= 1) return;
 
     const anchor = PAD_ANCHORS[part];
     const pad = geomOf(part, w, h);
@@ -377,6 +364,9 @@ function noteItems(
     const fadeIn = Math.min(1, t / 0.1);
     const alpha = (0.35 + 0.65 * p) * fadeIn;
     const headVisible = t < 1;
+    // 踏板顶面朝向：正方形先 rotate(th)，再统一压扁 0.42。
+    // 长音符色带沿同一朝向取宽度方向，才和踏板/音符块看起来是一体的。
+    const pedalTh = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
 
     items.push({
       // 同深度时音符压在鼓盘上层（+ε），保证判定点处不被自己的鼓面吃掉
@@ -388,22 +378,30 @@ function noteItems(
 
         // 长音符：先画一条从尾端连到头部的色带（左踏板「一直踩住」）
         if (hold) {
-          const dx = head.x - tail.x;
-          const dy = head.y - tail.y;
-          const len = Math.hypot(dx, dy) || 1;
-          const nx = -dy / len;
-          const ny = dx / len;
-          const wh = head.rx * 0.55;
-          const wt = tail.rx * 0.55;
+          // 宽度方向：局部 x 轴 (1,0) 经 rotate(th) → scale(1,0.42) 后的屏幕方向
+          let ux: number;
+          let uy: number;
+          if (anchor.square) {
+            ux = Math.cos(pedalTh);
+            uy = 0.42 * Math.sin(pedalTh);
+          } else {
+            ux = Math.cos(pad.rot);
+            uy = 0.42 * Math.sin(pad.rot);
+          }
+          const ul = Math.hypot(ux, uy) || 1;
+          ux /= ul;
+          uy /= ul;
+          const wh = head.rx * 0.9;
+          const wt = tail.rx * 0.9;
           ctx.shadowBlur = GLOW ? 14 * scale : 0;
           ctx.fillStyle = hexToRgba(color, 0.28);
           ctx.strokeStyle = hexToRgba(color, 0.75);
           ctx.lineWidth = Math.max(1, rx * 0.08);
           ctx.beginPath();
-          ctx.moveTo(tail.x + nx * wt, tail.y + ny * wt);
-          ctx.lineTo(head.x + nx * wh, head.y + ny * wh);
-          ctx.lineTo(head.x - nx * wh, head.y - ny * wh);
-          ctx.lineTo(tail.x - nx * wt, tail.y - ny * wt);
+          ctx.moveTo(tail.x + ux * wt, tail.y + uy * wt);
+          ctx.lineTo(head.x + ux * wh, head.y + uy * wh);
+          ctx.lineTo(head.x - ux * wh, head.y - uy * wh);
+          ctx.lineTo(tail.x - ux * wt, tail.y - uy * wt);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
@@ -419,10 +417,9 @@ function noteItems(
           ctx.beginPath();
           if (anchor.square) {
             // 踏板：与踏板顶面同构——正方形先按外八角旋转，再统一压扁 0.42
-            const th = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
             ctx.save();
             ctx.scale(1, 0.42);
-            ctx.rotate(th);
+            ctx.rotate(pedalTh);
             ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
             ctx.restore();
           } else {
@@ -434,10 +431,47 @@ function noteItems(
         ctx.restore();
       },
     });
+  };
+
+  // 长音符（如「整曲踩住」的左踏板）时长远超可见时间窗，单独取一份小列表，
+  // 只要还没结束就一直绘制，不受下面的时间窗裁剪影响。
+  for (const i of holdIndicesOf(f.chart)) pushNote(notes[i]!);
+
+  // 普通音符：只处理可见时间窗内的，二分定位起点，右边界一到就跳出，
+  // 不再每帧遍历整首歌上千个音符。
+  const span = LEAD_MS / Math.max(0.1, f.speed);
+  const from = f.timeMs - 100;
+  const until = f.timeMs + span;
+  let lo = 0;
+  let hi = notes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (notes[mid]!.timeMs < from) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < notes.length; i++) {
+    const n = notes[i]!;
+    if (n.timeMs > until) break;
+    if ((n.holdMs ?? 0) > 0) continue;
+    pushNote(n);
   }
 
   return items;
 }
+
+/** 长音符下标（按谱面缓存，通常只有一条） */
+const holdIndexCache = new WeakMap<TaikoChart, number[]>();
+function holdIndicesOf(chart: TaikoChart): number[] {
+  const hit = holdIndexCache.get(chart);
+  if (hit) return hit;
+  const list: number[] = [];
+  chart.notes.forEach((n, i) => {
+    if ((n.holdMs ?? 0) > 0) list.push(i);
+  });
+  holdIndexCache.set(chart, list);
+  return list;
+}
+
 
 function spawnSparks(id: PartId, color: string, w: number, h: number, now: number) {
   const p = geomOf(id, w, h);
