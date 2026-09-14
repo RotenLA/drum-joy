@@ -100,6 +100,8 @@ const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
 
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
+/** 长音符最长时长的余量（可见窗左边界） */
+const HOLD_WINDOW_MS = 4000;
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
 const LEAD_MS = 2400;
 /** 透视加速指数：>1 让音符近大远小的同时近处加速 */
@@ -427,7 +429,7 @@ function noteItems(
             ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
             ctx.restore();
           } else {
-            ctx.ellipse(0, 0, rx, rx * 0.42, padRotation(anchor, w, h), 0, Math.PI * 2);
+            ctx.ellipse(0, 0, rx, rx * 0.42, pad.rot, 0, Math.PI * 2);
           }
           ctx.fill();
           ctx.stroke();
@@ -443,10 +445,11 @@ function noteItems(
 
 
 
-function spawnSparks(anchor: PadAnchor, color: string, w: number, h: number, now: number) {
-  const p = padPixels(anchor, w, h);
+function spawnSparks(id: PartId, color: string, w: number, h: number, now: number) {
+  const p = geomOf(id, w, h);
   const k = h / 650;
-  for (let i = 0; i < 12; i++) {
+  if (SPARKS <= 0) return;
+  for (let i = 0; i < SPARKS; i++) {
     const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
     const sp = (0.06 + Math.random() * 0.12) * k;
     particles.push({
@@ -459,6 +462,7 @@ function spawnSparks(anchor: PadAnchor, color: string, w: number, h: number, now
       color,
     });
   }
+  if (particles.length > PARTICLE_CAP) particles.splice(0, particles.length - PARTICLE_CAP);
 }
 
 function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
@@ -631,7 +635,7 @@ function drawPad(
 ) {
   const anchor = PAD_ANCHORS[partId];
   const color = PART_BY_ID[partId].color;
-  const p = padPixels(anchor, w, h);
+  const p = geomOf(partId, w, h);
 
   if (anchor.square) {
     // 左右踏板镜像「外八」斜放
@@ -645,7 +649,7 @@ function drawPad(
   ctx.save();
   ctx.translate(p.cx, p.cy);
   // 鼓盘整体随车道旋转：鼓腔/盘面/描边/命中闪一起转，等效鼓面朝向来球方向倾斜
-  ctx.rotate(padRotation(anchor, w, h));
+  ctx.rotate(p.rot);
 
   // 鼓腔侧面：强纵向明暗 + 部件色淡染
   const depth = RY * 0.9;
@@ -936,6 +940,9 @@ export function renderStage(
   h: number,
   f: StageFrame,
 ) {
+  const q = quality.params;
+  GLOW = q.glow;
+  SPARKS = q.particles;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
@@ -951,7 +958,7 @@ export function renderStage(
     const expiry = f.flashes[id] ?? 0;
     const intensity = Math.max(0, Math.min(1, (expiry - f.now) / FLASH_MS));
     if (expiry > (lastFlash[id] ?? 0)) {
-      spawnSparks(PAD_ANCHORS[id], PART_BY_ID[id].color, v.w, v.h, f.now);
+      spawnSparks(id, PART_BY_ID[id].color, v.w, v.h, f.now);
       lastFlash[id] = expiry;
     }
     const missExpiry = f.missFlashes?.[id] ?? 0;
@@ -999,6 +1006,7 @@ export function renderPadArray(
   h: number,
   opts: PadArrayOptions,
 ) {
+  GLOW = quality.params.glow;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   ctx.save();
@@ -1012,7 +1020,7 @@ export function renderPadArray(
     drawPad(ctx, id, intensity, v.w, v.h);
     if (opts.selected === id) {
       const a = PAD_ANCHORS[id];
-      const p = padPixels(a, v.w, v.h);
+      const p = geomOf(id, v.w, v.h);
       ctx.save();
       ctx.strokeStyle = "rgba(255,255,255,0.9)";
       ctx.lineWidth = 2;
@@ -1050,7 +1058,7 @@ export function partAtPoint(
   const sorted = [...parts].sort((a, b) => PAD_ANCHORS[b].cy - PAD_ANCHORS[a].cy);
   for (const id of sorted) {
     const a = PAD_ANCHORS[id];
-    const p = padPixels(a, v.w, v.h);
+    const p = geomOf(id, v.w, v.h);
     const ry = a.square ? p.rx : p.ry; // 方形踏板纵向按全半径判定
     const dx = (lx - p.cx) / (p.rx * 1.15);
     const dy = (ly - p.cy) / (ry * 1.6);
