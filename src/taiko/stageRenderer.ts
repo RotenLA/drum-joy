@@ -179,15 +179,9 @@ function gatePoint(anchor: PadAnchor, w: number, h: number) {
   return { x, y: (anchor.cy - TRAVEL_H) * h };
 }
 
-/**
- * 鼓盘随车道旋转角（相对垂直方向的偏角）：长轴垂直于车道，与飞来音符同向，
- * 扇形鼓阵「面向消失点」。中间列 ≈0°，最外侧（吊镲/叮叮镲）约 ±41°，左右镜像对称。
- * 踏板不适用（保持外八斜放）。
+/*
+ * 鼓盘随车道旋转角在 geomOf() 里按尺寸缓存（长轴垂直于车道，面向消失点）。
  */
-function padRotation(anchor: PadAnchor, w: number, h: number): number {
-  const g = gatePoint(anchor, w, h);
-  return Math.atan2(anchor.cy * h - g.y, anchor.cx * w - g.x) - Math.PI / 2;
-}
 
 
 /**
