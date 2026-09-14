@@ -4,6 +4,15 @@
  * 未选择设备时监听全部输入（方便映射屏验证接线）。
  */
 
+import { debugLog } from "./debugLog";
+import { PART_BY_ID, partOfNote } from "./laneLayouts";
+
+/** 音符号 → 「(部件名)」，未映射时留空 */
+function partTag(note: number): string {
+  const id = partOfNote(note);
+  return id ? ` (${PART_BY_ID[id].label})` : "";
+}
+
 export interface MidiInputInfo {
   id: string;
   name: string;
@@ -51,6 +60,7 @@ class MidiManager {
       this.access = await nav.requestMIDIAccess();
       this.access.onstatechange = () => {
         this.bind();
+        debugLog.push("system", `MIDI 设备变化，当前 ${this.inputs().length} 个输入`);
         for (const f of this.stateListeners) f();
       };
       this.bind();
@@ -89,8 +99,10 @@ class MidiManager {
     const status = d[0]! & 0xf0;
     // note-on：0x90 且力度 > 0（力度 0 视为 note-off）
     if (status === 0x90 && d[2]! > 0) {
+      debugLog.push("midi", `硬件 note-on  ${d[1]} vel ${d[2]}${partTag(d[1]!)}`);
       for (const f of this.noteListeners) f(d[1]!, d[2]!);
     } else if (status === 0x80 || (status === 0x90 && d[2]! === 0)) {
+      debugLog.push("midi", `硬件 note-off ${d[1]}${partTag(d[1]!)}`);
       for (const f of this.noteOffListeners) f(d[1]!);
     }
   }
@@ -103,6 +115,7 @@ class MidiManager {
     const n = Math.round(note);
     const v = Math.round(velocity);
     if (n < 0 || n > 127 || v < 1 || v > 127) return;
+    debugLog.push("inject", `注入 note-on  ${n} vel ${v}${partTag(n)}`);
     for (const f of this.noteListeners) f(n, v);
   }
 
@@ -110,6 +123,7 @@ class MidiManager {
   injectNoteOff(note: number): void {
     const n = Math.round(note);
     if (n < 0 || n > 127) return;
+    debugLog.push("inject", `注入 note-off ${n}${partTag(n)}`);
     for (const f of this.noteOffListeners) f(n);
   }
 
@@ -152,4 +166,5 @@ export function installExternalBridge(): void {
   w["__pd2uNoteOn"] = (note: number, velocity: number) =>
     midiManager.injectNoteOn(note, velocity);
   w["__pd2uNoteOff"] = (note: number) => midiManager.injectNoteOff(note);
+  debugLog.push("system", "已挂载 window.__pd2uNoteOn / __pd2uNoteOff");
 }
