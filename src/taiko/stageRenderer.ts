@@ -90,8 +90,8 @@ const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
 
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
-/** 长音符最长时长的余量（可见窗左边界） */
-const HOLD_WINDOW_MS = 4000;
+/** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
+
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
 const LEAD_MS = 2400;
 /** 透视加速指数：>1 让音符近大远小的同时近处加速 */
@@ -119,6 +119,9 @@ export interface StageFrame {
   judgement?: { text: string; color: string; until: number } | null;
   /** 倒计时大号数字（4/3/2/1），null 不显示 */
   countText?: string | null;
+  /** 是否绘制飞行音符（未开始时为 false，只显示鼓阵） */
+  showNotes?: boolean;
+
   /** 判定统计（HUD 显示 P/G/M 与准确率） */
   stats?: { perfect: number; good: number; miss: number } | null;
   /** 生存模式血量 0~1（其他模式不传） */
