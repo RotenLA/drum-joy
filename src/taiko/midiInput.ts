@@ -33,7 +33,8 @@ interface MidiAccessLike {
   onstatechange: (() => void) | null;
 }
 
-type NoteListener = (note: number, velocity: number) => void;
+/** atMs：敲击时刻（performance.now() 基准），判定用它而不是下一帧渲染时刻 */
+type NoteListener = (note: number, velocity: number, atMs: number) => void;
 type NoteOffListener = (note: number) => void;
 type StateListener = () => void;
 
@@ -100,7 +101,8 @@ class MidiManager {
     // note-on：0x90 且力度 > 0（力度 0 视为 note-off）
     if (status === 0x90 && d[2]! > 0) {
       debugLog.push("midi", `硬件 note-on  ${d[1]} vel ${d[2]}${partTag(d[1]!)}`);
-      for (const f of this.noteListeners) f(d[1]!, d[2]!);
+      const at = performance.now();
+      for (const f of this.noteListeners) f(d[1]!, d[2]!, at);
     } else if (status === 0x80 || (status === 0x90 && d[2]! === 0)) {
       debugLog.push("midi", `硬件 note-off ${d[1]}${partTag(d[1]!)}`);
       for (const f of this.noteOffListeners) f(d[1]!);
@@ -111,12 +113,32 @@ class MidiManager {
    * 宿主（Unity 等）注入 note-on：与硬件消息走同一套 listener，
    * 因此映射、判定、鼓盘闪光行为完全一致。
    */
-  injectNoteOn(note: number, velocity: number): void {
+  injectNoteOn(note: number, velocity: number, hostTimeMs?: number): void {
     const n = Math.round(note);
     const v = Math.round(velocity);
     if (n < 0 || n > 127 || v < 1 || v > 127) return;
+    const at = this.toLocalTime(hostTimeMs);
     debugLog.push("inject", `注入 note-on  ${n} vel ${v}${partTag(n)}`);
-    for (const f of this.noteListeners) f(n, v);
+    for (const f of this.noteListeners) f(n, v, at);
+  }
+
+  /**
+   * 宿主时间戳 → 本地 performance.now() 基准。
+   * 首次注入时记录两个时钟的差值，之后按差值换算，
+   * 这样低帧率下判定也能还原真实敲击时刻。
+   */
+  private hostEpoch: number | null = null;
+  private toLocalTime(hostTimeMs?: number): number {
+    const now = performance.now();
+    if (hostTimeMs === undefined || !Number.isFinite(hostTimeMs)) return now;
+    if (this.hostEpoch === null) this.hostEpoch = hostTimeMs - now;
+    const local = hostTimeMs - this.hostEpoch;
+    // 偏差过大（宿主重启计时器等）时重新对齐
+    if (Math.abs(local - now) > 1000) {
+      this.hostEpoch = hostTimeMs - now;
+      return now;
+    }
+    return local;
   }
 
   /** 宿主注入 note-off（长音符判定用） */
@@ -163,8 +185,8 @@ export function installExternalBridge(): void {
   const w = window as unknown as Record<string, unknown>;
   if (w["__pd2uBridgeInstalled"]) return;
   w["__pd2uBridgeInstalled"] = true;
-  w["__pd2uNoteOn"] = (note: number, velocity: number) =>
-    midiManager.injectNoteOn(note, velocity);
+  w["__pd2uNoteOn"] = (note: number, velocity: number, hostTimeMs?: number) =>
+    midiManager.injectNoteOn(note, velocity, hostTimeMs);
   w["__pd2uNoteOff"] = (note: number) => midiManager.injectNoteOff(note);
   debugLog.push("system", "已挂载 window.__pd2uNoteOn / __pd2uNoteOff");
 }
