@@ -7,7 +7,7 @@ import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { DebugLogPanel } from "./DebugLogPanel";
-import { click as metronomeClick } from "./metronome";
+import { click as metronomeClick, getAudioContext } from "./metronome";
 import { loadKitEnabled, playDrum, saveKitEnabled } from "./drumKit";
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
@@ -197,11 +197,9 @@ export function FallScreen({
   const readTimeMs = useCallback(
     (now: number) => {
       const ph = phaseRef.current;
-      if (ph === "playing") {
+      // 倒计时与播放共用同一个时钟（音频时钟为准），从负数连续走到 0
+      if (ph === "playing" || ph === "countdown") {
         return hasAudio ? songPlayer.timeMs() : now - silentStartRef.current;
-      }
-      if (ph === "countdown") {
-        return now - countdownStartRef.current - countdownMsRef.current;
       }
       if (ph === "idle") return 0;
       return timeRef.current;
