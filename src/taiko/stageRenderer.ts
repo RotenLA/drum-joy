@@ -287,7 +287,7 @@ function noteItems(
           const ny = dx / len;
           const wh = head.rx * 0.55;
           const wt = tail.rx * 0.55;
-          ctx.shadowBlur = 14 * scale;
+          ctx.shadowBlur = GLOW ? (14 * scale) : 0;
           ctx.fillStyle = hexToRgba(color, 0.28);
           ctx.strokeStyle = hexToRgba(color, 0.75);
           ctx.lineWidth = Math.max(1, rx * 0.08);
@@ -303,7 +303,7 @@ function noteItems(
 
         if (headVisible) {
           ctx.translate(x, y);
-          ctx.shadowBlur = 18 * scale;
+          ctx.shadowBlur = GLOW ? (18 * scale) : 0;
           ctx.lineWidth = Math.max(1.4, rx * 0.16);
           ctx.strokeStyle = color;
           ctx.fillStyle = hexToRgba(color, 0.34);
@@ -366,7 +366,7 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
     const a = 1 - age / pt.life;
     ctx.globalAlpha = a;
     ctx.shadowColor = pt.color;
-    ctx.shadowBlur = 6;
+    ctx.shadowBlur = GLOW ? (6) : 0;
     ctx.fillStyle = pt.color;
     ctx.beginPath();
     ctx.arc(x, y, 2, 0, Math.PI * 2);
@@ -479,7 +479,7 @@ function drawSquarePad(
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
-  ctx.shadowBlur = 12 + 26 * intensity;
+  ctx.shadowBlur = GLOW ? (12 + 26 * intensity) : 0;
   ctx.strokeStyle = hexToRgba(color, 0.85);
   ctx.lineWidth = 2.5 + 2.5 * intensity;
   topPath();
@@ -580,7 +580,7 @@ function drawPad(
 
   // 描边 + 泛光（命中时增亮）
   ctx.shadowColor = color;
-  ctx.shadowBlur = 12 + 26 * intensity;
+  ctx.shadowBlur = GLOW ? (12 + 26 * intensity) : 0;
   ctx.strokeStyle = hexToRgba(color, 0.85);
   ctx.lineWidth = 2.5 + 2.5 * intensity;
   ctx.beginPath();
@@ -620,7 +620,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.fillStyle = "rgba(255,255,255,0.08)";
   ctx.fillRect(0, 0, w, 3);
   ctx.shadowColor = "#5D8CF4";
-  ctx.shadowBlur = 8;
+  ctx.shadowBlur = GLOW ? (8) : 0;
   ctx.fillStyle = "#5D8CF4";
   ctx.fillRect(0, 0, w * Math.min(1, progress), 3);
   ctx.shadowBlur = 0;
@@ -635,7 +635,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     const low = f.hp < 0.3;
     const col = low ? "#f87171" : f.hp < 0.6 ? "#fbbf24" : "#4ade80";
     ctx.shadowColor = col;
-    ctx.shadowBlur = low ? 14 + 8 * Math.sin(f.now / 120) : 10;
+    ctx.shadowBlur = GLOW ? (low ? 14 + 8 * Math.sin(f.now / 120) : 10) : 0;
     ctx.fillStyle = col;
     ctx.fillRect(bx, by, bw * Math.max(0, f.hp), 8);
     ctx.shadowBlur = 0;
@@ -654,7 +654,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.fillStyle = "#ffffff";
   ctx.font = "800 26px system-ui, sans-serif";
   ctx.shadowColor = "rgba(255,255,255,0.3)";
-  ctx.shadowBlur = 10;
+  ctx.shadowBlur = GLOW ? (10) : 0;
   ctx.fillText(String(f.score).padStart(7, "0"), 28, 58);
   ctx.shadowBlur = 0;
 
@@ -672,7 +672,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     const size = Math.round(h * 0.062);
     ctx.textAlign = "left";
     ctx.shadowColor = "rgba(255,255,255,0.4)";
-    ctx.shadowBlur = 16;
+    ctx.shadowBlur = GLOW ? (16) : 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = `italic 900 ${size}px system-ui, sans-serif`;
     ctx.fillText(String(f.combo), 28, 58 + size + 10);
@@ -703,7 +703,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     ctx.textAlign = "center";
     ctx.globalAlpha = a;
     ctx.shadowColor = f.judgement.color;
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = GLOW ? (18) : 0;
     ctx.fillStyle = f.judgement.color;
     ctx.font = `800 ${Math.round(h * 0.045)}px system-ui, sans-serif`;
     ctx.fillText(f.judgement.text, w / 2, h * 0.3);
@@ -715,7 +715,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   if (f.countText) {
     ctx.textAlign = "center";
     ctx.shadowColor = "rgba(255,255,255,0.5)";
-    ctx.shadowBlur = 30;
+    ctx.shadowBlur = GLOW ? (30) : 0;
     ctx.fillStyle = "#ffffff";
     ctx.font = `900 ${Math.round(h * 0.22)}px system-ui, sans-serif`;
     ctx.fillText(f.countText, w / 2, h * 0.45);
@@ -775,7 +775,7 @@ function drawStick(
   grad.addColorStop(0.55, hexToRgba(color, 0.7));
   grad.addColorStop(1, hexToRgba(color, 0.95));
   ctx.shadowColor = color;
-  ctx.shadowBlur = h * 0.03;
+  ctx.shadowBlur = GLOW ? (h * 0.03) : 0;
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(buttX + nx * wButt, buttY + ny * wButt);
@@ -796,7 +796,7 @@ function drawStick(
 
   // 棒头：小球 + 落点光圈
   ctx.shadowColor = color;
-  ctx.shadowBlur = h * 0.04;
+  ctx.shadowBlur = GLOW ? (h * 0.04) : 0;
   ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(tipX, tipY, wTip * 1.5, 0, Math.PI * 2);

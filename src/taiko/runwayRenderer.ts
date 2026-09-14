@@ -80,7 +80,7 @@ export function renderRunway(
     ctx.strokeStyle = hexToRgba(color, 0.6 + 0.4 * intensity);
     ctx.lineWidth = 1.5 + 2 * intensity;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 8 + 20 * intensity;
+    ctx.shadowBlur = GLOW ? (8 + 20 * intensity) : 0;
     ctx.strokeRect(bx, y + 2, laneH * 1.0, laneH - 4);
     ctx.shadowBlur = 0;
 
@@ -101,7 +101,7 @@ export function renderRunway(
   ctx.strokeStyle = "rgba(255,255,255,0.85)";
   ctx.lineWidth = 2;
   ctx.shadowColor = "rgba(255,255,255,0.6)";
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur = GLOW ? (12) : 0;
   ctx.beginPath();
   ctx.moveTo(hitX, top);
   ctx.lineTo(hitX, top + usable);
@@ -130,7 +130,7 @@ export function renderRunway(
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.shadowColor = color;
-    ctx.shadowBlur = 14;
+    ctx.shadowBlur = GLOW ? (14) : 0;
     ctx.fillStyle = hexToRgba(color, 0.38);
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
