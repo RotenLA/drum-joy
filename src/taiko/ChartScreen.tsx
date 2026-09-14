@@ -143,74 +143,56 @@ export function ChartScreen() {
     return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
   };
 
-  const fileInput = (
-    <input
-      ref={fileInputRef}
-      type="file"
-      multiple
-      accept=".mp3,.wav,.m4a,.ogg,.flac,.mid,.midi,audio/*"
-      className="hidden"
-      onChange={(e) => {
-        const list = Array.from(e.target.files ?? []);
-        if (list.length > 0) void importFiles(list);
-        e.target.value = "";
-      }}
-    />
+  const songList = (
+    <div className="border border-[var(--taiko-line)] px-4 py-3">
+      <div className="mb-3 flex items-center gap-3">
+        <span className="text-sm font-medium">选择歌曲</span>
+        {ready && !loadingId && <span className="text-xs text-emerald-400">已就绪</span>}
+        {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {PRESET_SONGS.map((p) => {
+          const active = song.fileName === p.title;
+          const busyThis = loadingId === p.id;
+          return (
+            <button
+              key={p.id}
+              onClick={() => void pickSong(p)}
+              disabled={loadingId !== null}
+              className={`relative overflow-hidden border px-3 py-2 text-left text-sm transition-colors disabled:opacity-60 ${
+                active
+                  ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/10"
+                  : "border-[var(--taiko-line)] hover:border-[var(--taiko-ink)]"
+              }`}
+            >
+              <span className="relative z-10 block truncate">{p.title}</span>
+              <span className="relative z-10 block text-xs tabular-nums text-[var(--taiko-ink)]/50">
+                {busyThis ? `${percent}%` : active ? "已加载" : "点击加载"}
+              </span>
+              {busyThis && (
+                <span
+                  className="absolute inset-y-0 left-0 bg-[var(--taiko-ink)]/15 transition-[width] duration-200"
+                  style={{ width: `${percent}%` }}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 
-  // ---- 空态：拖放区 ----
-  if (!song.midi && !anyStem) {
-    return (
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          void importFiles(Array.from(e.dataTransfer.files ?? []));
-        }}
-        className={`flex h-64 flex-col items-center justify-center gap-3 border border-dashed transition-colors ${
-          dragOver
-            ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/5"
-            : "border-[var(--taiko-line)]"
-        }`}
-      >
-        <p className="text-sm text-[var(--taiko-ink)]/70">
-          把这首歌的 stem 音轨和鼓 MIDI 一起拖到这里
-        </p>
-        <p className="text-xs text-[var(--taiko-ink)]/45">
-          xxx_Vocals / _Bass / _Drums / _Other.mp3（可缺）+ xxx.mid（必需）
-        </p>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="border border-[var(--taiko-ink)] px-6 py-2 text-sm text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
-          >
-            选择文件
-          </button>
-          <button
-            onClick={() => void importSample()}
-            disabled={busy !== null}
-            className="border border-[var(--taiko-line)] px-6 py-2 text-sm text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
-          >
-            载入示例曲：{SAMPLE_TITLE}
-          </button>
-        </div>
-        {busy && <p className="text-xs text-[var(--taiko-ink)]/50">{busy}</p>}
-        {warn && <p className="text-xs text-[var(--taiko-ink)]/60">{warn}</p>}
-        {fileInput}
-      </div>
-    );
+  if (!song.midi && !hasAnyStem(song.stems)) {
+    return <div className="flex flex-col gap-6">{songList}</div>;
   }
 
   const tempoChanges = song.midi ? Math.max(0, song.midi.tempos.length - 1) : 0;
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 配对信息 */}
+      {songList}
+
+      {/* 当前歌曲信息 */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">{song.fileName || "未命名"}</div>
@@ -227,37 +209,13 @@ export function ChartScreen() {
                 key={k}
                 className={t ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/30"}
               >
-                {STEM_LABEL[k]}：{t ? t.fileName : "未导入"}
+                {STEM_LABEL[k]}：{t ? "已就绪" : "无"}
               </span>
             );
           })}
-          <span
-            className={
-              song.midiFileName ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/35"
-            }
-          >
-            MIDI：{song.midiFileName || "未导入（无法生成谱面）"}
-          </span>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => void importSample()}
-            disabled={busy !== null}
-            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:opacity-40"
-          >
-            示例曲
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-          >
-            导入 / 补充文件
-          </button>
-        </div>
-        {busy && <span className="text-xs text-[var(--taiko-ink)]/50">{busy}</span>}
-        {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
-        {fileInput}
       </div>
+
 
       {/* MIDI 拆解结果 */}
       {analysis && (
