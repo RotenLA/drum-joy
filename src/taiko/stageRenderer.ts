@@ -4,13 +4,12 @@
  * 纯 Canvas 2D 伪 3D，与 React 解耦。鼓盘摆位/颜色全部来自
  * laneLayouts 的 PAD_ANCHORS / DRUM_PARTS，本文件只负责绘制。
  *
- * 场景：专辑封面全幅铺底（压灰压暗 + 全屏纵向遮罩），无地板/倒影/接触阴影，
+ * 场景：干净的暗夜网格背景（深色渐变 + 地平线 + 淡透视网格 + 中心聚光），
  * 9 条细光车道按「三排独立收束段」辐射到各排鼓盘（宽约一个通鼓，非单点），
  * 音符由小变大滑向鼓盘，鼓盘即判定落点，命中时鼓盘增亮回弹并喷火花粒子。
  * 踏板为斜放的立方体（顶面旋转后按 0.42 均匀压扁，与鼓面椭圆同一压扁比）。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
-import stageWallUrl from "@/assets/stage-wall.jpg";
 import {
   DRUM_PARTS,
   PAD_ANCHORS,
@@ -21,9 +20,6 @@ import {
 } from "./laneLayouts";
 import { quality } from "./perf";
 
-/** 专辑封面背景（浏览器侧懒加载；SSR 无 Image，退回纯色背景） */
-const wallImg = typeof Image !== "undefined" ? new Image() : null;
-if (wallImg) wallImg.src = stageWallUrl;
 
 /**
  * 当前帧的画质开关（每帧进入 renderStage / renderPadArray 时刷新）。
@@ -178,13 +174,16 @@ function gatePoint(anchor: PadAnchor, w: number, h: number) {
  */
 
 /**
- * 背景（封面铺满 + 压灰 + 遮罩 + 聚光）预先画到离屏画布，之后每帧只贴一次图。
- * 原实现每帧都跑一次图像滤镜 + 两个渐变，是安卓上最重的一项。
+ * 背景：干净的「暗夜网格」——深灰渐变底 + 地平线 + 极淡透视网格 + 中心微弱聚光。
+ * 预先烘焙到离屏画布，之后每帧只贴一次图（安卓上省掉大半开销）。
  */
 let bgCanvas: HTMLCanvasElement | null = null;
 let bgKey = "";
 
-function buildBackground(w: number, h: number, scale: number, filter: boolean) {
+/** 地平线高度（屏高比例，落在上排鼓盘之上） */
+const HORIZON = 0.42;
+
+function buildBackground(w: number, h: number, scale: number) {
   const cw = Math.max(1, Math.round(w * scale));
   const ch = Math.max(1, Math.round(h * scale));
   const cv = bgCanvas ?? document.createElement("canvas");
@@ -194,57 +193,76 @@ function buildBackground(w: number, h: number, scale: number, filter: boolean) {
   const c = cv.getContext("2d");
   if (!c) return;
   c.setTransform(scale, 0, 0, scale, 0, 0);
-  c.fillStyle = "#0a0a0c";
-  c.fillRect(0, 0, w, h);
 
-  if (wallImg && wallImg.complete && wallImg.naturalWidth > 0) {
-    const iw = wallImg.naturalWidth;
-    const ih = wallImg.naturalHeight;
-    // 专辑封面全幅铺底：cover 铺满整个画布，居中裁剪
-    const s = Math.max(w / iw, h / ih);
-    const dw = iw * s;
-    const dh = ih * s;
-    const dx = (w - dw) / 2;
-    const dy = (h - dh) / 2;
+  // 上：夜空；下：地面，都极暗
+  const sky = c.createLinearGradient(0, 0, 0, h * HORIZON);
+  sky.addColorStop(0, "#07070a");
+  sky.addColorStop(1, "#15161c");
+  c.fillStyle = sky;
+  c.fillRect(0, 0, w, h * HORIZON);
 
-    // 压灰压暗（「灰一点点」）；低档跳过滤镜，用一层暗色叠加代替
-    if (filter) c.filter = "saturate(0.55) brightness(0.65)";
-    c.drawImage(wallImg, dx, dy, dw, dh);
-    c.filter = "none";
-    if (!filter) {
-      c.fillStyle = "rgba(8,8,10,0.35)";
-      c.fillRect(0, 0, w, h);
-    }
-    // 全屏纵向遮罩：顶部压暗保 HUD/车道可读，中段最浅展示封面，底部略压暗衬托鼓盘泛光
-    const veil = c.createLinearGradient(0, 0, 0, h);
-    veil.addColorStop(0, "rgba(6,6,8,0.55)");
-    veil.addColorStop(0.45, "rgba(6,6,8,0.18)");
-    veil.addColorStop(1, "rgba(6,6,8,0.4)");
-    c.fillStyle = veil;
-    c.fillRect(0, 0, w, h);
+  const floor = c.createLinearGradient(0, h * HORIZON, 0, h);
+  floor.addColorStop(0, "#1b1d25");
+  floor.addColorStop(1, "#0b0b0e");
+  c.fillStyle = floor;
+  c.fillRect(0, h * HORIZON, w, h - h * HORIZON);
+
+  // 地平线
+  c.strokeStyle = "rgba(120,130,155,0.22)";
+  c.lineWidth = 1;
+  c.beginPath();
+  c.moveTo(0, h * HORIZON);
+  c.lineTo(w, h * HORIZON);
+  c.stroke();
+
+  // 透视网格：纵线汇聚到消失点，横线随距离加密
+  const vpx = w / 2;
+  const vpy = h * HORIZON;
+  c.strokeStyle = "rgba(91,96,112,0.16)";
+  c.lineWidth = 1;
+  for (let i = -7; i <= 7; i++) {
+    if (i === 0) continue;
+    c.beginPath();
+    c.moveTo(vpx + i * w * 0.035, vpy);
+    c.lineTo(vpx + i * w * 0.34, h);
+    c.stroke();
+  }
+  for (let k = 1; k <= 7; k++) {
+    const t = Math.pow(k / 8, 2.1);
+    const y = vpy + (h - vpy) * t;
+    c.strokeStyle = `rgba(91,96,112,${0.05 + t * 0.12})`;
+    c.beginPath();
+    c.moveTo(0, y);
+    c.lineTo(w, y);
+    c.stroke();
   }
 
-  // 顶部聚光灯
-  const spot = c.createRadialGradient(w * 0.5, h * 0.18, 0, w * 0.5, h * 0.18, h * 0.8);
-  spot.addColorStop(0, "rgba(80,110,255,0.12)");
-  spot.addColorStop(1, "rgba(80,110,255,0)");
+  // 中心微弱聚光 + 四角压暗
+  const spot = c.createRadialGradient(w * 0.5, h * 0.35, 0, w * 0.5, h * 0.35, h * 0.9);
+  spot.addColorStop(0, "rgba(150,175,220,0.07)");
+  spot.addColorStop(1, "rgba(150,175,220,0)");
   c.fillStyle = spot;
+  c.fillRect(0, 0, w, h);
+
+  const edge = c.createRadialGradient(w * 0.5, h * 0.5, h * 0.35, w * 0.5, h * 0.5, h * 1.05);
+  edge.addColorStop(0, "rgba(4,4,6,0)");
+  edge.addColorStop(1, "rgba(4,4,6,0.55)");
+  c.fillStyle = edge;
   c.fillRect(0, 0, w, h);
 }
 
 export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const filter = quality.params.bgFilter;
   // 画布已带 dpr 变换，按同一比例烘焙背景，避免贴图被放大发虚
   const scale = Math.min(2, Math.max(1, ctx.getTransform().a || 1));
-  const ready = !!(wallImg && wallImg.complete && wallImg.naturalWidth > 0);
-  const key = `${Math.round(w)}x${Math.round(h)}@${scale}:${filter ? 1 : 0}:${ready ? 1 : 0}`;
+  const key = `${Math.round(w)}x${Math.round(h)}@${scale}`;
   if (typeof document === "undefined") return;
   if (key !== bgKey || !bgCanvas) {
-    buildBackground(w, h, scale, filter);
+    buildBackground(w, h, scale);
     bgKey = key;
   }
   if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0, w, h);
 }
+
 
 /** 渐变缓存：尺寸不变就复用同一批渐变对象 */
 let gradKey = "";
