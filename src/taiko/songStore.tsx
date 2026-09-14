@@ -77,7 +77,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
     phaseBeatOffset: 0,
     bpm: 120,
     timeSignature: [4, 4],
-    difficulty: "standard",
+    difficulty: "easy",
     mix: { ...DEFAULT_MIX },
     chart: null,
   });
@@ -92,7 +92,10 @@ export function SongProvider({ children }: { children: ReactNode }) {
       const mix = parsed["mix"] as Record<string, unknown> | undefined;
       setState((s) => ({
         ...s,
-        difficulty: d === "beginner" || d === "standard" || d === "hard" ? d : s.difficulty,
+        difficulty:
+          d === "easy" || d === "beginner" || d === "standard" || d === "hard"
+            ? d
+            : s.difficulty,
         mix: mix
           ? {
               vocals: clamp01(mix["vocals"], DEFAULT_MIX.vocals),
