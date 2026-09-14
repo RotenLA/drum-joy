@@ -50,16 +50,19 @@ class QualityController {
   private lastDrop = 0;
   private listeners = new Set<() => void>();
 
-  constructor() {
-    if (typeof localStorage !== "undefined") {
-      try {
-        const raw = localStorage.getItem(STORE_KEY);
-        if (raw === "auto" || TIERS.includes(raw as QualityTier)) {
+  /** hydration 之后再读本地设置，避免 SSR 与客户端首帧不一致 */
+  hydrate(): void {
+    if (typeof localStorage === "undefined") return;
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw === "auto" || TIERS.includes(raw as QualityTier)) {
+        if (raw !== this.mode) {
           this.mode = raw as QualityMode;
+          for (const f of this.listeners) f();
         }
-      } catch {
-        // 存储不可用，用默认
       }
+    } catch {
+      // 存储不可用，用默认
     }
   }
 

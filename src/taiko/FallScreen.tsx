@@ -12,9 +12,10 @@ import { click as metronomeClick } from "./metronome";
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
 import { HP_GOOD, HP_MAX, HP_MISS, HP_PERFECT, clampHp, survivalSpeed } from "./survival";
-import { TIER_LABEL, quality, type QualityMode } from "./perf";
+import { TIER_LABEL, quality, type QualityMode, type QualityTier } from "./perf";
 import {
   CALIB_RANGE,
+  DEFAULT_CALIBRATION,
   loadCalibration,
   saveCalibration,
   tapOffsetMs,
@@ -79,9 +80,12 @@ export function FallScreen({
   const [deadOut, setDeadOut] = useState(false);
 
   // 画质档位（auto 会自动降档；tier 变化时重设画布分辨率）
-  const [qualityMode, setQualityMode] = useState<QualityMode>(() => quality.getMode());
-  const [tier, setTier] = useState(() => quality.tier);
+  const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
+  const [tier, setTier] = useState<QualityTier>("high");
   useEffect(() => {
+    quality.hydrate();
+    setQualityMode(quality.getMode());
+    setTier(quality.tier);
     const off = quality.subscribe(() => {
       setQualityMode(quality.getMode());
       setTier(quality.tier);
@@ -90,7 +94,10 @@ export function FallScreen({
   }, []);
 
   // 延迟校准（视觉 / 判定偏移）
-  const [calib, setCalib] = useState<Calibration>(() => loadCalibration());
+  const [calib, setCalib] = useState<Calibration>(DEFAULT_CALIBRATION);
+  useEffect(() => {
+    setCalib(loadCalibration());
+  }, []);
   const calibRef = useRef<Calibration>(calib);
   useEffect(() => {
     calibRef.current = calib;
