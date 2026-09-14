@@ -11,9 +11,10 @@ export interface Calibration {
   judgeMs: number;
 }
 
-const KEY = "taiko.calib.v1";
+const KEY = "taiko.calib.v2";
 export const CALIB_RANGE = 200;
-export const DEFAULT_CALIBRATION: Calibration = { visualMs: 0, judgeMs: 0 };
+/** 判定偏移默认 80ms：实机上这个值最贴手感 */
+export const DEFAULT_CALIBRATION: Calibration = { visualMs: 0, judgeMs: 80 };
 
 const clamp = (v: number) => Math.max(-CALIB_RANGE, Math.min(CALIB_RANGE, Math.round(v || 0)));
 
@@ -23,7 +24,10 @@ export function loadCalibration(): Calibration {
     const raw = localStorage.getItem(KEY);
     if (!raw) return { ...DEFAULT_CALIBRATION };
     const p = JSON.parse(raw) as Partial<Calibration>;
-    return { visualMs: clamp(p.visualMs ?? 0), judgeMs: clamp(p.judgeMs ?? 0) };
+    return {
+      visualMs: clamp(p.visualMs ?? DEFAULT_CALIBRATION.visualMs),
+      judgeMs: clamp(p.judgeMs ?? DEFAULT_CALIBRATION.judgeMs),
+    };
   } catch {
     return { ...DEFAULT_CALIBRATION };
   }

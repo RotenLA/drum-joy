@@ -56,7 +56,11 @@ class SongPlayer {
     return this.levels[kind];
   }
 
-  play(fromMs?: number): void {
+  /**
+   * 起播。atCtxSec 给定绝对的 AudioContext 时刻（用于倒计时：先排程，
+   * 时钟从负数连续走到 0，切换时不会跳位）。
+   */
+  play(fromMs?: number, atCtxSec?: number): void {
     if (!this.hasAudio) return;
     this.stopSources();
     const ctx = getAudioContext();
@@ -65,7 +69,7 @@ class SongPlayer {
       Math.max(0, this.durationMs - 10),
     );
     this.startOffsetMs = offset;
-    this.startCtxSec = ctx.currentTime + 0.05;
+    this.startCtxSec = Math.max(atCtxSec ?? ctx.currentTime + 0.05, ctx.currentTime + 0.02);
 
     // 结束回调挂在最长的一轨上
     let longest: StemKind | null = null;

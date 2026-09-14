@@ -7,7 +7,7 @@ import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { DebugLogPanel } from "./DebugLogPanel";
-import { click as metronomeClick } from "./metronome";
+import { click as metronomeClick, getAudioContext } from "./metronome";
 import { loadKitEnabled, playDrum, saveKitEnabled } from "./drumKit";
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
@@ -197,11 +197,9 @@ export function FallScreen({
   const readTimeMs = useCallback(
     (now: number) => {
       const ph = phaseRef.current;
-      if (ph === "playing") {
+      // 倒计时与播放共用同一个时钟（音频时钟为准），从负数连续走到 0
+      if (ph === "playing" || ph === "countdown") {
         return hasAudio ? songPlayer.timeMs() : now - silentStartRef.current;
-      }
-      if (ph === "countdown") {
-        return now - countdownStartRef.current - countdownMsRef.current;
       }
       if (ph === "idle") return 0;
       return timeRef.current;
@@ -366,20 +364,21 @@ export function FallScreen({
     resetRun();
     const beatMs = 60000 / playChart.bpm;
     beatMsRef.current = beatMs;
-    countdownMsRef.current = COUNT_IN_BEATS * beatMs;
+    const countdownMs = COUNT_IN_BEATS * beatMs;
+    countdownMsRef.current = countdownMs;
+    // 一次算好歌曲的绝对起播时刻，倒计时由同一时钟倒推 → 切换时不跳位
+    const ctx = getAudioContext();
+    const LEAD_SEC = 0.15;
+    const songStartSec = ctx.currentTime + LEAD_SEC + countdownMs / 1000;
     countdownStartRef.current = performance.now();
-    timeRef.current = -countdownMsRef.current;
+    timeRef.current = -countdownMs;
+    if (hasAudio) songPlayer.play(0, songStartSec);
+    else silentStartRef.current = performance.now() + LEAD_SEC * 1000 + countdownMs;
     setPhaseBoth("countdown");
+    // 倒计时滴答挂在同一条音频时间轴上
     for (let i = 0; i < COUNT_IN_BEATS; i++) {
-      timersRef.current.push(window.setTimeout(() => metronomeClick(i === 0), i * beatMs));
+      metronomeClick(i === 0, songStartSec - countdownMs / 1000 + (i * beatMs) / 1000);
     }
-    timersRef.current.push(
-      window.setTimeout(() => {
-        if (hasAudio) songPlayer.play(0);
-        else silentStartRef.current = performance.now();
-        setPhaseBoth("playing");
-      }, COUNT_IN_BEATS * beatMs),
-    );
   }, [hasAudio, playChart, resetRun, setPhaseBoth]);
 
   const togglePause = useCallback(() => {
@@ -447,8 +446,14 @@ export function FallScreen({
       last = now;
       quality.sample(dt, now);
 
-      const ph = phaseRef.current;
+      let ph = phaseRef.current;
       const t = readTimeMs(now);
+      // 倒计时走到 0 → 直接进入演奏（时钟不重设，音符不跳位）
+      if (ph === "countdown" && t >= 0) {
+        ph = "playing";
+        phaseRef.current = "playing";
+        setPhase("playing");
+      }
       if (ph === "playing") {
         if (!hasAudio && playChart && t > playChart.durationMs) {
           phaseRef.current = "ended";
@@ -504,14 +509,7 @@ export function FallScreen({
       };
       const countText =
         ph === "countdown"
-          ? String(
-              Math.max(
-                1,
-                Math.ceil(
-                  (countdownMsRef.current - (now - countdownStartRef.current)) / beatMsRef.current,
-                ),
-              ),
-            )
+          ? String(Math.min(COUNT_IN_BEATS, Math.max(1, Math.ceil(-t / beatMsRef.current))))
           : null;
 
       const frame = {
