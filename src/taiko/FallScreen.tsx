@@ -530,6 +530,9 @@ export function FallScreen({
         judgement: judgementRef.current,
         countText,
         stats: statsRef.current,
+        // 未开始（idle）时不画音符，只显示鼓阵
+        showNotes: ph !== "idle",
+
         // 宿主实时注入的鼓棒姿态（无数据时为 null，不绘制）
         sticks: stickManager.latest(),
       };
