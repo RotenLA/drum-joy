@@ -210,18 +210,21 @@ export function FallScreen({
     [hasAudio],
   );
 
-  // 击打：闪光 + 命中判定（空击只闪光不惩罚）
+  // 击打：鼓音色 + 闪光 + 命中判定（空击只出声闪光，不惩罚）
   const hitPart = useCallback(
-    (part: PartId, atMs?: number) => {
+    (part: PartId, atMs?: number, velocity = 100) => {
       const now = performance.now();
       const at = atMs !== undefined && Number.isFinite(atMs) ? atMs : now;
       flashesRef.current[part] = now + FLASH_MS;
+      if (kitOnRef.current) playDrum(part, velocity);
       // 跟拍校准中：只收集敲击时刻
       const run = calibRunRef.current;
       if (run) {
         run.taps.push(at);
+        setCalibTaps(run.taps.length);
         return;
       }
+
       if (phaseRef.current !== "playing" || !playChart) return;
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
       const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
