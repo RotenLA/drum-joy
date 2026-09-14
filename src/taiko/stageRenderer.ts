@@ -85,7 +85,11 @@ export interface StageFrame {
   stats?: { perfect: number; good: number; miss: number } | null;
   /** 生存模式血量 0~1（其他模式不传） */
   hp?: number | null;
-
+  /** 宿主注入的鼓棒姿态（度）；null / 缺省不绘制该棒 */
+  sticks?: {
+    l: { p: number; y: number } | null;
+    r: { p: number; y: number } | null;
+  } | null;
 }
 
 interface Particle {
