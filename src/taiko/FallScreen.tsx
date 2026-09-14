@@ -12,6 +12,8 @@ import { useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
+import { stickManager } from "./stickInput";
+import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick } from "./metronome";
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
@@ -433,6 +435,8 @@ export function FallScreen({
         countText,
         stats: statsRef.current,
         hp: survival ? hpRef.current / HP_MAX : null,
+        // 宿主实时注入的鼓棒姿态（无数据时为 null，不绘制）
+        sticks: stickManager.latest(),
       };
 
       if (playMode === "runway") {
@@ -468,6 +472,9 @@ export function FallScreen({
         }}
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
+
+        {/* 可开关的调试打印小窗 */}
+        <DebugLogPanel />
 
         {/* 空态 / 开始 / 暂停 / 结算遮罩 */}
         {!song.midi && (

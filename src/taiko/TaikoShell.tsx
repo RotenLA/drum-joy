@@ -4,6 +4,7 @@ import { FallScreen, type PlayMode } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
+import { installStickBridge } from "./stickInput";
 
 type ScreenKey = "play" | "chart" | "mapping";
 
@@ -59,6 +60,7 @@ function ShellInner() {
   // 暴露 __pd2uNoteOn/__pd2uNoteOff 给 Unity 等宿主注入 MIDI 事件
   useEffect(() => {
     installExternalBridge();
+    installStickBridge();
   }, []);
 
   // MIDI 初始化 + 应用已保存的输入设备
