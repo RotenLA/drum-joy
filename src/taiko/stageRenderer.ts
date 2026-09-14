@@ -91,9 +91,8 @@ const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
-
-/** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
 const LEAD_MS = 2400;
+
 /** 透视加速指数：>1 让音符近大远小的同时近处加速 */
 const EASE = 1.55;
 /** 命中闪光时长（与 FallScreen 的 FLASH_MS 对应） */
