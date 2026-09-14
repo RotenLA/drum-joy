@@ -171,7 +171,9 @@ export function MappingScreen({
           </select>
         )}
         <span className="text-xs tabular-nums text-[var(--taiko-ink)]/45">
-          {lastNote !== null ? `最近收到音符：${lastNote}（${getDrumNoteName(lastNote)}）` : "等待 MIDI 输入…"}
+          {lastNote !== null
+            ? `最近收到音符：${lastNote}（${getDrumNoteName(lastNote)}）`
+            : "等待 MIDI 输入…"}
         </span>
         <button
           onClick={() => {
@@ -191,7 +193,11 @@ export function MappingScreen({
           className="w-full overflow-hidden border border-[var(--taiko-line)]"
           style={{ aspectRatio: "16 / 9", backgroundColor: "#0a0a0c" }}
         >
-          <canvas ref={canvasRef} className="block h-full w-full cursor-pointer" onClick={onCanvasClick} />
+          <canvas
+            ref={canvasRef}
+            className="block h-full w-full cursor-pointer"
+            onClick={onCanvasClick}
+          />
         </div>
 
         {/* 选中部件编辑面板 */}

@@ -105,12 +105,7 @@ function divOf(slots: number[], stepsPerBar: number, stepsPerBeat: number): 0 | 
 }
 
 /** 该小节某部件是否在指定网格位附近（±tol 格）有击打 */
-export function hasNear(
-  bar: BarSkeleton,
-  part: PartId,
-  local: number,
-  tol = 1,
-): number | null {
+export function hasNear(bar: BarSkeleton, part: PartId, local: number, tol = 1): number | null {
   const slots = bar.slots[part];
   if (!slots) return null;
   let best: number | null = null;

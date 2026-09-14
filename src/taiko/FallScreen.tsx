@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  KEY_BY_PART,
-  PART_BY_ID,
-  VISIBLE_PARTS,
-  partOfNote,
-  type PartId,
-} from "./laneLayouts";
+import { KEY_BY_PART, PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
 import { renderRunway } from "./runwayRenderer";
 import { useSong } from "./songStore";
@@ -27,7 +21,6 @@ import {
   type Calibration,
 } from "./calibration";
 
-
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±50ms / Good ±120ms，超时未击为 Miss（调手感改这里） */
@@ -35,7 +28,6 @@ const PERFECT_MS = 50;
 const GOOD_MS = 120;
 /** 倒计时拍数（四分音符，无视拍号） */
 const COUNT_IN_BEATS = 4;
-
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
@@ -59,7 +51,7 @@ export function FallScreen({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
-  
+
   const phaseRef = useRef<Phase>("idle");
   const timeRef = useRef(0);
   const flashesRef = useRef<Record<string, number>>({});
@@ -130,17 +122,7 @@ export function FallScreen({
       },
       song.difficulty,
     );
-  }, [
-    song.midi,
-    song.fileName,
-    song.offsetMs,
-    song.phaseBeatOffset,
-    song.difficulty,
-  ]);
-
-
-
-
+  }, [song.midi, song.fileName, song.offsetMs, song.phaseBeatOffset, song.difficulty]);
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -320,14 +302,17 @@ export function FallScreen({
       );
     }
     timersRef.current.push(
-      window.setTimeout(() => {
-        const run = calibRunRef.current;
-        calibRunRef.current = null;
-        setCalibrating(false);
-        if (!run || run.taps.length < 3) return;
-        const off = tapOffsetMs(run.taps, run.startMs, run.beatMs);
-        setCalib((c) => saveCalibration({ ...c, judgeMs: -off }));
-      }, 600 + beats * beatMs + 400),
+      window.setTimeout(
+        () => {
+          const run = calibRunRef.current;
+          calibRunRef.current = null;
+          setCalibrating(false);
+          if (!run || run.taps.length < 3) return;
+          const off = tapOffsetMs(run.taps, run.startMs, run.beatMs);
+          setCalib((c) => saveCalibration({ ...c, judgeMs: -off }));
+        },
+        600 + beats * beatMs + 400,
+      ),
     );
   }, []);
 
@@ -344,9 +329,7 @@ export function FallScreen({
     timeRef.current = -countdownMsRef.current;
     setPhaseBoth("countdown");
     for (let i = 0; i < COUNT_IN_BEATS; i++) {
-      timersRef.current.push(
-        window.setTimeout(() => metronomeClick(i === 0), i * beatMs),
-      );
+      timersRef.current.push(window.setTimeout(() => metronomeClick(i === 0), i * beatMs));
     }
     timersRef.current.push(
       window.setTimeout(() => {
@@ -356,7 +339,6 @@ export function FallScreen({
       }, COUNT_IN_BEATS * beatMs),
     );
   }, [hasAudio, playChart, resetRun, setPhaseBoth]);
-
 
   const togglePause = useCallback(() => {
     if (phaseRef.current === "playing") {
@@ -368,7 +350,6 @@ export function FallScreen({
       setPhaseBoth("playing");
     }
   }, [stems, setPhaseBoth]);
-
 
   // 空格暂停/继续，回车开始
   useEffect(() => {
@@ -425,7 +406,7 @@ export function FallScreen({
       quality.sample(dt, now);
 
       const ph = phaseRef.current;
-      let t = readTimeMs(now);
+      const t = readTimeMs(now);
       if (ph === "playing") {
         if (!hasAudio && playChart && t > playChart.durationMs) {
           phaseRef.current = "ended";
@@ -434,7 +415,6 @@ export function FallScreen({
       }
       // paused / ended：冻结
       timeRef.current = t;
-
 
       // Miss 检测：超过 Good 窗未击
       if (ph === "playing" && playChart) {
@@ -490,20 +470,21 @@ export function FallScreen({
         }
       }
 
-      const frameChart =
-        playChart ?? {
-          title: "",
-          bpm: 120,
-          timeSignature: [4, 4] as [number, number],
-          durationMs: 1,
-          notes: [],
-        };
+      const frameChart = playChart ?? {
+        title: "",
+        bpm: 120,
+        timeSignature: [4, 4] as [number, number],
+        durationMs: 1,
+        notes: [],
+      };
       const countText =
         ph === "countdown"
           ? String(
               Math.max(
                 1,
-                Math.ceil((countdownMsRef.current - (now - countdownStartRef.current)) / beatMsRef.current),
+                Math.ceil(
+                  (countdownMsRef.current - (now - countdownStartRef.current)) / beatMsRef.current,
+                ),
               ),
             )
           : null;
@@ -568,9 +549,7 @@ export function FallScreen({
         {!song.midi && (
           <Overlay>
             <p className="text-sm text-white/80">还没有谱面</p>
-            <p className="text-xs text-white/50">
-              请先到「谱面」屏导入去鼓伴奏音频与对应的鼓 MIDI
-            </p>
+            <p className="text-xs text-white/50">请先到「谱面」屏导入去鼓伴奏音频与对应的鼓 MIDI</p>
           </Overlay>
         )}
         {song.midi && (!playChart || playChart.notes.length === 0) && (
@@ -643,9 +622,7 @@ export function FallScreen({
       >
         <div className="mb-2 flex items-baseline gap-3">
           <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">调音台</span>
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">
-            100% = 原始文件音量
-          </span>
+          <span className="text-[10px] text-[var(--taiko-ink)]/45">100% = 原始文件音量</span>
         </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
           {STEM_KINDS.map((key) => {
@@ -810,7 +787,6 @@ export function FallScreen({
             {d.label}
           </button>
         ))}
-
 
         <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55">
           {parts.map((p) => (

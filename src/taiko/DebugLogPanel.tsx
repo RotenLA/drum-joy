@@ -85,9 +85,7 @@ export function DebugLogPanel() {
         ref={boxRef}
         className="flex-1 overflow-auto px-2.5 py-1.5 font-mono text-[10px] leading-relaxed"
       >
-        {items.length === 0 && (
-          <p className="text-white/35">暂无消息（等待 MIDI 或鼓棒数据）</p>
-        )}
+        {items.length === 0 && <p className="text-white/35">暂无消息（等待 MIDI 或鼓棒数据）</p>}
         {items.map((e) => {
           const k = KIND_STYLE[e.kind];
           return (

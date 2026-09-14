@@ -173,14 +173,7 @@ export function ChartScreen() {
     );
     // chartNonce 变化 = 手动「重新生成谱面」
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    song.midi,
-    song.fileName,
-    song.offsetMs,
-    song.phaseBeatOffset,
-    song.difficulty,
-    chartNonce,
-  ]);
+  }, [song.midi, song.fileName, song.offsetMs, song.phaseBeatOffset, song.difficulty, chartNonce]);
 
   const regenerate = () => {
     if (!song.midi) return;
@@ -332,9 +325,7 @@ export function ChartScreen() {
           })}
           <span
             className={
-              song.midiFileName
-                ? "text-[var(--taiko-ink)]/70"
-                : "text-[var(--taiko-ink)]/35"
+              song.midiFileName ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/35"
             }
           >
             MIDI：{song.midiFileName || "未导入（无法生成谱面）"}
@@ -398,7 +389,6 @@ export function ChartScreen() {
           </span>
         </div>
       )}
-
 
       {/* 速度 / 拍号（来自 MIDI）+ 偏移 + 试听 */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border border-[var(--taiko-line)] px-4 py-3">
@@ -481,7 +471,6 @@ export function ChartScreen() {
             </button>
           )}
         </div>
-
 
         {counts && (
           <div className="flex flex-wrap gap-x-6 gap-y-2">

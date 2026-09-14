@@ -68,7 +68,11 @@ function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
     const start = stepsPerBar - stepsPerBeat;
     const n = bar.noteCount >= 8 ? 3 : 2;
     for (let k = 0; k < n; k++) {
-      out.push({ step: start + Math.round((k * stepsPerBeat) / n), part: "floorTom", velocity: 100 });
+      out.push({
+        step: start + Math.round((k * stepsPerBeat) / n),
+        part: "floorTom",
+        velocity: 100,
+      });
     }
     out.push({ step: 0, part: "kick", velocity: 110 });
     return out;
@@ -133,7 +137,8 @@ function standardBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
     return out;
   }
 
-  for (const s of pattern.kick) out.push({ step: s, part: "kick", velocity: bar.vel.kick?.[s] ?? 105 });
+  for (const s of pattern.kick)
+    out.push({ step: s, part: "kick", velocity: bar.vel.kick?.[s] ?? 105 });
   for (const s of pattern.snare)
     out.push({ step: s, part: "snare", velocity: bar.vel.snare?.[s] ?? 105 });
 
@@ -214,7 +219,13 @@ function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
       )
       .sort((a, b) => a.step - b.step);
     inBar.forEach((e, i) => {
-      e.part = TOM_DOWN[Math.min(TOM_DOWN.length - 1, Math.floor((i * TOM_DOWN.length) / Math.max(1, inBar.length)))]!;
+      e.part =
+        TOM_DOWN[
+          Math.min(
+            TOM_DOWN.length - 1,
+            Math.floor((i * TOM_DOWN.length) / Math.max(1, inBar.length)),
+          )
+        ]!;
     });
   }
 
@@ -245,8 +256,7 @@ function limitHands(emits: Emit[]): Emit[] {
     }
     hands.sort(
       (a, b) =>
-        (HAND_PRIORITY[a.part] ?? 9) - (HAND_PRIORITY[b.part] ?? 9) ||
-        b.velocity - a.velocity,
+        (HAND_PRIORITY[a.part] ?? 9) - (HAND_PRIORITY[b.part] ?? 9) || b.velocity - a.velocity,
     );
     out.push(...hands.slice(0, MAX_HANDS_AT_ONCE));
   }
@@ -263,7 +273,12 @@ interface HoldSeg {
  * 闭镲期间左脚要一直踩住：把连续的闭镲段落转成左踏板长音符。
  * 开镲处断开，开镲之后再出现闭镲则重新踩下。
  */
-function pedalHolds(emits: Emit[], diff: Difficulty, stepsPerBar: number, stepsPerBeat: number): HoldSeg[] {
+function pedalHolds(
+  emits: Emit[],
+  diff: Difficulty,
+  stepsPerBar: number,
+  stepsPerBeat: number,
+): HoldSeg[] {
   const hats = emits.filter((e) => e.part === "hihat").sort((a, b) => a.step - b.step);
   if (hats.length === 0) return [];
   // 入门：全部按闭镲处理

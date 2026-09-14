@@ -35,9 +35,7 @@ export interface LoadedSample {
   title: string;
 }
 
-export async function loadSampleSong(
-  onProgress?: (label: string) => void,
-): Promise<LoadedSample> {
+export async function loadSampleSong(onProgress?: (label: string) => void): Promise<LoadedSample> {
   onProgress?.("下载示例曲 MIDI…");
   const midiBuf = await (await fetch(assetUrl(midiAsset.url))).arrayBuffer();
   const midi = parseMidi(midiBuf);

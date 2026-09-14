@@ -2,11 +2,7 @@
  * 节奏跑道模式：9（或 5）条横向轨道从右往左推进，左侧一条竖直判定线。
  * 与舞台下落共用同一份谱面、判定窗口、HUD 与 16:9 演奏区。
  */
-import {
-  PART_BY_ID,
-  partOfNote,
-  type PartId,
-} from "./laneLayouts";
+import { PART_BY_ID, partOfNote, type PartId } from "./laneLayouts";
 import {
   drawBackground,
   drawHud,
@@ -29,12 +25,7 @@ const TOP_PAD = 0.18;
 const BOT_PAD = 0.06;
 const FLASH_MS = 200;
 
-export function renderRunway(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  f: StageFrame,
-) {
+export function renderRunway(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
   GLOW = quality.params.glow;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
@@ -85,7 +76,7 @@ export function renderRunway(
     ctx.strokeStyle = hexToRgba(color, 0.6 + 0.4 * intensity);
     ctx.lineWidth = 1.5 + 2 * intensity;
     ctx.shadowColor = color;
-    ctx.shadowBlur = GLOW ? (8 + 20 * intensity) : 0;
+    ctx.shadowBlur = GLOW ? 8 + 20 * intensity : 0;
     ctx.strokeRect(bx, y + 2, laneH * 1.0, laneH - 4);
     ctx.shadowBlur = 0;
 
@@ -106,7 +97,7 @@ export function renderRunway(
   ctx.strokeStyle = "rgba(255,255,255,0.85)";
   ctx.lineWidth = 2;
   ctx.shadowColor = "rgba(255,255,255,0.6)";
-  ctx.shadowBlur = GLOW ? (12) : 0;
+  ctx.shadowBlur = GLOW ? 12 : 0;
   ctx.beginPath();
   ctx.moveTo(hitX, top);
   ctx.lineTo(hitX, top + usable);
@@ -148,7 +139,7 @@ export function renderRunway(
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.shadowColor = color;
-    ctx.shadowBlur = GLOW ? (14) : 0;
+    ctx.shadowBlur = GLOW ? 14 : 0;
     ctx.fillStyle = hexToRgba(color, 0.38);
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;

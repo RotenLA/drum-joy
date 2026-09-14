@@ -15,8 +15,7 @@ const KEY = "taiko.calib.v1";
 export const CALIB_RANGE = 200;
 export const DEFAULT_CALIBRATION: Calibration = { visualMs: 0, judgeMs: 0 };
 
-const clamp = (v: number) =>
-  Math.max(-CALIB_RANGE, Math.min(CALIB_RANGE, Math.round(v || 0)));
+const clamp = (v: number) => Math.max(-CALIB_RANGE, Math.min(CALIB_RANGE, Math.round(v || 0)));
 
 export function loadCalibration(): Calibration {
   if (typeof localStorage === "undefined") return { ...DEFAULT_CALIBRATION };
@@ -57,7 +56,6 @@ export function tapOffsetMs(taps: number[], startMs: number, beatMs: number): nu
     .sort((a, b) => a - b);
   if (diffs.length === 0) return 0;
   const mid = Math.floor(diffs.length / 2);
-  const median =
-    diffs.length % 2 === 1 ? diffs[mid]! : (diffs[mid - 1]! + diffs[mid]!) / 2;
+  const median = diffs.length % 2 === 1 ? diffs[mid]! : (diffs[mid - 1]! + diffs[mid]!) / 2;
   return clamp(median);
 }
