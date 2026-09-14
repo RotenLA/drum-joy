@@ -139,7 +139,6 @@ export function FallScreen({
     missFlashesRef.current = {};
     judgementRef.current = null;
   }, [playChart]);
-  }, [playChart]);
 
   useEffect(() => {
     songPlayer.stop();
