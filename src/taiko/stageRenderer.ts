@@ -41,8 +41,16 @@ const ROW_GATES = [
  * 消除「同刻多部件看起来有先后」的错觉。
  */
 const TRAVEL_H = 0.44;
-/** 同刻判定容差（毫秒）：组内音符画同刻连线 */
-const CHORD_TOL_MS = 15;
+/** 鼓棒角度→屏幕映射：偏航/俯仰各 ±45° 覆盖鼓阵横向/纵向范围 */
+const STICK_YAW_RANGE = 45;
+const STICK_PITCH_RANGE = 45;
+/** 鼓棒可达区域（归一化，与鼓阵摆位对应） */
+const STICK_X_SPREAD = 0.4;
+const STICK_Y_CENTER = 0.6;
+const STICK_Y_SPREAD = 0.26;
+/** 左右鼓棒颜色 */
+const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
+
 
 /** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
 const PAD_SPREAD = 0.34;
