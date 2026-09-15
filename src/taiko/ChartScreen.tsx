@@ -15,9 +15,19 @@ import { PRESET_SONGS, loadPresetSong, type PresetSong } from "./presetSongs";
 import { songPlayer } from "./player";
 import { Metronome } from "./metronome";
 import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
+import { GlobalSettings } from "./GlobalSettings";
+import { HelpDot } from "@/components/HelpDot";
+import { HELP } from "./helpTexts";
 
-export function ChartScreen() {
+export function ChartScreen({
+  speed,
+  onSpeedChange,
+}: {
+  speed: number;
+  onSpeedChange: (s: number) => void;
+}) {
   const song = useSong();
+
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [percent, setPercent] = useState(0);
   const [ready, setReady] = useState(false);
