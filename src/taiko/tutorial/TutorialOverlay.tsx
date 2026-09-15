@@ -238,11 +238,14 @@ function AdapterStep({ onDone }: { onDone: () => void }) {
         okText={`已识别到适配器：${found}`}
         waitText="正在等待适配器…"
       />
-      {found !== null && (
-        <div className="pt-2">
+      <div className="flex gap-3 pt-2">
+        {found !== null ? (
           <PrimaryButton onClick={onDone}>下一步</PrimaryButton>
-        </div>
-      )}
+        ) : (
+          <GhostButton onClick={onDone}>暂时跳过这步</GhostButton>
+        )}
+      </div>
+
     </Card>
   );
 }
