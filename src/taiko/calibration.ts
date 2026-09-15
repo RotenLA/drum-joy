@@ -11,10 +11,10 @@ export interface Calibration {
   judgeMs: number;
 }
 
-const KEY = "taiko.calib.v2";
+const KEY = "taiko.calib.v3";
 export const CALIB_RANGE = 200;
-/** 判定偏移默认 80ms：实机上这个值最贴手感 */
-export const DEFAULT_CALIBRATION: Calibration = { visualMs: 0, judgeMs: 80 };
+/** 实机上最贴手感的一组默认值：视觉 +50ms、判定 +70ms */
+export const DEFAULT_CALIBRATION: Calibration = { visualMs: 50, judgeMs: 70 };
 
 const clamp = (v: number) => Math.max(-CALIB_RANGE, Math.min(CALIB_RANGE, Math.round(v || 0)));
 
