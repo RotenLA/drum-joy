@@ -229,7 +229,9 @@ export function ChartScreen() {
           </span>
           <span className="flex items-center gap-1">
             微调
+            <HelpDot label="小节相位微调" text={HELP["phase"]!} />
             <button
+
               onClick={() => song.setSong({ phaseBeatOffset: song.phaseBeatOffset - 1 })}
               className="border border-[var(--taiko-line)] px-2 py-0.5 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
             >
