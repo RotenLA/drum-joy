@@ -218,8 +218,9 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                   </div>
                 </>
               )}
-            </StageCard>
-          </StageFrame>
+              </>
+            }
+          />
         )}
       </div>
     </div>
