@@ -261,16 +261,20 @@ export function MappingScreen({
                 </button>
               </div>
 
-              <button
-                onClick={() => setLearning((v) => !v)}
-                className={`border px-3 py-2 text-xs transition-colors ${
-                  learning
-                    ? "animate-pulse border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                    : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-                }`}
-              >
-                {learning ? "敲一下实体鼓…（点击取消）" : "MIDI Learn"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLearning((v) => !v)}
+                  className={`border px-3 py-2 text-xs transition-colors ${
+                    learning
+                      ? "animate-pulse border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                      : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+                  }`}
+                >
+                  {learning ? "敲一下实体鼓…（点击取消）" : "MIDI Learn"}
+                </button>
+                <HelpDot label="MIDI Learn" text={HELP["mapping"]!} />
+              </div>
+
               <p className="text-xs leading-relaxed text-[var(--taiko-ink)]/45">
                 音符会同时从其他部件移除（一个音符只归属一个部件）。游玩屏判定与键盘图例即时生效。
               </p>
