@@ -1,6 +1,6 @@
 /**
  * 教学用小舞台：与游玩屏同一套渲染（stageRenderer），只显示五个部件。
- * mode = "demo"   自动演示，音符到点自动闪光，不需要玩家输入
+ * mode = "demo"     自动演示，音符到点自动闪光，不需要玩家输入
  * mode = "practice" 玩家跟着节拍器敲，连续完成 TARGET 次即通过
  */
 import { useEffect, useRef, useState } from "react";
@@ -11,15 +11,7 @@ import { midiManager } from "../midiInput";
 import { click as metronomeClick, getAudioContext } from "../metronome";
 import { loadKitEnabled, playDrum } from "../drumKit";
 import { loadCalibration } from "../calibration";
-import {
-  BEAT_MS,
-  TARGET,
-  TUTORIAL_PARTS,
-  WARMUP_BEATS,
-  buildLessonChart,
-  noteOfPart,
-  type Lesson,
-} from "./steps";
+import { BEAT_MS, TARGET, TUTORIAL_PARTS, WARMUP_BEATS, buildLessonChart, type Lesson } from "./steps";
 
 const HIT_WINDOW = 170;
 const FLASH_MS = 200;
@@ -38,9 +30,9 @@ export function TutorialStage({
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const progressRef = useRef(0);
   const [progress, setProgress] = useState(0);
-  const [tip, setTip] = useState<string>("");
-  const passedRef = useRef(false);
+  const [tip, setTip] = useState("");
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -49,7 +41,8 @@ export function TutorialStage({
     const ctx2d = canvas.getContext("2d");
     if (!ctx2d) return;
 
-    passedRef.current = false;
+    let passed = false;
+    progressRef.current = 0;
     setProgress(0);
     setTip("");
 
@@ -61,19 +54,19 @@ export function TutorialStage({
     const calib = loadCalibration();
     const kitOn = loadKitEnabled();
     const holdPart = lesson.hold?.part ?? null;
+    /** 组合课：踩住左踏板的同时还要敲够次数 */
     const holdNeedsHits = Boolean(lesson.hold && lesson.pattern.length > 0);
 
     const audio = getAudioContext();
     const startSec = audio.currentTime + 0.4;
     const clockMs = () => (audio.currentTime - startSec) * 1000;
-    const perfAtStart = performance.now() + 400;
 
     let streak = 0;
     let pedalHeld = false;
     let holdActiveOk = false;
     let judgement: { text: string; color: string; until: number } | null = null;
 
-    // 节拍器：100ms 前瞻调度
+    // 节拍器：150ms 前瞻调度，与音符共用同一条音频时间轴
     let nextBeat = 0;
     const totalBeats = WARMUP_BEATS + BARS * 4;
     const schedule = window.setInterval(() => {
@@ -84,52 +77,66 @@ export function TutorialStage({
       }
     }, 40);
 
-    const bump = (ok: boolean) => {
-      if (passedRef.current) return;
-      streak = ok ? streak + 1 : 0;
-      setProgress(streak);
-      if (!ok) setTip("断了，从头再来一次就行");
-      if (streak >= TARGET) {
-        passedRef.current = true;
-        window.setTimeout(() => onPass?.(), 500);
-      }
+    const setStreak = (v: number) => {
+      streak = v;
+      progressRef.current = v;
+      setProgress(v);
     };
 
-    /** 玩家敲击：找最近的未判定同部件音符 */
+    const pass = () => {
+      if (passed) return;
+      passed = true;
+      setStreak(TARGET);
+      window.setTimeout(() => onPass?.(), 600);
+    };
+
+    const bump = (ok: boolean) => {
+      if (passed || mode !== "practice") return;
+      if (!ok) {
+        setStreak(0);
+        return;
+      }
+      setStreak(streak + 1);
+      if (streak >= TARGET) pass();
+    };
+
+    /** 玩家敲击：找最近的未判定同部件短音符 */
     const hit = (part: PartId, atMs: number, vel: number) => {
       const now = performance.now();
       if (kitOn) playDrum(part, vel);
       flashes[part] = now + FLASH_MS;
-      if (mode !== "practice" || passedRef.current) return;
-      const t = clockMs() - (now - atMs) + calib.judgeMs;
-
+      if (mode !== "practice" || passed) return;
       if (holdPart && part === holdPart) {
         pedalHeld = true;
         return;
       }
-      // 组合课：踩住期间才计数
       if (holdNeedsHits && !pedalHeld) {
-        setTip("先踩住左踏板，再敲踩镲");
+        setTip("先用左脚踩住左踏板，再敲踩镲");
         return;
       }
+      const t = clockMs() - (now - atMs) + calib.judgeMs;
       let best = -1;
       let bestDiff = HIT_WINDOW;
       for (let i = 0; i < notes.length; i++) {
         const n = notes[i]!;
+        if (n.timeMs - t > HIT_WINDOW) break;
         if (judged[i] || (n.holdMs ?? 0) > 0) continue;
         if (n.note === undefined || partOfNote(n.note) !== part) continue;
         const d = Math.abs(n.timeMs - t);
-        if (n.timeMs - t > HIT_WINDOW) break;
         if (d < bestDiff) {
           bestDiff = d;
           best = i;
         }
       }
-      if (best >= 0) {
-        judged[best] = 1;
-        judgement = { text: bestDiff <= 60 ? "PERFECT" : "GOOD", color: "#ffd75e", until: now + 450 };
-        bump(true);
-      }
+      if (best < 0) return;
+      judged[best] = 1;
+      judgement = {
+        text: bestDiff <= 60 ? "PERFECT" : "GOOD",
+        color: bestDiff <= 60 ? "#ffd75e" : "#7dd3fc",
+        until: now + 450,
+      };
+      setTip("");
+      bump(true);
     };
 
     void midiManager.init();
@@ -164,51 +171,47 @@ export function TutorialStage({
       const t = clockMs();
 
       if (mode === "demo") {
-        // 演示：音符到点自动闪光
         for (let i = 0; i < notes.length; i++) {
           if (judged[i]) continue;
           const n = notes[i]!;
           if (t < n.timeMs) break;
           judged[i] = 1;
           const p = n.note !== undefined ? partOfNote(n.note) : null;
-          if (p) flashes[p] = now + FLASH_MS;
+          if (p) flashes[p] = now + FLASH_MS + (n.holdMs ?? 0);
         }
       } else {
-        // 短音符 Miss：过窗未击 → 连击清零
+        // 短音符过窗未击 → 连击清零
         for (let i = 0; i < notes.length; i++) {
-          if (judged[i] || (notes[i]!.holdMs ?? 0) > 0) continue;
           const n = notes[i]!;
           if (n.timeMs >= t - HIT_WINDOW) break;
+          if (judged[i] || (n.holdMs ?? 0) > 0) continue;
           judged[i] = 2;
           const p = n.note !== undefined ? partOfNote(n.note) : null;
           if (p) missFlashes[p] = now + 240;
           judgement = { text: "MISS", color: "#f87171", until: now + 450 };
           if (!holdNeedsHits) bump(false);
         }
-        // 长音符：整段按住
+        // 长音符：整段按住不能松
         if (holdPart) {
           for (let i = 0; i < notes.length; i++) {
             const n = notes[i]!;
             const len = n.holdMs ?? 0;
-            if (len <= 0) continue;
+            if (len <= 0 || judged[i]) continue;
             const end = n.timeMs + len;
-            if (t < n.timeMs - HIT_WINDOW || t > end) continue;
-            if (!pedalHeld) {
-              if (holdActiveOk) {
-                holdActiveOk = false;
-                missFlashes[holdPart] = now + 240;
-                setTip("左踏板松开了，重新踩住");
-                if (!holdNeedsHits) bump(false);
-                else {
-                  streak = 0;
-                  setProgress(0);
-                }
-              }
-            } else {
+            if (t < n.timeMs || t > end + HIT_WINDOW) continue;
+            if (pedalHeld) {
               holdActiveOk = true;
               flashes[holdPart] = now + 120;
-              // 只练长音符：撑到尾巴走完即通过
-              if (!holdNeedsHits && t >= end - 60) bump(true), (streak = TARGET), bump(true);
+              if (t >= end - 40) {
+                judged[i] = 1;
+                if (!holdNeedsHits) pass();
+              }
+            } else if (holdActiveOk) {
+              holdActiveOk = false;
+              judged[i] = 2;
+              missFlashes[holdPart] = now + 240;
+              setTip("左踏板松开了，重新踩住");
+              setStreak(0);
             }
           }
         }
@@ -231,7 +234,6 @@ export function TutorialStage({
         showNotes: true,
         sticks: null,
       });
-      void perfAtStart;
     };
     raf = requestAnimationFrame(draw);
 
@@ -242,11 +244,8 @@ export function TutorialStage({
       offNote();
       offUp();
     };
-    // restartKey 变化 = 重看/再练一次
+    // restartKey 变化 = 重看一次 / 再练一次
   }, [lesson, mode, onPass, restartKey]);
-
-  const progressRef = useRef(0);
-  progressRef.current = progress;
 
   return (
     <div className="flex flex-col gap-2">
@@ -255,8 +254,8 @@ export function TutorialStage({
         className="relative mx-auto w-full overflow-hidden border border-white/15"
         style={{
           aspectRatio: "16 / 9",
-          maxHeight: "min(48vh, 460px)",
-          maxWidth: "calc(min(48vh, 460px) * 16 / 9)",
+          maxHeight: "min(46vh, 440px)",
+          maxWidth: "calc(min(46vh, 440px) * 16 / 9)",
           backgroundColor: "#0a0a0c",
         }}
       >
@@ -273,5 +272,3 @@ export function TutorialStage({
     </div>
   );
 }
-
-export { noteOfPart };
