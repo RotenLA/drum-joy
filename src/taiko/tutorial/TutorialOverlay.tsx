@@ -351,28 +351,26 @@ function PartsPreview() {
 
 // ================= 小组件 =================
 
-/** 固定尺寸的 16:9 舞台框：教学全程复用同一块画面 */
-function StageFrame({ children }: { children: React.ReactNode }) {
+/** 固定尺寸的 16:9 舞台框 + 紧贴下方的说明区：教学全程复用同一块画面 */
+function StageFrame({ stage, card }: { stage: React.ReactNode; card: React.ReactNode }) {
   return (
     <div
-      className="relative mx-auto w-full overflow-hidden border border-white/12"
-      style={{
-        aspectRatio: "16 / 9",
-        maxHeight: "min(64vh, 560px)",
-        maxWidth: "calc(min(64vh, 560px) * 16 / 9)",
-        backgroundColor: "#0a0a0c",
-      }}
+      className="mx-auto flex w-full flex-col"
+      style={{ maxWidth: "calc(min(52vh, 480px) * 16 / 9)" }}
     >
-      {children}
-    </div>
-  );
-}
-
-/** 叠在舞台底部的说明卡片 */
-function StageCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute inset-x-0 bottom-0 flex max-h-[62%] flex-col gap-2 overflow-auto border-t border-white/12 bg-[#07070a]/85 px-5 py-4 backdrop-blur">
-      {children}
+      <div
+        className="relative w-full overflow-hidden border border-white/12"
+        style={{
+          aspectRatio: "16 / 9",
+          maxHeight: "min(52vh, 480px)",
+          backgroundColor: "#0a0a0c",
+        }}
+      >
+        {stage}
+      </div>
+      <div className="flex flex-col gap-2 border border-t-0 border-white/12 bg-white/[0.03] px-5 py-4">
+        {card}
+      </div>
     </div>
   );
 }
