@@ -679,84 +679,6 @@ export function FallScreen({
         </div>
       </div>
 
-      {/* 性能与手感：画质档位 + 延迟校准 */}
-      <div
-        className="mx-auto w-full border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-4 py-3"
-        style={{ maxWidth: "calc(min(70vh, 720px) * 16 / 9)" }}
-      >
-        <div className="mb-2 flex flex-wrap items-center gap-3">
-          <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">画质</span>
-          {(["auto", "high", "medium", "low"] as QualityMode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => quality.setMode(m)}
-              className={`-ml-px border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors first:ml-0 ${
-                qualityMode === m
-                  ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                  : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-              }`}
-            >
-              {TIER_LABEL[m]}
-            </button>
-          ))}
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">
-            当前实际：{TIER_LABEL[tier]}（卡顿时自动降档）
-          </span>
-        </div>
-        <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2">
-          {(
-            [
-              ["visualMs", "音符视觉偏移"],
-              ["judgeMs", "判定偏移"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="flex flex-col gap-1">
-              <span className="flex items-center justify-between text-[11px] text-[var(--taiko-ink)]/70">
-                <span>{label}</span>
-                <span className="tabular-nums text-[var(--taiko-ink)]/55">
-                  {calib[key] > 0 ? "+" : ""}
-                  {calib[key]} ms
-                </span>
-              </span>
-              <input
-                type="range"
-                min={-CALIB_RANGE}
-                max={CALIB_RANGE}
-                step={1}
-                value={calib[key]}
-                onChange={(e) => updateCalib({ [key]: Number(e.target.value) })}
-                className="h-1 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)]"
-              />
-            </label>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button
-            onClick={calibrating ? finishCalibration : startCalibration}
-            disabled={!calibrating && phase === "playing"}
-            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {calibrating ? `停止校准（${calibTaps}/8）` : "自动校准"}
-          </button>
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">
-            节拍器会一直响，跟着敲 8 下自动算出你这台机器的延迟，也可随时停止
-          </span>
-
-          <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
-          <button
-            onClick={toggleKit}
-            className={`border px-3 py-1.5 text-xs transition-colors ${
-              kitOn
-                ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-            }`}
-          >
-            鼓音色 {kitOn ? "开" : "关"}
-          </button>
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">内置鼓音色，敲击即出声</span>
-        </div>
-      </div>
-
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={togglePause}
@@ -765,48 +687,15 @@ export function FallScreen({
         >
           {phase === "paused" ? "继续" : "暂停"}
         </button>
-
-        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-
-        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-        <span className="text-xs text-[var(--taiko-ink)]/50">速度</span>
-        {SPEEDS.map((s) => (
-          <button
-            key={s}
-            onClick={() => onSpeedChange(s)}
-            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs tabular-nums transition-colors first:ml-0 ${
-              speed === s
-                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-            }`}
-          >
-            {s}x
-          </button>
-        ))}
-
-        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-        <span className="text-xs text-[var(--taiko-ink)]/50">难度</span>
-        {DIFFICULTIES.map((d) => (
-          <button
-            key={d.id}
-            onClick={() => song.setSong({ difficulty: d.id })}
-            title={d.hint}
-            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
-              song.difficulty === d.id
-                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-            }`}
-          >
-            {d.label}
-          </button>
-        ))}
+        <HelpDot label="游玩" text={HELP["play"]!} />
+        <span className="text-xs text-[var(--taiko-ink)]/50">
+          速度 {speed}x · 难度 {DIFFICULTIES.find((d) => d.id === song.difficulty)?.label} ·
+          参数都在「谱面」页
+        </span>
 
         <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55">
           {parts.map((p) => (
             <span key={p} className="flex items-center gap-1.5">
-              <kbd className="border border-[var(--taiko-line)] px-1.5 py-0.5 font-mono text-[10px]">
-                {KEY_BY_PART[p].label}
-              </kbd>
               <i
                 className="inline-block h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: PART_BY_ID[p].color }}
@@ -816,6 +705,7 @@ export function FallScreen({
           ))}
         </span>
       </div>
+
     </div>
   );
 }
