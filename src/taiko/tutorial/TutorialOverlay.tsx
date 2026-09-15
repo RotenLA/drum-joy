@@ -266,11 +266,14 @@ function StickStep({ onDone }: { onDone: () => void }) {
       <p className="text-sm text-white/75">打开鼓槌和踏板的开关，随意敲几下、踩几下。</p>
       <StatusLine ok={stickOk} okText="鼓槌已连接" waitText="等待鼓槌敲击…" />
       <StatusLine ok={pedalOk} okText="踏板已连接" waitText="等待踏板踩下…" />
-      {stickOk && pedalOk && (
-        <div className="pt-2">
+      <div className="flex gap-3 pt-2">
+        {stickOk && pedalOk ? (
           <PrimaryButton onClick={onDone}>下一步</PrimaryButton>
-        </div>
-      )}
+        ) : (
+          <GhostButton onClick={onDone}>暂时跳过这步</GhostButton>
+        )}
+      </div>
+
     </Card>
   );
 }
