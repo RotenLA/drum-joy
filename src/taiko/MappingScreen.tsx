@@ -151,8 +151,12 @@ export function MappingScreen({
     <div className="flex flex-col gap-4">
       {/* MIDI 设备 */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
-        <span className="text-xs text-[var(--taiko-ink)]/60">MIDI 输入设备</span>
+        <span className="flex items-center gap-1 text-xs text-[var(--taiko-ink)]/60">
+          MIDI 输入设备
+          <HelpDot label="MIDI 输入设备" text={HELP["midiDevice"]!} />
+        </span>
         {midiReady === false ? (
+
           <span className="text-xs text-[var(--taiko-ink)]/45">
             当前环境不支持 Web MIDI（请在 Chrome / Electron 中使用）
           </span>
