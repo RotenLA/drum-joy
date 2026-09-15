@@ -182,14 +182,21 @@ export function ChartScreen() {
   );
 
   if (!song.midi && !hasAnyStem(song.stems)) {
-    return <div className="flex flex-col gap-6">{songList}</div>;
+    return (
+      <div className="flex flex-col gap-6">
+        <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} />
+        {songList}
+      </div>
+    );
   }
 
   const tempoChanges = song.midi ? Math.max(0, song.midi.tempos.length - 1) : 0;
 
   return (
     <div className="flex flex-col gap-6">
+      <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} />
       {songList}
+
 
       {/* 当前歌曲信息 */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
