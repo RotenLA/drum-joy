@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KEY_BY_PART, PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
+import { PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
 import { useSong } from "./songStore";
 import { songPlayer } from "./player";
@@ -8,22 +8,16 @@ import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick, getAudioContext } from "./metronome";
-import { loadKitEnabled, playDrum, saveKitEnabled } from "./drumKit";
+import { loadKitEnabled, playDrum } from "./drumKit";
+import { HelpDot } from "@/components/HelpDot";
+import { HELP } from "./helpTexts";
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
 
-import { TIER_LABEL, quality, type QualityMode, type QualityTier } from "./perf";
-import {
-  CALIB_RANGE,
-  DEFAULT_CALIBRATION,
-  loadCalibration,
-  saveCalibration,
-  tapOffsetMs,
-  type Calibration,
-} from "./calibration";
+import { quality, type QualityTier } from "./perf";
+import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
 
-const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±50ms / Good ±120ms，超时未击为 Miss（调手感改这里） */
 const PERFECT_MS = 50;
@@ -33,13 +27,7 @@ const COUNT_IN_BEATS = 4;
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
-export function FallScreen({
-  speed,
-  onSpeedChange,
-}: {
-  speed: number;
-  onSpeedChange: (s: number) => void;
-}) {
+export function FallScreen({ speed }: { speed: number }) {
   const song = useSong();
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
@@ -56,7 +44,7 @@ export function FallScreen({
   const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
   /** 长音符（左踏板踩住闭镲）状态：0 未开始 / 1 按住中 / 2 已断开或结算 */
   const holdStateRef = useRef<Uint8Array>(new Uint8Array(0));
-  /** 左踏板当前是否被踩住（键盘 keyup / MIDI note-off 抬起） */
+  /** 左踏板当前是否被踩住（MIDI note-off 抬起） */
   const pedalHeldRef = useRef(false);
   const statsRef = useRef({ perfect: 0, good: 0, miss: 0 });
   const comboRef = useRef(0);
@@ -70,54 +58,22 @@ export function FallScreen({
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
 
-  // 画质档位（auto 会自动降档；tier 变化时重设画布分辨率）
-  const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
+  // 画质档位（在谱面页设置；tier 变化时重设画布分辨率）
   const [tier, setTier] = useState<QualityTier>("high");
   useEffect(() => {
     quality.hydrate();
-    setQualityMode(quality.getMode());
     setTier(quality.tier);
-    const off = quality.subscribe(() => {
-      setQualityMode(quality.getMode());
-      setTier(quality.tier);
-    });
-    return off;
+    return quality.subscribe(() => setTier(quality.tier));
   }, []);
 
-  // 延迟校准（视觉 / 判定偏移）
-  const [calib, setCalib] = useState<Calibration>(DEFAULT_CALIBRATION);
-  useEffect(() => {
-    setCalib(loadCalibration());
-  }, []);
-  const calibRef = useRef<Calibration>(calib);
-  useEffect(() => {
-    calibRef.current = calib;
-  }, [calib]);
-  const updateCalib = useCallback((patch: Partial<Calibration>) => {
-    setCalib((c) => saveCalibration({ ...c, ...patch }));
-  }, []);
-  /** 跟拍校准状态 */
-  const calibRunRef = useRef<{ startMs: number; beatMs: number; taps: number[] } | null>(null);
-  const calibTimerRef = useRef<number | null>(null);
-  const [calibrating, setCalibrating] = useState(false);
-  const [calibTaps, setCalibTaps] = useState(0);
-
-  // 内置鼓音色（默认开启）
-  const [kitOn, setKitOn] = useState(true);
+  // 偏移与鼓音色（在谱面页设置，进入本页时读取）
+  const calibRef = useRef<Calibration>(DEFAULT_CALIBRATION);
   const kitOnRef = useRef(true);
   useEffect(() => {
-    const on = loadKitEnabled();
-    setKitOn(on);
-    kitOnRef.current = on;
+    calibRef.current = loadCalibration();
+    kitOnRef.current = loadKitEnabled();
   }, []);
-  const toggleKit = useCallback(() => {
-    setKitOn((on) => {
-      const next = !on;
-      kitOnRef.current = next;
-      saveKitEnabled(next);
-      return next;
-    });
-  }, []);
+
 
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
