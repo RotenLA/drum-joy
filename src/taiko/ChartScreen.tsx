@@ -305,8 +305,10 @@ export function ChartScreen() {
       {/* 难度 + 谱面统计 */}
       <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-2 text-sm font-medium">难度</h2>
+          <h2 className="mr-1 text-sm font-medium">难度</h2>
+          <HelpDot label="难度" text={HELP["difficulty"]!} />
           {DIFFICULTIES.map((d) => (
+
             <button
               key={d.id}
               onClick={() => song.setSong({ difficulty: d.id })}
