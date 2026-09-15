@@ -214,13 +214,8 @@ export function FallScreen({
       const at = atMs !== undefined && Number.isFinite(atMs) ? atMs : now;
       flashesRef.current[part] = now + FLASH_MS;
       if (kitOnRef.current) playDrum(part, velocity);
-      // 跟拍校准中：只收集敲击时刻
-      const run = calibRunRef.current;
-      if (run) {
-        run.taps.push(at);
-        setCalibTaps(run.taps.length);
-        return;
-      }
+
+
 
       if (phaseRef.current !== "playing" || !playChart) return;
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
