@@ -110,20 +110,22 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
         {phase === "sticks" && <StickStep onDone={() => setPhase("intro")} />}
 
         {onStage && (
-          <StageFrame>
-            {phase === "intro" ? (
-              <PartsPreview />
-            ) : (
-              <TutorialStage
-                key={`${lesson.id}-${lessonPhase === "practice" ? "practice" : "demo"}`}
-                lesson={lesson}
-                mode={lessonPhase === "practice" ? "practice" : "demo"}
-                restartKey={restartKey}
-                onPass={() => setLessonPhase("praise")}
-              />
-            )}
-
-            <StageCard>
+          <StageFrame
+            stage={
+              phase === "intro" ? (
+                <PartsPreview />
+              ) : (
+                <TutorialStage
+                  key={`${lesson.id}-${lessonPhase === "practice" ? "practice" : "demo"}`}
+                  lesson={lesson}
+                  mode={lessonPhase === "practice" ? "practice" : "demo"}
+                  restartKey={restartKey}
+                  onPass={() => setLessonPhase("praise")}
+                />
+              )
+            }
+            card={
+              <>
               {phase === "intro" && (
                 <>
                   <CardTitle>认识这五个部件</CardTitle>
