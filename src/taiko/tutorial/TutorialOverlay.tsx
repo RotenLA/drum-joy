@@ -119,7 +119,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                 lesson={lesson}
                 mode={lessonPhase === "practice" ? "practice" : "demo"}
                 restartKey={restartKey}
-                onPass={lessonPhase === "practice" ? () => setLessonPhase("praise") : undefined}
+                onPass={() => setLessonPhase("praise")}
               />
             )}
 
