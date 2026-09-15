@@ -5,7 +5,7 @@ import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
-import { TutorialOverlay, tutorialSeen } from "./tutorial/TutorialOverlay";
+import { TutorialOverlay } from "./tutorial/TutorialOverlay";
 
 type ScreenKey = "play" | "chart" | "mapping";
 
@@ -37,7 +37,8 @@ export function TaikoShell() {
 function ShellInner() {
   const [screen, setScreen] = useState<ScreenKey>("chart");
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
-  const [tutorial, setTutorial] = useState(false);
+  // 每次打开都先进新手教学（欢迎页可跳过）
+  const [tutorial, setTutorial] = useState(true);
   const song = useSong();
 
   // hydration 后再读本地设置，避免 SSR 不一致
@@ -51,8 +52,6 @@ function ShellInner() {
     } catch {
       // 忽略损坏的本地设置
     }
-    // 首次打开自动弹出新手教程
-    if (!tutorialSeen()) setTutorial(true);
   }, []);
 
   // 暴露 __pd2uNoteOn/__pd2uNoteOff 给 Unity 等宿主注入 MIDI 事件

@@ -254,28 +254,20 @@ export function TutorialStage({
     // restartKey 变化 = 重看一次 / 再练一次
   }, [lesson, mode, onPass, restartKey]);
 
+  // 铺满外层舞台框（由 TutorialOverlay 提供尺寸），卡片叠在同一块画面上
   return (
-    <div className="flex flex-col gap-2">
-      <div
-        ref={wrapRef}
-        className="relative mx-auto w-full overflow-hidden border border-white/15"
-        style={{
-          aspectRatio: "16 / 9",
-          maxHeight: "min(46vh, 440px)",
-          maxWidth: "calc(min(46vh, 440px) * 16 / 9)",
-          backgroundColor: "#0a0a0c",
-        }}
-      >
+    <>
+      <div ref={wrapRef} className="absolute inset-0 overflow-hidden bg-[#0a0a0c]">
         <canvas ref={canvasRef} className="block h-full w-full" />
       </div>
       {mode === "practice" && (
-        <div className="flex items-center justify-center gap-3 text-xs text-white/70">
+        <div className="absolute left-3 top-3 flex items-center gap-3 border border-white/15 bg-black/45 px-3 py-1 text-xs text-white/75 backdrop-blur">
           <span className="tabular-nums">
             进度 {Math.min(progress, TARGET)} / {TARGET}
           </span>
-          {tip && <span className="text-white/45">{tip}</span>}
+          {tip && <span className="text-white/50">{tip}</span>}
         </div>
       )}
-    </div>
+    </>
   );
 }
