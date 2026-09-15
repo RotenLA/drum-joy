@@ -12,6 +12,9 @@ import {
 import { partAtPoint, renderPadArray } from "./stageRenderer";
 import { midiManager, type MidiInputInfo } from "./midiInput";
 import { getDrumNoteName } from "@/shared/drumLaneMap";
+import { HelpDot } from "@/components/HelpDot";
+import { HELP } from "./helpTexts";
+
 
 const ALL_PARTS = DRUM_PARTS.map((p) => p.id);
 
