@@ -1,6 +1,7 @@
 /**
  * 新手教程：全屏遮罩 + 分步引导。
  * 连接适配器 → 连接鼓槌与踏板 → 认识五个部件 → 六节课（动画演示 + 练习 + 鼓励）→ 完成。
+ * 从「认识五个部件」开始，鼓位图舞台一直留在画面上，后续说明都以卡片叠在舞台之上。
  */
 import { useEffect, useRef, useState } from "react";
 import { midiManager } from "../midiInput";
@@ -69,6 +70,9 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
     }
   };
 
+  const lesson = LESSONS[lessonIdx]!;
+  const onStage = phase === "intro" || phase === "lesson" || phase === "done";
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-auto bg-[#07070a]/97 px-6 py-6 backdrop-blur">
       <header className="mx-auto flex w-full max-w-4xl items-baseline gap-4">
@@ -105,102 +109,115 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
         {phase === "adapter" && <AdapterStep onDone={() => setPhase("sticks")} />}
         {phase === "sticks" && <StickStep onDone={() => setPhase("intro")} />}
 
-        {phase === "intro" && (
-          <Card title="认识这五个部件">
-            <PartsPreview />
-            <ul className="grid grid-cols-2 gap-2 text-xs text-white/70 sm:grid-cols-3">
-              {TUTORIAL_PARTS.map((id) => (
-                <li key={id} className="flex items-center gap-2">
-                  <span
-                    className="inline-block h-3 w-3 rounded-full"
-                    style={{ backgroundColor: PART_BY_ID[id].color }}
-                  />
-                  {PART_BY_ID[id].label}
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-white/45">
-              下面两块方形是左右踏板（左脚踩镲、右脚底鼓），上面三块是鼓槌敲的踩镲、军鼓和低通。
-            </p>
-            <div className="pt-2">
-              <PrimaryButton onClick={() => setPhase("lesson")}>开始第一节</PrimaryButton>
-            </div>
-          </Card>
-        )}
+        {onStage && (
+          <StageFrame>
+            {phase === "intro" ? (
+              <PartsPreview />
+            ) : (
+              <TutorialStage
+                key={`${lesson.id}-${lessonPhase === "practice" ? "practice" : "demo"}`}
+                lesson={lesson}
+                mode={lessonPhase === "practice" ? "practice" : "demo"}
+                restartKey={restartKey}
+                onPass={lessonPhase === "practice" ? () => setLessonPhase("praise") : undefined}
+              />
+            )}
 
-        {phase === "lesson" && (
-          <Card title={LESSONS[lessonIdx]!.title}>
-            {lessonPhase === "demo" && (
-              <>
-                <p className="text-xs tracking-[0.2em] text-white/45">动画演示</p>
-                {LESSONS[lessonIdx]!.demo.map((line) => (
-                  <p key={line} className="text-sm text-white/75">
-                    {line}
+            <StageCard>
+              {phase === "intro" && (
+                <>
+                  <CardTitle>认识这五个部件</CardTitle>
+                  <ul className="grid grid-cols-3 gap-2 text-xs text-white/70 sm:grid-cols-5">
+                    {TUTORIAL_PARTS.map((id) => (
+                      <li key={id} className="flex items-center gap-2">
+                        <span
+                          className="inline-block h-3 w-3 rounded-full"
+                          style={{ backgroundColor: PART_BY_ID[id].color }}
+                        />
+                        {PART_BY_ID[id].label}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-white/45">
+                    下面两块方形是左右踏板（左脚踩镲、右脚底鼓），上面三块是鼓槌敲的踩镲、军鼓和低通。敲一下实物，画面上对应的鼓面会亮。
                   </p>
-                ))}
-                <TutorialStage lesson={LESSONS[lessonIdx]!} mode="demo" restartKey={restartKey} />
-                <div className="flex gap-3">
-                  <PrimaryButton
-                    onClick={() => {
-                      setLessonPhase("practice");
-                      setRestartKey((k) => k + 1);
-                    }}
-                  >
-                    明白了，开始练习
-                  </PrimaryButton>
-                  <GhostButton onClick={() => setRestartKey((k) => k + 1)}>再看一次</GhostButton>
-                </div>
-              </>
-            )}
+                  <div className="flex gap-3 pt-1">
+                    <PrimaryButton onClick={() => setPhase("lesson")}>开始第一节</PrimaryButton>
+                  </div>
+                </>
+              )}
 
-            {lessonPhase === "practice" && (
-              <>
-                <p className="text-sm text-white/75">{LESSONS[lessonIdx]!.hint}</p>
-                <TutorialStage
-                  lesson={LESSONS[lessonIdx]!}
-                  mode="practice"
-                  restartKey={restartKey}
-                  onPass={() => setLessonPhase("praise")}
-                />
-                <div className="flex gap-3">
-                  <GhostButton onClick={() => setRestartKey((k) => k + 1)}>重新开始</GhostButton>
-                  <GhostButton onClick={nextLesson}>跳过本节</GhostButton>
-                </div>
-              </>
-            )}
+              {phase === "lesson" && lessonPhase === "demo" && (
+                <>
+                  <CardTitle>
+                    {lesson.title} · <span className="text-white/50">动画演示</span>
+                  </CardTitle>
+                  {lesson.demo.map((line) => (
+                    <p key={line} className="text-sm text-white/75">
+                      {line}
+                    </p>
+                  ))}
+                  <div className="flex gap-3 pt-1">
+                    <PrimaryButton
+                      onClick={() => {
+                        setLessonPhase("practice");
+                        setRestartKey((k) => k + 1);
+                      }}
+                    >
+                      明白了，开始练习
+                    </PrimaryButton>
+                    <GhostButton onClick={() => setRestartKey((k) => k + 1)}>再看一次</GhostButton>
+                  </div>
+                </>
+              )}
 
-            {lessonPhase === "praise" && (
-              <>
-                <p className="text-lg text-white">做得好！</p>
-                <p className="text-sm text-white/70">{LESSONS[lessonIdx]!.praise}</p>
-                <div className="flex gap-3 pt-2">
-                  <PrimaryButton onClick={nextLesson}>下一步</PrimaryButton>
-                  <GhostButton
-                    onClick={() => {
-                      setLessonPhase("practice");
-                      setRestartKey((k) => k + 1);
-                    }}
-                  >
-                    再练一次
-                  </GhostButton>
-                </div>
-              </>
-            )}
-          </Card>
-        )}
+              {phase === "lesson" && lessonPhase === "practice" && (
+                <>
+                  <CardTitle>
+                    {lesson.title} · <span className="text-white/50">练习</span>
+                  </CardTitle>
+                  <p className="text-sm text-white/75">{lesson.hint}</p>
+                  <div className="flex gap-3 pt-1">
+                    <GhostButton onClick={() => setRestartKey((k) => k + 1)}>重新开始</GhostButton>
+                    <GhostButton onClick={nextLesson}>跳过本节</GhostButton>
+                  </div>
+                </>
+              )}
 
-        {phase === "done" && (
-          <Card title="教程完成">
-            <p className="text-sm text-white/75">
-              基础的短音符、长音符和手脚配合都练过了，接下来挑一首歌试试吧。
-            </p>
-            <p className="text-xs text-white/45">
-              画质、判定偏移、鼓音色这些参数都在「谱面」页顶部，随时可以调。
-            </p>
-            <div className="pt-2">
-              <PrimaryButton onClick={finish}>开始游玩</PrimaryButton>
-            </div>
-          </Card>
+              {phase === "lesson" && lessonPhase === "praise" && (
+                <>
+                  <CardTitle>做得好！</CardTitle>
+                  <p className="text-sm text-white/75">{lesson.praise}</p>
+                  <div className="flex gap-3 pt-1">
+                    <PrimaryButton onClick={nextLesson}>下一步</PrimaryButton>
+                    <GhostButton
+                      onClick={() => {
+                        setLessonPhase("practice");
+                        setRestartKey((k) => k + 1);
+                      }}
+                    >
+                      再练一次
+                    </GhostButton>
+                  </div>
+                </>
+              )}
+
+              {phase === "done" && (
+                <>
+                  <CardTitle>教程完成</CardTitle>
+                  <p className="text-sm text-white/75">
+                    基础的短音符、长音符和手脚配合都练过了，接下来挑一首歌试试吧。
+                  </p>
+                  <p className="text-xs text-white/45">
+                    画质、判定偏移、鼓音色这些参数都在「谱面」页顶部，随时可以调。
+                  </p>
+                  <div className="pt-1">
+                    <PrimaryButton onClick={finish}>开始游玩</PrimaryButton>
+                  </div>
+                </>
+              )}
+            </StageCard>
+          </StageFrame>
         )}
       </div>
     </div>
@@ -245,7 +262,6 @@ function AdapterStep({ onDone }: { onDone: () => void }) {
           <GhostButton onClick={onDone}>暂时跳过这步</GhostButton>
         )}
       </div>
-
     </Card>
   );
 }
@@ -276,7 +292,6 @@ function StickStep({ onDone }: { onDone: () => void }) {
           <GhostButton onClick={onDone}>暂时跳过这步</GhostButton>
         )}
       </div>
-
     </Card>
   );
 }
@@ -328,22 +343,43 @@ function PartsPreview() {
   }, []);
 
   return (
-    <div
-      ref={wrapRef}
-      className="relative mx-auto w-full overflow-hidden border border-white/15"
-      style={{
-        aspectRatio: "16 / 9",
-        maxHeight: "min(40vh, 380px)",
-        maxWidth: "calc(min(40vh, 380px) * 16 / 9)",
-        backgroundColor: "#0a0a0c",
-      }}
-    >
+    <div ref={wrapRef} className="absolute inset-0 overflow-hidden bg-[#0a0a0c]">
       <canvas ref={canvasRef} className="block h-full w-full" />
     </div>
   );
 }
 
 // ================= 小组件 =================
+
+/** 固定尺寸的 16:9 舞台框：教学全程复用同一块画面 */
+function StageFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="relative mx-auto w-full overflow-hidden border border-white/12"
+      style={{
+        aspectRatio: "16 / 9",
+        maxHeight: "min(64vh, 560px)",
+        maxWidth: "calc(min(64vh, 560px) * 16 / 9)",
+        backgroundColor: "#0a0a0c",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** 叠在舞台底部的说明卡片 */
+function StageCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="absolute inset-x-0 bottom-0 flex max-h-[62%] flex-col gap-2 overflow-auto border-t border-white/12 bg-[#07070a]/85 px-5 py-4 backdrop-blur">
+      {children}
+    </div>
+  );
+}
+
+function CardTitle({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-sm tracking-[0.12em] text-white">{children}</h2>;
+}
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
