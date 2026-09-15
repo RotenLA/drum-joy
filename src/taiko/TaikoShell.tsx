@@ -103,7 +103,17 @@ function ShellInner() {
               </button>
             </li>
           ))}
+          <li>
+            <button
+              onClick={() => setTutorial(true)}
+              className="flex w-full items-baseline gap-2 border-b border-[var(--taiko-line)] px-4 py-3 text-left text-sm transition-colors hover:bg-[var(--taiko-ink)]/10"
+            >
+              <span>教程</span>
+              <span className="text-[10px] uppercase tracking-[0.15em] opacity-50">GUIDE</span>
+            </button>
+          </li>
         </ul>
+
       </nav>
 
       <main className="flex min-w-0 flex-1 flex-col">
