@@ -275,86 +275,8 @@ export function FallScreen({
     };
   }, [hitPart, parts]);
 
-  // 键盘调试（无 MIDI 设备时）
-  useEffect(() => {
-    const pedalKey = KEY_BY_PART.pedalHat.key;
-    const onKey = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
-      if (k === pedalKey) pedalHeldRef.current = true;
-      if (e.repeat) return;
-      for (const [part, v] of Object.entries(KEY_BY_PART) as [PartId, { key: string }][]) {
-        if (v.key === k && parts.includes(part)) {
-          hitPart(part);
-          return;
-        }
-      }
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === pedalKey) pedalHeldRef.current = false;
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, [hitPart, parts]);
 
-  /** 校准结束：够 3 下就算偏差中位数写入判定偏移，否则原值不动 */
-  const finishCalibration = useCallback(() => {
-    if (calibTimerRef.current !== null) {
-      window.clearInterval(calibTimerRef.current);
-      calibTimerRef.current = null;
-    }
-    const run = calibRunRef.current;
-    calibRunRef.current = null;
-    setCalibrating(false);
-    setCalibTaps(0);
-    if (!run || run.taps.length < 3) return;
-    const off = tapOffsetMs(run.taps, run.startMs, run.beatMs);
-    setCalib((c) => saveCalibration({ ...c, judgeMs: -off }));
-  }, []);
 
-  /**
-   * 跟拍校准：120BPM 节拍器一直响，直到敲满 8 下自动结束（也可手动停止），
-   * 取偏差中位数写入判定偏移。
-   */
-  const startCalibration = useCallback(() => {
-    if (calibRunRef.current) return;
-    songPlayer.pause();
-    const beatMs = 500;
-    const target = 8;
-    const startMs = performance.now() + 600;
-    calibRunRef.current = { startMs, beatMs, taps: [] };
-    setCalibrating(true);
-    setCalibTaps(0);
-    let beat = 0;
-    const tick = () => {
-      const run = calibRunRef.current;
-      if (!run) return;
-      // 敲满 8 下 → 结算（在下一拍到来时收工，保证最后一下也被记到）
-      if (run.taps.length >= target) {
-        finishCalibration();
-        return;
-      }
-      metronomeClick(beat % 4 === 0);
-      beat++;
-    };
-    timersRef.current.push(
-      window.setTimeout(() => {
-        if (!calibRunRef.current) return;
-        tick();
-        calibTimerRef.current = window.setInterval(tick, beatMs);
-      }, 600),
-    );
-  }, [finishCalibration]);
-
-  // 离开界面时确保校准节拍器停止
-  useEffect(() => {
-    return () => {
-      if (calibTimerRef.current !== null) window.clearInterval(calibTimerRef.current);
-    };
-  }, []);
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
   const start = useCallback(() => {
