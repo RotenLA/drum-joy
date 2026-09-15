@@ -34,21 +34,26 @@ export function TaikoShell() {
 }
 
 function ShellInner() {
-  const [screen, setScreen] = useState<ScreenKey>("play");
+  const [screen, setScreen] = useState<ScreenKey>("chart");
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
+  const [tutorial, setTutorial] = useState(false);
   const song = useSong();
 
   // hydration 后再读本地设置，避免 SSR 不一致
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<TaikoSettings>;
-      setSettings((s) => ({ ...s, ...parsed }));
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<TaikoSettings>;
+        setSettings((s) => ({ ...s, ...parsed }));
+      }
     } catch {
       // 忽略损坏的本地设置
     }
+    // 首次打开自动弹出新手教程
+    if (!tutorialSeen()) setTutorial(true);
   }, []);
+
 
   // 暴露 __pd2uNoteOn/__pd2uNoteOff 给 Unity 等宿主注入 MIDI 事件
   useEffect(() => {
