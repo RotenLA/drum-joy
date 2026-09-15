@@ -88,7 +88,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
 
       <div className="mx-auto mt-6 flex w-full max-w-4xl flex-1 flex-col gap-5">
         {phase === "welcome" && (
-          <Card title="欢迎使用 PD2U 自动挡鼓模块">
+          <Card title="欢迎使用 AeroGame 模块！">
             <p className="text-sm text-white/70">
               这个教程会带你连接设备，并练习最基础的敲击方式，大约 5 分钟。
             </p>
