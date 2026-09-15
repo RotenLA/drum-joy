@@ -267,6 +267,7 @@ export function ChartScreen() {
 
         <label className="flex items-center gap-2 text-xs text-[var(--taiko-ink)]/60">
           对齐偏移 ms
+          <HelpDot label="对齐偏移" text={HELP["offset"]!} />
           <input
             type="number"
             step={10}
@@ -300,7 +301,9 @@ export function ChartScreen() {
         >
           节拍器 {metroOn ? "开" : "关"}
         </button>
+        <HelpDot label="节拍器" text={HELP["metronome"]!} />
       </div>
+
 
       {/* 难度 + 谱面统计 */}
       <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
