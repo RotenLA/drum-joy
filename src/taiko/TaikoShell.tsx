@@ -135,14 +135,14 @@ function ShellInner() {
         </header>
 
         <div className="flex-1 overflow-auto px-8 py-6">
-          {screen === "play" && (
-            <FallScreen
+          {screen === "play" && <FallScreen speed={settings.speed} />}
+
+          {screen === "chart" && (
+            <ChartScreen
               speed={settings.speed}
               onSpeedChange={(speed) => updateSettings({ speed })}
             />
           )}
-
-          {screen === "chart" && <ChartScreen />}
           {screen === "mapping" && (
             <MappingScreen
               deviceId={settings.midiDeviceId}
@@ -151,6 +151,16 @@ function ShellInner() {
           )}
         </div>
       </main>
+
+      {tutorial && (
+        <TutorialOverlay
+          onFinish={() => {
+            setTutorial(false);
+            setScreen("chart");
+          }}
+        />
+      )}
+
     </div>
   );
 }
