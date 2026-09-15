@@ -144,11 +144,13 @@ export function ChartScreen() {
 
   const songList = (
     <div className="border border-[var(--taiko-line)] px-4 py-3">
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex items-center gap-2">
         <span className="text-sm font-medium">选择歌曲</span>
-        {ready && !loadingId && <span className="text-xs text-emerald-400">已就绪</span>}
+        <HelpDot label="选择歌曲" text={HELP["song"]!} />
+        {ready && !loadingId && <span className="ml-1 text-xs text-emerald-400">已就绪</span>}
         {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
       </div>
+
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {PRESET_SONGS.map((p) => {
           const active = song.fileName === p.title;
