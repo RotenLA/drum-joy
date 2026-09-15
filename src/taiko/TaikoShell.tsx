@@ -5,7 +5,7 @@ import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
-import { TutorialOverlay, tutorialSeen } from "./tutorial/TutorialOverlay";
+import { TutorialOverlay } from "./tutorial/TutorialOverlay";
 
 type ScreenKey = "play" | "chart" | "mapping";
 
