@@ -15,9 +15,19 @@ import { PRESET_SONGS, loadPresetSong, type PresetSong } from "./presetSongs";
 import { songPlayer } from "./player";
 import { Metronome } from "./metronome";
 import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
+import { GlobalSettings } from "./GlobalSettings";
+import { HelpDot } from "@/components/HelpDot";
+import { HELP } from "./helpTexts";
 
-export function ChartScreen() {
+export function ChartScreen({
+  speed,
+  onSpeedChange,
+}: {
+  speed: number;
+  onSpeedChange: (s: number) => void;
+}) {
   const song = useSong();
+
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [percent, setPercent] = useState(0);
   const [ready, setReady] = useState(false);
@@ -144,11 +154,13 @@ export function ChartScreen() {
 
   const songList = (
     <div className="border border-[var(--taiko-line)] px-4 py-3">
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex items-center gap-2">
         <span className="text-sm font-medium">选择歌曲</span>
-        {ready && !loadingId && <span className="text-xs text-emerald-400">已就绪</span>}
+        <HelpDot label="选择歌曲" text={HELP["song"]!} />
+        {ready && !loadingId && <span className="ml-1 text-xs text-emerald-400">已就绪</span>}
         {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
       </div>
+
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {PRESET_SONGS.map((p) => {
           const active = song.fileName === p.title;
@@ -182,13 +194,19 @@ export function ChartScreen() {
   );
 
   if (!song.midi && !hasAnyStem(song.stems)) {
-    return <div className="flex flex-col gap-6">{songList}</div>;
+    return (
+      <div className="flex flex-col gap-6">
+        <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} />
+        {songList}
+      </div>
+    );
   }
 
   const tempoChanges = song.midi ? Math.max(0, song.midi.tempos.length - 1) : 0;
 
   return (
     <div className="flex flex-col gap-6">
+      <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} />
       {songList}
 
       {/* 当前歌曲信息 */}
@@ -229,6 +247,7 @@ export function ChartScreen() {
           </span>
           <span className="flex items-center gap-1">
             微调
+            <HelpDot label="小节相位微调" text={HELP["phase"]!} />
             <button
               onClick={() => song.setSong({ phaseBeatOffset: song.phaseBeatOffset - 1 })}
               className="border border-[var(--taiko-line)] px-2 py-0.5 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
@@ -267,6 +286,7 @@ export function ChartScreen() {
 
         <label className="flex items-center gap-2 text-xs text-[var(--taiko-ink)]/60">
           对齐偏移 ms
+          <HelpDot label="对齐偏移" text={HELP["offset"]!} />
           <input
             type="number"
             step={10}
@@ -300,12 +320,14 @@ export function ChartScreen() {
         >
           节拍器 {metroOn ? "开" : "关"}
         </button>
+        <HelpDot label="节拍器" text={HELP["metronome"]!} />
       </div>
 
       {/* 难度 + 谱面统计 */}
       <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-2 text-sm font-medium">难度</h2>
+          <h2 className="mr-1 text-sm font-medium">难度</h2>
+          <HelpDot label="难度" text={HELP["difficulty"]!} />
           {DIFFICULTIES.map((d) => (
             <button
               key={d.id}

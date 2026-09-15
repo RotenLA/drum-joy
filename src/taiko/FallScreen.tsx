@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KEY_BY_PART, PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
+import { PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
 import { useSong } from "./songStore";
 import { songPlayer } from "./player";
@@ -8,22 +8,16 @@ import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick, getAudioContext } from "./metronome";
-import { loadKitEnabled, playDrum, saveKitEnabled } from "./drumKit";
+import { loadKitEnabled, playDrum } from "./drumKit";
+import { HelpDot } from "@/components/HelpDot";
+import { HELP } from "./helpTexts";
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
 
-import { TIER_LABEL, quality, type QualityMode, type QualityTier } from "./perf";
-import {
-  CALIB_RANGE,
-  DEFAULT_CALIBRATION,
-  loadCalibration,
-  saveCalibration,
-  tapOffsetMs,
-  type Calibration,
-} from "./calibration";
+import { quality, type QualityTier } from "./perf";
+import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
 
-const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±50ms / Good ±120ms，超时未击为 Miss（调手感改这里） */
 const PERFECT_MS = 50;
@@ -33,13 +27,7 @@ const COUNT_IN_BEATS = 4;
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
-export function FallScreen({
-  speed,
-  onSpeedChange,
-}: {
-  speed: number;
-  onSpeedChange: (s: number) => void;
-}) {
+export function FallScreen({ speed }: { speed: number }) {
   const song = useSong();
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
@@ -56,7 +44,7 @@ export function FallScreen({
   const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
   /** 长音符（左踏板踩住闭镲）状态：0 未开始 / 1 按住中 / 2 已断开或结算 */
   const holdStateRef = useRef<Uint8Array>(new Uint8Array(0));
-  /** 左踏板当前是否被踩住（键盘 keyup / MIDI note-off 抬起） */
+  /** 左踏板当前是否被踩住（MIDI note-off 抬起） */
   const pedalHeldRef = useRef(false);
   const statsRef = useRef({ perfect: 0, good: 0, miss: 0 });
   const comboRef = useRef(0);
@@ -70,53 +58,20 @@ export function FallScreen({
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
 
-  // 画质档位（auto 会自动降档；tier 变化时重设画布分辨率）
-  const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
+  // 画质档位（在谱面页设置；tier 变化时重设画布分辨率）
   const [tier, setTier] = useState<QualityTier>("high");
   useEffect(() => {
     quality.hydrate();
-    setQualityMode(quality.getMode());
     setTier(quality.tier);
-    const off = quality.subscribe(() => {
-      setQualityMode(quality.getMode());
-      setTier(quality.tier);
-    });
-    return off;
+    return quality.subscribe(() => setTier(quality.tier));
   }, []);
 
-  // 延迟校准（视觉 / 判定偏移）
-  const [calib, setCalib] = useState<Calibration>(DEFAULT_CALIBRATION);
-  useEffect(() => {
-    setCalib(loadCalibration());
-  }, []);
-  const calibRef = useRef<Calibration>(calib);
-  useEffect(() => {
-    calibRef.current = calib;
-  }, [calib]);
-  const updateCalib = useCallback((patch: Partial<Calibration>) => {
-    setCalib((c) => saveCalibration({ ...c, ...patch }));
-  }, []);
-  /** 跟拍校准状态 */
-  const calibRunRef = useRef<{ startMs: number; beatMs: number; taps: number[] } | null>(null);
-  const calibTimerRef = useRef<number | null>(null);
-  const [calibrating, setCalibrating] = useState(false);
-  const [calibTaps, setCalibTaps] = useState(0);
-
-  // 内置鼓音色（默认开启）
-  const [kitOn, setKitOn] = useState(true);
+  // 偏移与鼓音色（在谱面页设置，进入本页时读取）
+  const calibRef = useRef<Calibration>(DEFAULT_CALIBRATION);
   const kitOnRef = useRef(true);
   useEffect(() => {
-    const on = loadKitEnabled();
-    setKitOn(on);
-    kitOnRef.current = on;
-  }, []);
-  const toggleKit = useCallback(() => {
-    setKitOn((on) => {
-      const next = !on;
-      kitOnRef.current = next;
-      saveKitEnabled(next);
-      return next;
-    });
+    calibRef.current = loadCalibration();
+    kitOnRef.current = loadKitEnabled();
   }, []);
 
   const layout = layoutOf(song.difficulty);
@@ -214,13 +169,6 @@ export function FallScreen({
       const at = atMs !== undefined && Number.isFinite(atMs) ? atMs : now;
       flashesRef.current[part] = now + FLASH_MS;
       if (kitOnRef.current) playDrum(part, velocity);
-      // 跟拍校准中：只收集敲击时刻
-      const run = calibRunRef.current;
-      if (run) {
-        run.taps.push(at);
-        setCalibTaps(run.taps.length);
-        return;
-      }
 
       if (phaseRef.current !== "playing" || !playChart) return;
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
@@ -274,87 +222,6 @@ export function FallScreen({
       offUp();
     };
   }, [hitPart, parts]);
-
-  // 键盘调试（无 MIDI 设备时）
-  useEffect(() => {
-    const pedalKey = KEY_BY_PART.pedalHat.key;
-    const onKey = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
-      if (k === pedalKey) pedalHeldRef.current = true;
-      if (e.repeat) return;
-      for (const [part, v] of Object.entries(KEY_BY_PART) as [PartId, { key: string }][]) {
-        if (v.key === k && parts.includes(part)) {
-          hitPart(part);
-          return;
-        }
-      }
-    };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === pedalKey) pedalHeldRef.current = false;
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, [hitPart, parts]);
-
-  /** 校准结束：够 3 下就算偏差中位数写入判定偏移，否则原值不动 */
-  const finishCalibration = useCallback(() => {
-    if (calibTimerRef.current !== null) {
-      window.clearInterval(calibTimerRef.current);
-      calibTimerRef.current = null;
-    }
-    const run = calibRunRef.current;
-    calibRunRef.current = null;
-    setCalibrating(false);
-    setCalibTaps(0);
-    if (!run || run.taps.length < 3) return;
-    const off = tapOffsetMs(run.taps, run.startMs, run.beatMs);
-    setCalib((c) => saveCalibration({ ...c, judgeMs: -off }));
-  }, []);
-
-  /**
-   * 跟拍校准：120BPM 节拍器一直响，直到敲满 8 下自动结束（也可手动停止），
-   * 取偏差中位数写入判定偏移。
-   */
-  const startCalibration = useCallback(() => {
-    if (calibRunRef.current) return;
-    songPlayer.pause();
-    const beatMs = 500;
-    const target = 8;
-    const startMs = performance.now() + 600;
-    calibRunRef.current = { startMs, beatMs, taps: [] };
-    setCalibrating(true);
-    setCalibTaps(0);
-    let beat = 0;
-    const tick = () => {
-      const run = calibRunRef.current;
-      if (!run) return;
-      // 敲满 8 下 → 结算（在下一拍到来时收工，保证最后一下也被记到）
-      if (run.taps.length >= target) {
-        finishCalibration();
-        return;
-      }
-      metronomeClick(beat % 4 === 0);
-      beat++;
-    };
-    timersRef.current.push(
-      window.setTimeout(() => {
-        if (!calibRunRef.current) return;
-        tick();
-        calibTimerRef.current = window.setInterval(tick, beatMs);
-      }, 600),
-    );
-  }, [finishCalibration]);
-
-  // 离开界面时确保校准节拍器停止
-  useEffect(() => {
-    return () => {
-      if (calibTimerRef.current !== null) window.clearInterval(calibTimerRef.current);
-    };
-  }, []);
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
   const start = useCallback(() => {
@@ -679,84 +546,6 @@ export function FallScreen({
         </div>
       </div>
 
-      {/* 性能与手感：画质档位 + 延迟校准 */}
-      <div
-        className="mx-auto w-full border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-4 py-3"
-        style={{ maxWidth: "calc(min(70vh, 720px) * 16 / 9)" }}
-      >
-        <div className="mb-2 flex flex-wrap items-center gap-3">
-          <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">画质</span>
-          {(["auto", "high", "medium", "low"] as QualityMode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => quality.setMode(m)}
-              className={`-ml-px border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors first:ml-0 ${
-                qualityMode === m
-                  ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                  : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-              }`}
-            >
-              {TIER_LABEL[m]}
-            </button>
-          ))}
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">
-            当前实际：{TIER_LABEL[tier]}（卡顿时自动降档）
-          </span>
-        </div>
-        <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2">
-          {(
-            [
-              ["visualMs", "音符视觉偏移"],
-              ["judgeMs", "判定偏移"],
-            ] as const
-          ).map(([key, label]) => (
-            <label key={key} className="flex flex-col gap-1">
-              <span className="flex items-center justify-between text-[11px] text-[var(--taiko-ink)]/70">
-                <span>{label}</span>
-                <span className="tabular-nums text-[var(--taiko-ink)]/55">
-                  {calib[key] > 0 ? "+" : ""}
-                  {calib[key]} ms
-                </span>
-              </span>
-              <input
-                type="range"
-                min={-CALIB_RANGE}
-                max={CALIB_RANGE}
-                step={1}
-                value={calib[key]}
-                onChange={(e) => updateCalib({ [key]: Number(e.target.value) })}
-                className="h-1 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)]"
-              />
-            </label>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <button
-            onClick={calibrating ? finishCalibration : startCalibration}
-            disabled={!calibrating && phase === "playing"}
-            className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {calibrating ? `停止校准（${calibTaps}/8）` : "自动校准"}
-          </button>
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">
-            节拍器会一直响，跟着敲 8 下自动算出你这台机器的延迟，也可随时停止
-          </span>
-
-          <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
-          <button
-            onClick={toggleKit}
-            className={`border px-3 py-1.5 text-xs transition-colors ${
-              kitOn
-                ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-            }`}
-          >
-            鼓音色 {kitOn ? "开" : "关"}
-          </button>
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">内置鼓音色，敲击即出声</span>
-        </div>
-      </div>
-
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={togglePause}
@@ -765,48 +554,15 @@ export function FallScreen({
         >
           {phase === "paused" ? "继续" : "暂停"}
         </button>
-
-        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-
-        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-        <span className="text-xs text-[var(--taiko-ink)]/50">速度</span>
-        {SPEEDS.map((s) => (
-          <button
-            key={s}
-            onClick={() => onSpeedChange(s)}
-            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs tabular-nums transition-colors first:ml-0 ${
-              speed === s
-                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-            }`}
-          >
-            {s}x
-          </button>
-        ))}
-
-        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
-        <span className="text-xs text-[var(--taiko-ink)]/50">难度</span>
-        {DIFFICULTIES.map((d) => (
-          <button
-            key={d.id}
-            onClick={() => song.setSong({ difficulty: d.id })}
-            title={d.hint}
-            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1.5 text-xs transition-colors first:ml-0 ${
-              song.difficulty === d.id
-                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
-            }`}
-          >
-            {d.label}
-          </button>
-        ))}
+        <HelpDot label="游玩" text={HELP["play"]!} />
+        <span className="text-xs text-[var(--taiko-ink)]/50">
+          速度 {speed}x · 难度 {DIFFICULTIES.find((d) => d.id === song.difficulty)?.label} ·
+          参数都在「谱面」页
+        </span>
 
         <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55">
           {parts.map((p) => (
             <span key={p} className="flex items-center gap-1.5">
-              <kbd className="border border-[var(--taiko-line)] px-1.5 py-0.5 font-mono text-[10px]">
-                {KEY_BY_PART[p].label}
-              </kbd>
               <i
                 className="inline-block h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: PART_BY_ID[p].color }}

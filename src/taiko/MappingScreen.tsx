@@ -12,6 +12,8 @@ import {
 import { partAtPoint, renderPadArray } from "./stageRenderer";
 import { midiManager, type MidiInputInfo } from "./midiInput";
 import { getDrumNoteName } from "@/shared/drumLaneMap";
+import { HelpDot } from "@/components/HelpDot";
+import { HELP } from "./helpTexts";
 
 const ALL_PARTS = DRUM_PARTS.map((p) => p.id);
 
@@ -151,7 +153,10 @@ export function MappingScreen({
     <div className="flex flex-col gap-4">
       {/* MIDI 设备 */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
-        <span className="text-xs text-[var(--taiko-ink)]/60">MIDI 输入设备</span>
+        <span className="flex items-center gap-1 text-xs text-[var(--taiko-ink)]/60">
+          MIDI 输入设备
+          <HelpDot label="MIDI 输入设备" text={HELP["midiDevice"]!} />
+        </span>
         {midiReady === false ? (
           <span className="text-xs text-[var(--taiko-ink)]/45">
             当前环境不支持 Web MIDI（请在 Chrome / Electron 中使用）
@@ -261,16 +266,20 @@ export function MappingScreen({
                 </button>
               </div>
 
-              <button
-                onClick={() => setLearning((v) => !v)}
-                className={`border px-3 py-2 text-xs transition-colors ${
-                  learning
-                    ? "animate-pulse border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
-                    : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
-                }`}
-              >
-                {learning ? "敲一下实体鼓…（点击取消）" : "MIDI Learn"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setLearning((v) => !v)}
+                  className={`border px-3 py-2 text-xs transition-colors ${
+                    learning
+                      ? "animate-pulse border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                      : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+                  }`}
+                >
+                  {learning ? "敲一下实体鼓…（点击取消）" : "MIDI Learn"}
+                </button>
+                <HelpDot label="MIDI Learn" text={HELP["mapping"]!} />
+              </div>
+
               <p className="text-xs leading-relaxed text-[var(--taiko-ink)]/45">
                 音符会同时从其他部件移除（一个音符只归属一个部件）。游玩屏判定与键盘图例即时生效。
               </p>

@@ -5,6 +5,7 @@ import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
+import { TutorialOverlay, tutorialSeen } from "./tutorial/TutorialOverlay";
 
 type ScreenKey = "play" | "chart" | "mapping";
 
@@ -34,20 +35,24 @@ export function TaikoShell() {
 }
 
 function ShellInner() {
-  const [screen, setScreen] = useState<ScreenKey>("play");
+  const [screen, setScreen] = useState<ScreenKey>("chart");
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
+  const [tutorial, setTutorial] = useState(false);
   const song = useSong();
 
   // hydration 后再读本地设置，避免 SSR 不一致
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Partial<TaikoSettings>;
-      setSettings((s) => ({ ...s, ...parsed }));
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<TaikoSettings>;
+        setSettings((s) => ({ ...s, ...parsed }));
+      }
     } catch {
       // 忽略损坏的本地设置
     }
+    // 首次打开自动弹出新手教程
+    if (!tutorialSeen()) setTutorial(true);
   }, []);
 
   // 暴露 __pd2uNoteOn/__pd2uNoteOff 给 Unity 等宿主注入 MIDI 事件
@@ -103,6 +108,15 @@ function ShellInner() {
               </button>
             </li>
           ))}
+          <li>
+            <button
+              onClick={() => setTutorial(true)}
+              className="flex w-full items-baseline gap-2 border-b border-[var(--taiko-line)] px-4 py-3 text-left text-sm transition-colors hover:bg-[var(--taiko-ink)]/10"
+            >
+              <span>教程</span>
+              <span className="text-[10px] uppercase tracking-[0.15em] opacity-50">GUIDE</span>
+            </button>
+          </li>
         </ul>
       </nav>
 
@@ -135,14 +149,14 @@ function ShellInner() {
         </header>
 
         <div className="flex-1 overflow-auto px-8 py-6">
-          {screen === "play" && (
-            <FallScreen
+          {screen === "play" && <FallScreen speed={settings.speed} />}
+
+          {screen === "chart" && (
+            <ChartScreen
               speed={settings.speed}
               onSpeedChange={(speed) => updateSettings({ speed })}
             />
           )}
-
-          {screen === "chart" && <ChartScreen />}
           {screen === "mapping" && (
             <MappingScreen
               deviceId={settings.midiDeviceId}
@@ -151,6 +165,15 @@ function ShellInner() {
           )}
         </div>
       </main>
+
+      {tutorial && (
+        <TutorialOverlay
+          onFinish={() => {
+            setTutorial(false);
+            setScreen("chart");
+          }}
+        />
+      )}
     </div>
   );
 }
