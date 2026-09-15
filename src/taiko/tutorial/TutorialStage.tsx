@@ -11,7 +11,14 @@ import { midiManager } from "../midiInput";
 import { click as metronomeClick, getAudioContext } from "../metronome";
 import { loadKitEnabled, playDrum } from "../drumKit";
 import { loadCalibration } from "../calibration";
-import { BEAT_MS, TARGET, TUTORIAL_PARTS, WARMUP_BEATS, buildLessonChart, type Lesson } from "./steps";
+import {
+  BEAT_MS,
+  TARGET,
+  TUTORIAL_PARTS,
+  WARMUP_BEATS,
+  buildLessonChart,
+  type Lesson,
+} from "./steps";
 
 const HIT_WINDOW = 170;
 const FLASH_MS = 200;

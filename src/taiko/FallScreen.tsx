@@ -74,7 +74,6 @@ export function FallScreen({ speed }: { speed: number }) {
     kitOnRef.current = loadKitEnabled();
   }, []);
 
-
   const layout = layoutOf(song.difficulty);
   const parts = VISIBLE_PARTS[layout];
   const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
@@ -171,8 +170,6 @@ export function FallScreen({ speed }: { speed: number }) {
       flashesRef.current[part] = now + FLASH_MS;
       if (kitOnRef.current) playDrum(part, velocity);
 
-
-
       if (phaseRef.current !== "playing" || !playChart) return;
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
       const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
@@ -225,9 +222,6 @@ export function FallScreen({ speed }: { speed: number }) {
       offUp();
     };
   }, [hitPart, parts]);
-
-
-
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
   const start = useCallback(() => {
@@ -578,7 +572,6 @@ export function FallScreen({ speed }: { speed: number }) {
           ))}
         </span>
       </div>
-
     </div>
   );
 }

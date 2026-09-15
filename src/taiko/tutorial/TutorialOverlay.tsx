@@ -49,7 +49,15 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
   };
 
   const stepNo =
-    phase === "adapter" ? 1 : phase === "sticks" ? 2 : phase === "intro" ? 3 : phase === "lesson" ? 4 + lessonIdx : TOTAL_STEPS;
+    phase === "adapter"
+      ? 1
+      : phase === "sticks"
+        ? 2
+        : phase === "intro"
+          ? 3
+          : phase === "lesson"
+            ? 4 + lessonIdx
+            : TOTAL_STEPS;
 
   const nextLesson = () => {
     if (lessonIdx + 1 < LESSONS.length) {
@@ -84,7 +92,9 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
             <p className="text-sm text-white/70">
               这个教程会带你连接设备，并练习最基础的敲击方式，大约 5 分钟。
             </p>
-            <p className="text-xs text-white/45">已经熟悉的话可以直接跳过，随时能从左侧「教程」重新进入。</p>
+            <p className="text-xs text-white/45">
+              已经熟悉的话可以直接跳过，随时能从左侧「教程」重新进入。
+            </p>
             <div className="flex gap-3 pt-2">
               <PrimaryButton onClick={() => setPhase("adapter")}>开始教学</PrimaryButton>
               <GhostButton onClick={finish}>跳过</GhostButton>
@@ -128,11 +138,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                     {line}
                   </p>
                 ))}
-                <TutorialStage
-                  lesson={LESSONS[lessonIdx]!}
-                  mode="demo"
-                  restartKey={restartKey}
-                />
+                <TutorialStage lesson={LESSONS[lessonIdx]!} mode="demo" restartKey={restartKey} />
                 <div className="flex gap-3">
                   <PrimaryButton
                     onClick={() => {
@@ -227,7 +233,11 @@ function AdapterStep({ onDone }: { onDone: () => void }) {
       <p className="text-sm text-white/75">
         打开 PD2ULTRA 或 PD2MAX 的适配器，用 USB 线把它接到电脑上。
       </p>
-      <StatusLine ok={found !== null} okText={`已识别到适配器：${found}`} waitText="正在等待适配器…" />
+      <StatusLine
+        ok={found !== null}
+        okText={`已识别到适配器：${found}`}
+        waitText="正在等待适配器…"
+      />
       {found !== null && (
         <div className="pt-2">
           <PrimaryButton onClick={onDone}>下一步</PrimaryButton>

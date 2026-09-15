@@ -7,7 +7,6 @@ import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
 import { TutorialOverlay, tutorialSeen } from "./tutorial/TutorialOverlay";
 
-
 type ScreenKey = "play" | "chart" | "mapping";
 
 interface TaikoSettings {
@@ -55,7 +54,6 @@ function ShellInner() {
     // 首次打开自动弹出新手教程
     if (!tutorialSeen()) setTutorial(true);
   }, []);
-
 
   // 暴露 __pd2uNoteOn/__pd2uNoteOff 给 Unity 等宿主注入 MIDI 事件
   useEffect(() => {
@@ -120,7 +118,6 @@ function ShellInner() {
             </button>
           </li>
         </ul>
-
       </nav>
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -177,7 +174,6 @@ function ShellInner() {
           }}
         />
       )}
-
     </div>
   );
 }

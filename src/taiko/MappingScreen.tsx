@@ -15,7 +15,6 @@ import { getDrumNoteName } from "@/shared/drumLaneMap";
 import { HelpDot } from "@/components/HelpDot";
 import { HELP } from "./helpTexts";
 
-
 const ALL_PARTS = DRUM_PARTS.map((p) => p.id);
 
 /**
@@ -159,7 +158,6 @@ export function MappingScreen({
           <HelpDot label="MIDI 输入设备" text={HELP["midiDevice"]!} />
         </span>
         {midiReady === false ? (
-
           <span className="text-xs text-[var(--taiko-ink)]/45">
             当前环境不支持 Web MIDI（请在 Chrome / Electron 中使用）
           </span>

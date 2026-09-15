@@ -12,13 +12,7 @@ export const WARMUP_BEATS = 4;
 /** 通过所需次数 */
 export const TARGET = 8;
 /** 教学只展示这五个部件 */
-export const TUTORIAL_PARTS: readonly PartId[] = [
-  "pedalHat",
-  "kick",
-  "hihat",
-  "snare",
-  "floorTom",
-];
+export const TUTORIAL_PARTS: readonly PartId[] = ["pedalHat", "kick", "hihat", "snare", "floorTom"];
 
 /** 部件 → 用于渲染的 MIDI 音符（跟随当前映射） */
 export function noteOfPart(part: PartId): number {
