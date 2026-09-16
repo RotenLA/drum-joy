@@ -327,8 +327,7 @@ export function PositionCaptureScreen() {
             onClick={() => {
               clearStickCalibration();
               setGroups({});
-              setCapture(IDLE);
-              setStatus("已恢复默认鼓棒位置");
+              apply(IDLE, "已恢复默认鼓棒位置");
             }}
             className="flex items-center justify-center gap-1 border border-[var(--taiko-line)] px-3 py-2 text-xs"
           >
