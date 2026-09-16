@@ -3,7 +3,7 @@
  * 连接适配器 → 连接鼓槌与踏板 → 认识五个部件 → 六节课（动画演示 + 练习 + 鼓励）→ 完成。
  * 从「认识五个部件」开始，鼓位图舞台一直留在画面上，后续说明都以卡片叠在舞台之上。
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { midiManager } from "../midiInput";
 import { PART_BY_ID, partOfNote, type PartId } from "../laneLayouts";
 import { renderPadArray } from "../stageRenderer";
@@ -73,6 +73,10 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
     }
   };
 
+  const handleLessonPass = useCallback(() => {
+    setLessonPhase("praise");
+  }, []);
+
   const lesson = LESSONS[lessonIdx]!;
   const onStage = phase === "intro" || phase === "lesson" || phase === "done";
 
@@ -122,9 +126,38 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                   key={`${lesson.id}-${restartKey}`}
                   lesson={lesson}
                   restartKey={restartKey}
-                  onPass={() => setLessonPhase("praise")}
+                  paused={lessonPhase === "praise"}
+                  onPass={handleLessonPass}
                 />
               )
+            }
+            overlay={
+              phase === "lesson" && lessonPhase === "praise" ? (
+                <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/55 px-5 backdrop-blur-sm">
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="tutorial-praise-title"
+                    className="w-full max-w-sm border border-white/25 bg-[#0b0b0e]/95 px-6 py-5 shadow-2xl"
+                  >
+                    <h2 id="tutorial-praise-title" className="text-base tracking-[0.12em] text-white">
+                      做得好！
+                    </h2>
+                    <p className="mt-2 text-sm text-white/75">{lesson.praise}</p>
+                    <div className="mt-5 flex gap-3">
+                      <PrimaryButton onClick={nextLesson}>下一步</PrimaryButton>
+                      <GhostButton
+                        onClick={() => {
+                          setLessonPhase("learn");
+                          setRestartKey((k) => k + 1);
+                        }}
+                      >
+                        再练一次
+                      </GhostButton>
+                    </div>
+                  </div>
+                </div>
+              ) : null
             }
             card={
               <>
@@ -168,24 +201,6 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                   <div className="flex gap-3 pt-1">
                     <GhostButton onClick={() => setRestartKey((k) => k + 1)}>重新开始</GhostButton>
                     <GhostButton onClick={nextLesson}>跳过本节</GhostButton>
-                  </div>
-                </>
-              )}
-
-              {phase === "lesson" && lessonPhase === "praise" && (
-                <>
-                  <CardTitle>做得好！</CardTitle>
-                  <p className="text-sm text-white/75">{lesson.praise}</p>
-                  <div className="flex gap-3 pt-1">
-                    <PrimaryButton onClick={nextLesson}>下一步</PrimaryButton>
-                    <GhostButton
-                      onClick={() => {
-                        setLessonPhase("learn");
-                        setRestartKey((k) => k + 1);
-                      }}
-                    >
-                      再练一次
-                    </GhostButton>
                   </div>
                 </>
               )}
@@ -341,7 +356,15 @@ function PartsPreview() {
 // ================= 小组件 =================
 
 /** 固定尺寸的 16:9 舞台框 + 紧贴下方的说明区：教学全程复用同一块画面 */
-function StageFrame({ stage, card }: { stage: React.ReactNode; card: React.ReactNode }) {
+function StageFrame({
+  stage,
+  overlay,
+  card,
+}: {
+  stage: React.ReactNode;
+  overlay?: React.ReactNode;
+  card: React.ReactNode;
+}) {
   return (
     <div
       className="mx-auto flex w-full flex-col"
@@ -356,6 +379,7 @@ function StageFrame({ stage, card }: { stage: React.ReactNode; card: React.React
         }}
       >
         {stage}
+        {overlay}
         <KitToggle />
       </div>
 

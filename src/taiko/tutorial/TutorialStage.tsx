@@ -29,10 +29,12 @@ export function TutorialStage({
   lesson,
   onPass,
   restartKey,
+  paused,
 }: {
   lesson: Lesson;
   onPass?: () => void;
   restartKey: number;
+  paused?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -60,6 +62,8 @@ export function TutorialStage({
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
+    // 通过后保留最后一帧作为弹窗背景，同时停止节拍器、判定与动画。
+    if (paused) return;
     const ctx2d = canvas.getContext("2d");
     if (!ctx2d) return;
 
@@ -119,7 +123,7 @@ export function TutorialStage({
       if (passed) return;
       passed = true;
       setStreak(TARGET);
-      window.setTimeout(() => onPass?.(), 600);
+      onPass?.();
     };
 
     const bump = (ok: boolean) => {
@@ -282,7 +286,7 @@ export function TutorialStage({
       offUp();
     };
     // restartKey 变化 = 再来一次
-  }, [lesson, onPass, restartKey]);
+  }, [lesson, onPass, paused, restartKey]);
 
   // 铺满外层舞台框（由 TutorialOverlay 提供尺寸），卡片叠在同一块画面上
   return (
