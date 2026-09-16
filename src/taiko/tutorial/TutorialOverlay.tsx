@@ -66,7 +66,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
   const nextLesson = () => {
     if (lessonIdx + 1 < LESSONS.length) {
       setLessonIdx(lessonIdx + 1);
-      setLessonPhase("demo");
+      setLessonPhase("learn");
       setRestartKey((k) => k + 1);
     } else {
       setPhase("done");
