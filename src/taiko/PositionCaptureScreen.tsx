@@ -214,12 +214,7 @@ export function PositionCaptureScreen() {
   const calibration = useMemo(() => makeCalibration(groups), [groups]);
   const save = () => {
     saveStickCalibration(calibration);
-    const missing = (["l", "r"] as const).filter((side) => !calibration.fit[side]);
-    setStatus(
-      missing.length
-        ? `已保存，但${missing.map((s) => SIDE_LABEL[s]).join("、")}的角度过于集中，无法换算位置，建议重测`
-        : "校准已保存并应用到鼓棒位置",
-    );
+    setStatus("校准已保存，鼓棒会柔和吸附到最接近的鼓面");
   };
   const download = () => {
     const file = makeCalibration(groups);
