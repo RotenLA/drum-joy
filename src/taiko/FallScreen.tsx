@@ -17,6 +17,7 @@ import { getPlayChart } from "./chartCache";
 import { shiftChart } from "@/shared/taikoChart";
 
 import { quality, type QualityTier } from "./perf";
+import { FpsBadge } from "./FpsBadge";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
 
 const FLASH_MS = 200;
