@@ -42,15 +42,15 @@ function ShellInner() {
   const open = (key: PanelKey) => { setPanel(key); setDrawer(false); };
 
   return (
-    <div className="taiko-root relative h-dvh min-h-[360px] overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
+    <div className="taiko-root relative h-dvh min-h-[320px] overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
       <div className="absolute inset-0 z-0"><FallScreen speed={settings.speed} suspended={panel !== null} /></div>
 
-      <button aria-label={drawer ? "关闭菜单" : "打开菜单"} title={drawer ? "关闭菜单" : "打开菜单"} onClick={() => setDrawer((v) => !v)} className="absolute left-3 top-3 z-50 grid h-11 w-11 place-items-center border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/90 text-[var(--taiko-ink)] backdrop-blur transition-colors hover:border-[var(--taiko-ink)]">
+      <button aria-label={drawer ? "关闭菜单" : "打开菜单"} title={drawer ? "关闭菜单" : "打开菜单"} onClick={() => setDrawer((v) => !v)} className="taiko-menu-trigger absolute z-50 grid h-11 w-11 shrink-0 place-items-center border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/95 text-[var(--taiko-ink)] shadow-lg backdrop-blur transition-colors hover:border-[var(--taiko-ink)]">
         {drawer ? <X size={20} /> : <Menu size={20} />}
       </button>
 
       {drawer && <button aria-label="关闭菜单遮罩" onClick={() => setDrawer(false)} className="absolute inset-0 z-30 bg-black/45" />}
-      <nav className={`absolute inset-y-0 left-0 z-40 w-64 border-r border-[var(--taiko-line)] bg-[var(--taiko-paper)]/95 pt-20 shadow-2xl backdrop-blur transition-transform duration-200 ${drawer ? "translate-x-0" : "-translate-x-full"}`}>
+      <nav className={`taiko-drawer absolute inset-y-0 left-0 z-40 w-64 max-w-[82vw] border-r border-[var(--taiko-line)] bg-[var(--taiko-paper)]/95 pt-20 shadow-2xl backdrop-blur transition-transform duration-200 ${drawer ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="border-y border-[var(--taiko-line)] px-5 py-4">
           <div className="text-lg font-semibold text-[var(--taiko-accent)]">PD2U</div>
           <div className="mt-1 truncate text-xs text-[var(--taiko-ink)]/55">{song.fileName || "未选择歌曲"}</div>
@@ -64,8 +64,8 @@ function ShellInner() {
       </nav>
 
       {panel && (
-        <section className="absolute inset-3 z-20 overflow-hidden border border-[var(--taiko-line)] bg-[var(--taiko-paper)]/96 shadow-2xl backdrop-blur md:inset-6">
-          <header className="grid h-14 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-[var(--taiko-line)] px-4 pl-16">
+        <section className="taiko-panel absolute z-20 overflow-hidden border border-[var(--taiko-line)] bg-[var(--taiko-paper)]/96 shadow-2xl backdrop-blur">
+          <header className="grid h-14 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-[var(--taiko-line)] px-3 pl-16 md:px-4 md:pl-16">
             <div className="min-w-0"><h1 className="truncate text-sm font-medium">{panel === "chart" ? "谱面" : panel === "mapping" ? "映射" : "位置捕捉"}</h1><p className="truncate text-[10px] text-[var(--taiko-ink)]/45">{song.fileName || "PD2U AeroGame"}</p></div>
             <button aria-label="关闭窗口" title="关闭" onClick={() => setPanel(null)} className="grid h-9 w-9 shrink-0 place-items-center border border-[var(--taiko-line)] hover:border-[var(--taiko-ink)]"><X size={17}/></button>
           </header>

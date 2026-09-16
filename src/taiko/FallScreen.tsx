@@ -521,24 +521,24 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
         )}
       </div>
 
-      {/* 调音台悬浮在舞台底部，不再压缩演奏区 */}
+      {/* 手机横屏保持四轨单行，固定在底部安全区内 */}
       <div
-        className="absolute inset-x-3 bottom-3 z-20 border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/90 px-4 py-3 backdrop-blur md:inset-x-auto md:left-1/2 md:w-[min(860px,calc(100%-2rem))] md:-translate-x-1/2"
+        className="taiko-mixer absolute z-20 border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/92 px-2 py-1.5 shadow-lg backdrop-blur md:px-3 md:py-2"
       >
-        <div className="mb-2 flex items-baseline gap-3">
+        <div className="mb-2 hidden items-baseline gap-3 lg:flex">
           <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">调音台</span>
           <span className="text-[10px] text-[var(--taiko-ink)]/45">100% = 原始文件音量</span>
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4">
+        <div className="grid grid-cols-4 gap-2 md:gap-4">
           {STEM_KINDS.map((key) => {
             const track = stems[key];
             const value = song.mix[key];
             return (
-              <label key={key} className="flex flex-col gap-1">
-                <span className="flex items-center justify-between text-[11px] text-[var(--taiko-ink)]/70">
-                  <span className={track ? "" : "text-[var(--taiko-ink)]/35"}>
+              <label key={key} className="flex min-w-0 flex-col gap-1">
+                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 text-[10px] text-[var(--taiko-ink)]/70 md:text-[11px]">
+                  <span className={`truncate ${track ? "" : "text-[var(--taiko-ink)]/35"}`}>
                     {STEM_LABEL[key]}
-                    {track ? "" : "（无此轨）"}
+                    {track ? "" : "（无）"}
                   </span>
                   <span className="tabular-nums text-[var(--taiko-ink)]/55">
                     {Math.round(value * 100)}%
@@ -556,7 +556,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
                       mix: { ...song.mix, [key]: Number(e.target.value) / 100 },
                     })
                   }
-                  className="h-1 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)] disabled:cursor-not-allowed disabled:opacity-40"
                 />
               </label>
             );
@@ -564,21 +564,21 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
         </div>
       </div>
 
-      <div className="absolute right-3 top-3 z-20 flex max-w-[calc(100%-5rem)] flex-wrap items-center justify-end gap-2 border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/85 px-3 py-2 backdrop-blur">
+      <div className="taiko-play-controls absolute z-20 grid grid-cols-[auto_auto] items-center justify-end gap-2 border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/92 p-1.5 shadow-lg backdrop-blur md:px-2 md:py-2">
         <button
           onClick={togglePause}
           disabled={phase !== "playing" && phase !== "paused"}
-          className="border border-[var(--taiko-ink)] px-5 py-2 text-sm tracking-wide text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:cursor-not-allowed disabled:opacity-30"
+          className="h-9 min-w-16 border border-[var(--taiko-ink)] px-3 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:cursor-not-allowed disabled:opacity-30 md:min-w-20 md:px-5 md:text-sm"
         >
           {phase === "paused" ? "继续" : "暂停"}
         </button>
         <HelpDot label="游玩" text={HELP["play"]!} />
-        <span className="text-xs text-[var(--taiko-ink)]/50">
+        <span className="col-span-2 hidden text-xs text-[var(--taiko-ink)]/50 lg:block">
           速度 {speed}x · 难度 {DIFFICULTIES.find((d) => d.id === song.difficulty)?.label} ·
           参数都在「谱面」页
         </span>
 
-        <span className="hidden flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55 xl:flex">
+        <span className="col-span-2 hidden flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55 xl:flex">
           {parts.map((p) => (
             <span key={p} className="flex items-center gap-1.5">
               <i

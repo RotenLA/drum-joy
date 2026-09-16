@@ -150,5 +150,68 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    margin: 0;
+    min-height: 100dvh;
+    overflow: hidden;
+  }
+}
+
+.taiko-root {
+  --safe-top: max(0.5rem, env(safe-area-inset-top));
+  --safe-right: max(0.5rem, env(safe-area-inset-right));
+  --safe-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  --safe-left: max(0.5rem, env(safe-area-inset-left));
+}
+
+.taiko-menu-trigger {
+  left: var(--safe-left);
+  top: var(--safe-top);
+}
+
+.taiko-drawer {
+  padding-left: env(safe-area-inset-left);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.taiko-panel {
+  left: var(--safe-left);
+  right: var(--safe-right);
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+}
+
+.taiko-play-controls {
+  right: var(--safe-right);
+  top: var(--safe-top);
+}
+
+.taiko-mixer {
+  left: var(--safe-left);
+  right: var(--safe-right);
+  bottom: var(--safe-bottom);
+}
+
+@media (min-width: 768px) {
+  .taiko-panel {
+    left: max(1.5rem, env(safe-area-inset-left));
+    right: max(1.5rem, env(safe-area-inset-right));
+    top: max(1.5rem, env(safe-area-inset-top));
+    bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  .taiko-mixer {
+    left: 50%;
+    right: auto;
+    width: min(53.75rem, calc(100% - 2rem));
+    transform: translateX(-50%);
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .taiko-root {
+    --safe-top: max(0.375rem, env(safe-area-inset-top));
+    --safe-right: max(0.5rem, env(safe-area-inset-right));
+    --safe-bottom: max(0.375rem, env(safe-area-inset-bottom));
+    --safe-left: max(0.5rem, env(safe-area-inset-left));
   }
 }
