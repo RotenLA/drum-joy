@@ -165,8 +165,8 @@ export function PositionCaptureScreen() {
   const goTo = (index: number, note?: string) => {
     const step = ((index % ORDER.length) + ORDER.length) % ORDER.length;
     const item = ORDER[step]!;
-    setCapture({ step, samples: [] });
-    setStatus(
+    apply(
+      { step, samples: [] },
       `${note ?? ""}请用${SIDE_LABEL[item.side]}敲${PART_BY_ID[item.part].label}，共 ${NEED} 次`,
     );
   };
@@ -181,9 +181,9 @@ export function PositionCaptureScreen() {
     goTo(index, "重新测试：");
   };
   const resetCurrent = () => {
-    if (!running) return;
-    setCapture((prev) => ({ step: prev.step, samples: [] }));
-    setStatus("本项已清空，重新采集");
+    const step = captureRef.current.step;
+    if (step < 0) return;
+    apply({ step, samples: [] }, "本项已清空，重新采集");
   };
 
   const calibration = useMemo(() => makeCalibration(groups), [groups]);
