@@ -292,6 +292,21 @@ export function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number
   ctx.fillRect(0, h * 0.72, w, h * 0.28);
 }
 
+/**
+ * 鼓盘渐变缓存：侧面/顶面渐变只随几何（半径、角度）变化，
+ * 命中回弹的 10% 缩放不再新建 Gradient（视觉上不可分辨），
+ * 每帧少建十几个对象，WebView 上 GC 卡顿明显下降。
+ */
+const padGradCache = new Map<string, CanvasGradient>();
+function cachedGrad(key: string, make: () => CanvasGradient): CanvasGradient {
+  let g = padGradCache.get(key);
+  if (!g) {
+    g = make();
+    padGradCache.set(key, g);
+  }
+  return g;
+}
+
 function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number, parts: readonly PartId[]) {
   ensureGradCache(ctx, w, h);
   ctx.save();
