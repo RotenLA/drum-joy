@@ -47,17 +47,7 @@ export interface PresetSong {
 
 export const PRESET_SONGS: readonly PresetSong[] = [
   {
-    id: "rolling-in-the-deep",
-    title: "Rolling in the Deep",
-    stems: {
-      vocals: rollingVocals,
-      bass: rollingBass,
-      drums: rollingDrums,
-      other: rollingOther,
-    },
-    midi: rollingMidi,
-  },
-  {
+
     id: "hongse-gaogenxie",
     title: "红色高跟鞋",
     stems: { vocals: hongseVocals, bass: hongseBass, drums: hongseDrums, other: hongseOther },
