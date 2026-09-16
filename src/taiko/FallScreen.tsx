@@ -28,7 +28,7 @@ const COUNT_IN_BEATS = 4;
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
-export function FallScreen({ speed }: { speed: number }) {
+export function FallScreen({ speed, suspended = false }: { speed: number; suspended?: boolean }) {
   const song = useSong();
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
@@ -271,6 +271,11 @@ export function FallScreen({ speed }: { speed: number }) {
     }
   }, [stems, setPhaseBoth]);
 
+  // 打开谱面、映射或位置捕捉覆盖窗时只负责暂停，不自动续播。
+  useEffect(() => {
+    if (suspended && phaseRef.current === "playing") togglePause();
+  }, [suspended, togglePause]);
+
   // Unity 把 H5 切后台/锁屏时自动暂停（rAF 后台本就不走，这里把音频也停下）
   useEffect(() => {
     const onVis = () => {
@@ -437,17 +442,10 @@ export function FallScreen({ speed }: { speed: number }) {
   const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[var(--taiko-paper)]">
       <div
         ref={wrapRef}
-        className="relative mx-auto w-full overflow-hidden border border-[var(--taiko-line)]"
-        style={{
-          // 演奏区始终 16:9
-          aspectRatio: "16 / 9",
-          maxHeight: "min(70vh, 720px)",
-          maxWidth: "calc(min(70vh, 720px) * 16 / 9)",
-          backgroundColor: "#0a0a0c",
-        }}
+        className="absolute inset-0 overflow-hidden bg-[var(--taiko-paper)]"
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
 
@@ -523,10 +521,9 @@ export function FallScreen({ speed }: { speed: number }) {
         )}
       </div>
 
-      {/* 调音台：四轨常驻，100% = 原始文件音量 */}
+      {/* 调音台悬浮在舞台底部，不再压缩演奏区 */}
       <div
-        className="mx-auto w-full border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-4 py-3"
-        style={{ maxWidth: "calc(min(70vh, 720px) * 16 / 9)" }}
+        className="absolute inset-x-3 bottom-3 z-20 border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/90 px-4 py-3 backdrop-blur md:inset-x-auto md:left-1/2 md:w-[min(860px,calc(100%-2rem))] md:-translate-x-1/2"
       >
         <div className="mb-2 flex items-baseline gap-3">
           <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">调音台</span>
@@ -567,7 +564,7 @@ export function FallScreen({ speed }: { speed: number }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="absolute right-3 top-3 z-20 flex max-w-[calc(100%-5rem)] flex-wrap items-center justify-end gap-2 border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/85 px-3 py-2 backdrop-blur">
         <button
           onClick={togglePause}
           disabled={phase !== "playing" && phase !== "paused"}
@@ -581,7 +578,7 @@ export function FallScreen({ speed }: { speed: number }) {
           参数都在「谱面」页
         </span>
 
-        <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55">
+        <span className="hidden flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55 xl:flex">
           {parts.map((p) => (
             <span key={p} className="flex items-center gap-1.5">
               <i

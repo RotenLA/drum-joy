@@ -4,16 +4,16 @@ import { TaikoShell } from "@/taiko/TaikoShell";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "PD2U 谱面工作台 — LovableSynth" },
+      { title: "PD2U AeroGame 空气鼓游玩台" },
       {
         name: "description",
         content:
-          "PD2U 空气鼓模块：舞台下落游玩、谱面导入分析与鼓件 MIDI 映射设置。",
+          "PD2U AeroGame 空气鼓模块：全屏舞台游玩、谱面设置、MIDI 映射与鼓棒位置捕捉。",
       },
-      { property: "og:title", content: "PD2U 谱面工作台 — LovableSynth" },
+      { property: "og:title", content: "PD2U AeroGame 空气鼓游玩台" },
       {
         property: "og:description",
-        content: "PD2U：游玩轨道、谱面分析与鼓件映射设置的一体化界面。",
+        content: "全屏空气鼓游玩、谱面设置、MIDI 映射与鼓棒位置捕捉的一体化界面。",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

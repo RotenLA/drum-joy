@@ -19,6 +19,7 @@ import {
   type PartId,
 } from "./laneLayouts";
 import { quality } from "./perf";
+import { calibratedPoint } from "./stickCalibration";
 
 /**
  * 当前帧的画质开关（每帧进入 renderStage / renderPadArray 时刷新）。
@@ -1047,8 +1048,8 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
 }
 
 /**
- * 演奏区固定 16:9：背景铺满整个画布，鼓阵/车道/音符/HUD 全部布局在
- * 画布内居中的 16:9 逻辑区域里，窗口比例变化时构图不变形。
+ * 演奏区固定 18:9：背景铺满整个画布，鼓阵/车道/音符/HUD 全部布局在
+ * 画布内居中的 2:1 逻辑区域里，窗口比例变化时构图不变形。
  */
 /**
  * 鼓棒（立体棒身）：宿主给的俯仰/偏航角映射到鼓阵上的棒尖落点，
@@ -1067,8 +1068,9 @@ function drawStick(
   const color = STICK_COLORS[side];
 
   // 棒尖落点：偏航 → 横向，俯仰 → 纵向（抬头往上）
-  const tipX = (0.5 + yaw * STICK_X_SPREAD) * w;
-  const tipY = (STICK_Y_CENTER - pitch * STICK_Y_SPREAD) * h;
+  const calibrated = calibratedPoint(pose, side);
+  const tipX = (calibrated?.x ?? 0.5 + yaw * STICK_X_SPREAD) * w;
+  const tipY = (calibrated?.y ?? STICK_Y_CENTER - pitch * STICK_Y_SPREAD) * h;
 
   // 棒身方向：由屏幕下方玩家手部指向棒尖，左右手各自外偏
   const handX = (side === "l" ? 0.3 : 0.7) * w + yaw * 0.06 * w;
@@ -1079,13 +1081,13 @@ function drawStick(
   const ux = dx / len;
   const uy = dy / len;
   // 棒长：屏幕高度的一半左右，随俯仰略变（抬起看起来更短）
-  const stickLen = Math.min(len, h * (0.52 - pitch * 0.06));
+  const stickLen = Math.min(len, h * (0.26 - pitch * 0.03));
   const buttX = tipX - ux * stickLen;
   const buttY = tipY - uy * stickLen;
   const nx = -uy;
   const ny = ux;
-  const wTip = Math.max(1.6, h * 0.006);
-  const wButt = Math.max(2.6, h * 0.013);
+  const wTip = Math.max(0.9, h * 0.003);
+  const wButt = Math.max(1.4, h * 0.0065);
 
   ctx.save();
   ctx.lineJoin = "round";
@@ -1132,7 +1134,7 @@ function drawStick(
 }
 
 export function stageViewport(w: number, h: number) {
-  const target = 16 / 9;
+  const target = 18 / 9;
   let vw = w;
   let vh = w / target;
   if (vh > h) {
@@ -1203,6 +1205,8 @@ export interface PadArrayOptions {
   now: number;
   /** 当前选中编辑的鼓盘（白色虚线圈高亮） */
   selected?: PartId | null;
+  /** 位置捕捉时显示实时鼓棒 */
+  sticks?: StageFrame["sticks"];
 }
 
 /** 静态鼓盘阵（无车道/音符/HUD），与游玩屏同一套摆位与绘制 */
@@ -1235,6 +1239,8 @@ export function renderPadArray(
       ctx.restore();
     }
   }
+  if (opts.sticks?.l) drawStick(ctx, v.w, v.h, opts.sticks.l, "l");
+  if (opts.sticks?.r) drawStick(ctx, v.w, v.h, opts.sticks.r, "r");
   ctx.restore();
   drawVignette(ctx, w, h);
 }
