@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, RotateCcw, SkipForward, Upload } from "lucide-react";
-import { PART_BY_ID, partOfNote } from "./laneLayouts";
+import { DRUM_PARTS, PART_BY_ID, getMapping, partOfNote, setMapping, type PartId } from "./laneLayouts";
 import { midiManager } from "./midiInput";
 import { renderPadArray } from "./stageRenderer";
 import { stickManager } from "./stickInput";
@@ -47,6 +47,10 @@ export function PositionCaptureScreen() {
   const [online, setOnline] = useState<{ l: boolean; r: boolean }>({ l: false, r: false });
   const [midiSeen, setMidiSeen] = useState(false);
   const [status, setStatus] = useState("连接鼓棒姿态和 MIDI 后开始");
+  /** 最近击打（号码 + 当前被判成的鼓件），倒序 */
+  const [recent, setRecent] = useState<{ note: number; part: PartId | null; at: number }[]>([]);
+  /** 最近一次「敲错鼓面」，用于一键纠正 */
+  const [mismatch, setMismatch] = useState<{ note: number; target: CapturePart } | null>(null);
 
   /** 采集状态的唯一真源（击打回调里同步读写，避免读到旧值） */
   const captureRef = useRef<CaptureState>(IDLE);
