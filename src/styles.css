@@ -150,6 +150,8 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    display: grid;
+    place-items: center;
     margin: 0;
     height: 100vh;
     height: 100dvh;
