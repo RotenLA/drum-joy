@@ -1,177 +1,80 @@
 import { useEffect, useState } from "react";
+import { Crosshair, Gamepad2, ListMusic, Menu, Settings2, X, Maximize } from "lucide-react";
 import { SongProvider, useSong } from "./songStore";
 import { FallScreen } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
+import { PositionCaptureScreen } from "./PositionCaptureScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
-import { TutorialOverlay } from "./tutorial/TutorialOverlay";
 
-type ScreenKey = "play" | "chart" | "mapping";
-
-interface TaikoSettings {
-  speed: number;
-  midiDeviceId: string | null;
-}
-
+type PanelKey = "chart" | "mapping" | "capture" | null;
+interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
-const DEFAULT_SETTINGS: TaikoSettings = {
-  speed: 1.5,
-  midiDeviceId: null,
-};
-
-const NAV: { key: ScreenKey; label: string; hint: string }[] = [
-  { key: "play", label: "游玩", hint: "PLAY" },
-  { key: "chart", label: "谱面", hint: "CHART" },
-  { key: "mapping", label: "映射", hint: "MAP" },
+const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.5, midiDeviceId: null };
+const NAV = [
+  { key: null, label: "游玩", hint: "PLAY", icon: Gamepad2 },
+  { key: "chart" as const, label: "谱面", hint: "CHART", icon: ListMusic },
+  { key: "mapping" as const, label: "映射", hint: "MAP", icon: Settings2 },
+  { key: "capture" as const, label: "位置捕捉", hint: "CAPTURE", icon: Crosshair },
 ];
 
 export function TaikoShell() {
-  return (
-    <SongProvider>
-      <ShellInner />
-    </SongProvider>
-  );
+  return <SongProvider><ShellInner /></SongProvider>;
 }
 
 function ShellInner() {
-  const [screen, setScreen] = useState<ScreenKey>("chart");
+  const [panel, setPanel] = useState<PanelKey>("chart");
+  const [drawer, setDrawer] = useState(false);
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
-  // 每次打开都先进新手教学（欢迎页可跳过）
-  const [tutorial, setTutorial] = useState(true);
   const song = useSong();
 
-  // hydration 后再读本地设置，避免 SSR 不一致
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<TaikoSettings>;
-        setSettings((s) => ({ ...s, ...parsed }));
-      }
-    } catch {
-      // 忽略损坏的本地设置
-    }
+    try { const raw = localStorage.getItem(SETTINGS_KEY); if (raw) setSettings((s) => ({ ...s, ...(JSON.parse(raw) as Partial<TaikoSettings>) })); } catch { /* 忽略损坏设置 */ }
   }, []);
-
-  // 暴露 __pd2uNoteOn/__pd2uNoteOff 给 Unity 等宿主注入 MIDI 事件
-  useEffect(() => {
-    installExternalBridge();
-    installStickBridge();
-  }, []);
-
-  // MIDI 初始化 + 应用已保存的输入设备
-  useEffect(() => {
-    void midiManager.init().then(() => midiManager.select(settings.midiDeviceId));
-  }, [settings.midiDeviceId]);
-
-  const updateSettings = (patch: Partial<TaikoSettings>) =>
-    setSettings((s) => {
-      const next = { ...s, ...patch };
-      try {
-        const raw = localStorage.getItem(SETTINGS_KEY);
-        const base = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-        localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...base, ...next }));
-      } catch {
-        // 存储不可用时仅保留内存态
-      }
-      return next;
-    });
+  useEffect(() => { installExternalBridge(); installStickBridge(); }, []);
+  useEffect(() => { void midiManager.init().then(() => midiManager.select(settings.midiDeviceId)); }, [settings.midiDeviceId]);
+  const updateSettings = (patch: Partial<TaikoSettings>) => setSettings((s) => {
+    const next = { ...s, ...patch };
+    try { const raw = localStorage.getItem(SETTINGS_KEY); const base = raw ? JSON.parse(raw) as Record<string, unknown> : {}; localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...base, ...next })); } catch { /* 仅保留内存 */ }
+    return next;
+  });
+  const open = (key: PanelKey) => { setPanel(key); setDrawer(false); };
 
   return (
-    <div className="taiko-root flex min-h-screen bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
-      <nav className="flex w-40 shrink-0 flex-col border-r border-[var(--taiko-line)]">
-        <div className="border-b border-[var(--taiko-line)] px-4 py-5">
-          <div className="text-lg font-semibold tracking-[0.3em] text-[var(--taiko-accent)]">
-            PD2U
-          </div>
-          <div className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[var(--taiko-ink)]/45">
-            LovableSynth
-          </div>
+    <div className="taiko-root relative h-dvh min-h-[360px] overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
+      <div className="absolute inset-0 z-0"><FallScreen speed={settings.speed} suspended={panel !== null} /></div>
+
+      <button aria-label={drawer ? "关闭菜单" : "打开菜单"} title={drawer ? "关闭菜单" : "打开菜单"} onClick={() => setDrawer((v) => !v)} className="absolute left-3 top-3 z-50 grid h-11 w-11 place-items-center border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/90 text-[var(--taiko-ink)] backdrop-blur transition-colors hover:border-[var(--taiko-ink)]">
+        {drawer ? <X size={20} /> : <Menu size={20} />}
+      </button>
+
+      {drawer && <button aria-label="关闭菜单遮罩" onClick={() => setDrawer(false)} className="absolute inset-0 z-30 bg-black/45" />}
+      <nav className={`absolute inset-y-0 left-0 z-40 w-64 border-r border-[var(--taiko-line)] bg-[var(--taiko-paper)]/95 pt-20 shadow-2xl backdrop-blur transition-transform duration-200 ${drawer ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className="border-y border-[var(--taiko-line)] px-5 py-4">
+          <div className="text-lg font-semibold text-[var(--taiko-accent)]">PD2U</div>
+          <div className="mt-1 truncate text-xs text-[var(--taiko-ink)]/55">{song.fileName || "未选择歌曲"}</div>
         </div>
-        <ul className="flex flex-col">
-          {NAV.map((item) => (
-            <li key={item.key}>
-              <button
-                onClick={() => setScreen(item.key)}
-                className={`flex w-full items-baseline gap-2 border-b border-[var(--taiko-line)] px-4 py-3 text-left text-sm transition-colors ${
-                  screen === item.key
-                    ? "bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
-                    : "hover:bg-[var(--taiko-ink)]/10"
-                }`}
-              >
-                <span>{item.label}</span>
-                <span className="text-[10px] uppercase tracking-[0.15em] opacity-50">
-                  {item.hint}
-                </span>
-              </button>
-            </li>
-          ))}
-          <li>
-            <button
-              onClick={() => setTutorial(true)}
-              className="flex w-full items-baseline gap-2 border-b border-[var(--taiko-line)] px-4 py-3 text-left text-sm transition-colors hover:bg-[var(--taiko-ink)]/10"
-            >
-              <span>教程</span>
-              <span className="text-[10px] uppercase tracking-[0.15em] opacity-50">GUIDE</span>
-            </button>
-          </li>
+        <ul>
+          {NAV.map((item) => { const Icon = item.icon; const active = panel === item.key; return (
+            <li key={item.hint}><button onClick={() => open(item.key)} className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-[var(--taiko-line)] px-5 py-4 text-left ${active ? "bg-[var(--taiko-accent)] text-[var(--taiko-paper)]" : "hover:bg-[var(--taiko-ink)]/10"}`}><Icon size={17}/><span className="truncate text-sm">{item.label}</span><span className="text-[10px] opacity-50">{item.hint}</span></button></li>
+          ); })}
         </ul>
+        <button onClick={() => { const el = document.querySelector(".taiko-root"); if (!document.fullscreenElement) void el?.requestFullscreen?.(); else void document.exitFullscreen?.(); setDrawer(false); }} className="absolute bottom-5 left-5 flex items-center gap-2 text-xs text-[var(--taiko-ink)]/60"><Maximize size={15}/>全屏显示</button>
       </nav>
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-baseline gap-6 border-b border-[var(--taiko-line)] px-8 py-4">
-          <h1 className="text-base font-medium">{song.fileName || "未导入歌曲"}</h1>
-          {song.midi && (
-            <>
-              <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
-                BPM {song.bpm}
-              </span>
-              <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
-                {song.timeSignature[0]}/{song.timeSignature[1]}
-              </span>
-              <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
-                {song.chart ? `${song.chart.notes.length} 音符` : "谱面未生成"}
-              </span>
-            </>
-          )}
-          <button
-            onClick={() => {
-              const el = document.querySelector(".taiko-root");
-              if (!document.fullscreenElement) el?.requestFullscreen?.();
-              else document.exitFullscreen?.();
-            }}
-            className="ml-auto border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors hover:border-[var(--taiko-ink)]"
-          >
-            全屏
-          </button>
-        </header>
-
-        <div className="flex-1 overflow-auto px-8 py-6">
-          {screen === "play" && <FallScreen speed={settings.speed} />}
-
-          {screen === "chart" && (
-            <ChartScreen
-              speed={settings.speed}
-              onSpeedChange={(speed) => updateSettings({ speed })}
-            />
-          )}
-          {screen === "mapping" && (
-            <MappingScreen
-              deviceId={settings.midiDeviceId}
-              onDeviceChange={(midiDeviceId) => updateSettings({ midiDeviceId })}
-            />
-          )}
-        </div>
-      </main>
-
-      {tutorial && (
-        <TutorialOverlay
-          onFinish={() => {
-            setTutorial(false);
-            setScreen("chart");
-          }}
-        />
+      {panel && (
+        <section className="absolute inset-3 z-20 overflow-hidden border border-[var(--taiko-line)] bg-[var(--taiko-paper)]/96 shadow-2xl backdrop-blur md:inset-6">
+          <header className="grid h-14 grid-cols-[minmax(0,1fr)_auto] items-center border-b border-[var(--taiko-line)] px-4 pl-16">
+            <div className="min-w-0"><h1 className="truncate text-sm font-medium">{panel === "chart" ? "谱面" : panel === "mapping" ? "映射" : "位置捕捉"}</h1><p className="truncate text-[10px] text-[var(--taiko-ink)]/45">{song.fileName || "PD2U AeroGame"}</p></div>
+            <button aria-label="关闭窗口" title="关闭" onClick={() => setPanel(null)} className="grid h-9 w-9 shrink-0 place-items-center border border-[var(--taiko-line)] hover:border-[var(--taiko-ink)]"><X size={17}/></button>
+          </header>
+          <div className="h-[calc(100%-3.5rem)] overflow-auto p-4 md:p-6">
+            {panel === "chart" && <ChartScreen speed={settings.speed} onSpeedChange={(speed) => updateSettings({ speed })} />}
+            {panel === "mapping" && <MappingScreen deviceId={settings.midiDeviceId} onDeviceChange={(midiDeviceId) => updateSettings({ midiDeviceId })} />}
+            {panel === "capture" && <PositionCaptureScreen />}
+          </div>
+        </section>
       )}
     </div>
   );
