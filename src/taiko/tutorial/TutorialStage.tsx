@@ -260,8 +260,8 @@ export function TutorialStage({
       offNote();
       offUp();
     };
-    // restartKey 变化 = 重看一次 / 再练一次
-  }, [lesson, mode, onPass, restartKey]);
+    // restartKey 变化 = 再来一次
+  }, [lesson, onPass, restartKey]);
 
   // 铺满外层舞台框（由 TutorialOverlay 提供尺寸），卡片叠在同一块画面上
   return (
@@ -269,14 +269,22 @@ export function TutorialStage({
       <div ref={wrapRef} className="absolute inset-0 overflow-hidden bg-[#0a0a0c]">
         <canvas ref={canvasRef} className="block h-full w-full" />
       </div>
-      {mode === "practice" && (
-        <div className="absolute left-3 top-3 flex items-center gap-3 border border-white/15 bg-black/45 px-3 py-1 text-xs text-white/75 backdrop-blur">
-          <span className="tabular-nums">
-            进度 {Math.min(progress, TARGET)} / {TARGET}
-          </span>
-          {tip && <span className="text-white/50">{tip}</span>}
-        </div>
-      )}
+      <div className="absolute left-3 top-3 flex items-center gap-3 border border-white/15 bg-black/45 px-3 py-1 text-xs text-white/75 backdrop-blur">
+        <span className="tabular-nums">
+          进度 {Math.min(progress, TARGET)} / {TARGET}
+        </span>
+        {tip && <span className="text-white/50">{tip}</span>}
+      </div>
+      {/* 提醒玩家现在就可以跟着敲，几秒后淡出 */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 bottom-3 flex justify-center transition-opacity duration-700 ${
+          hintOn ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <span className="border border-[var(--taiko-accent)]/50 bg-black/55 px-4 py-1 text-xs tracking-wide text-white/85 backdrop-blur">
+          跟着音符一起敲 —— 连续 {TARGET} 次就通过
+        </span>
+      </div>
     </>
   );
 }
