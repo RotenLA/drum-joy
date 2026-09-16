@@ -151,36 +151,20 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                 </>
               )}
 
-              {phase === "lesson" && lessonPhase === "demo" && (
+              {phase === "lesson" && lessonPhase === "learn" && (
                 <>
                   <CardTitle>
-                    {lesson.title} · <span className="text-white/50">动画演示</span>
+                    {lesson.title} · <span className="text-white/50">边看边练</span>
                   </CardTitle>
                   {lesson.demo.map((line) => (
                     <p key={line} className="text-sm text-white/75">
                       {line}
                     </p>
                   ))}
-                  <div className="flex gap-3 pt-1">
-                    <PrimaryButton
-                      onClick={() => {
-                        setLessonPhase("practice");
-                        setRestartKey((k) => k + 1);
-                      }}
-                    >
-                      明白了，开始练习
-                    </PrimaryButton>
-                    <GhostButton onClick={() => setRestartKey((k) => k + 1)}>再看一次</GhostButton>
-                  </div>
-                </>
-              )}
-
-              {phase === "lesson" && lessonPhase === "practice" && (
-                <>
-                  <CardTitle>
-                    {lesson.title} · <span className="text-white/50">练习</span>
-                  </CardTitle>
                   <p className="text-sm text-white/75">{lesson.hint}</p>
+                  <p className="text-sm font-medium text-[var(--taiko-accent)]">
+                    音符会自动示范，现在就可以跟着一起敲，连续 8 次即通过。
+                  </p>
                   <div className="flex gap-3 pt-1">
                     <GhostButton onClick={() => setRestartKey((k) => k + 1)}>重新开始</GhostButton>
                     <GhostButton onClick={nextLesson}>跳过本节</GhostButton>
