@@ -95,17 +95,78 @@ export function loadStickCalibration(): StickCalibrationFile | null {
   try { cached = validateCalibration(JSON.parse(localStorage.getItem(STICK_CALIBRATION_KEY) ?? "null")); } catch { cached = null; }
   return cached;
 }
-export function saveStickCalibration(file: StickCalibrationFile): void { cached = file; localStorage.setItem(STICK_CALIBRATION_KEY, JSON.stringify(file)); }
-export function clearStickCalibration(): void { cached = null; localStorage.removeItem(STICK_CALIBRATION_KEY); }
+export function saveStickCalibration(file: StickCalibrationFile): void {
+  cached = file;
+  stickyPart.l = null;
+  stickyPart.r = null;
+  localStorage.setItem(STICK_CALIBRATION_KEY, JSON.stringify(file));
+}
+export function clearStickCalibration(): void {
+  cached = null;
+  stickyPart.l = null;
+  stickyPart.r = null;
+  localStorage.removeItem(STICK_CALIBRATION_KEY);
+}
 export function validateCalibration(raw: unknown): StickCalibrationFile | null {
   if (!raw || typeof raw !== "object") return null;
   const file = raw as Partial<StickCalibrationFile>;
   if (file.version !== 1 || file.aspectRatio !== "18:9" || file.layoutVersion !== STICK_LAYOUT_VERSION || !file.groups || !file.fit) return null;
   return file as StickCalibrationFile;
 }
+const SNAP_OUTER_DEG = 18;
+const SNAP_FULL_DEG = 4;
+const SNAP_MAX_WEIGHT = 0.9;
+const SNAP_SWITCH_MARGIN_DEG = 2;
+const stickyPart: Record<StickSide, CapturePart | null> = { l: null, r: null };
+
+const angleDelta = (a: number, b: number) => {
+  const delta = Math.abs(a - b) % 360;
+  return Math.min(delta, 360 - delta);
+};
+
+const poseDistance = (a: StickPose, b: StickPose) =>
+  Math.hypot(a.p - b.p, angleDelta(a.y, b.y));
+
+/**
+ * 用每个鼓面的实测姿态做最近邻柔和吸附。
+ *
+ * 与仿射拟合不同，这里不会让少量角度误差把棒尖推到鼓阵之外：接近某个
+ * 已采鼓面时才逐渐靠向其中心，离所有鼓面较远时仍沿用默认连续映射。
+ * 切换鼓面保留 2° 滞后，避免在两个相邻采集中心之间快速抖动。
+ */
 export function calibratedPoint(pose: StickPose, side: StickSide): { x: number; y: number } | null {
-  const fit = loadStickCalibration()?.fit[side];
-  if (!fit) return null;
-  const row = [1, pose.y, pose.p];
-  return { x: row.reduce((v, n, i) => v + n * fit.x[i]!, 0), y: row.reduce((v, n, i) => v + n * fit.y[i]!, 0) };
+  const calibration = loadStickCalibration();
+  if (!calibration) return null;
+
+  const candidates = CAPTURE_PARTS.flatMap((part) => {
+    const group = calibration.groups[part]?.[side];
+    return group ? [{ part, distance: poseDistance(pose, group.median) }] : [];
+  }).sort((a, b) => a.distance - b.distance);
+  const nearest = candidates[0];
+  if (!nearest) return null;
+
+  const previousPart = stickyPart[side];
+  const previous = previousPart
+    ? candidates.find((candidate) => candidate.part === previousPart)
+    : undefined;
+  const selected = previous && previous.distance <= nearest.distance + SNAP_SWITCH_MARGIN_DEG
+    ? previous
+    : nearest;
+  stickyPart[side] = selected.part;
+
+  if (selected.distance >= SNAP_OUTER_DEG) return null;
+
+  const yaw = Math.max(-1, Math.min(1, pose.y / 45));
+  const pitch = Math.max(-1, Math.min(1, pose.p / 45));
+  const base = { x: 0.5 + yaw * 0.4, y: 0.6 - pitch * 0.26 };
+  const anchor = calibration.anchors[selected.part] ?? PAD_ANCHORS[selected.part];
+  const range = SNAP_OUTER_DEG - SNAP_FULL_DEG;
+  const progress = Math.max(0, Math.min(1, (SNAP_OUTER_DEG - selected.distance) / range));
+  const smooth = progress * progress * (3 - 2 * progress);
+  const weight = SNAP_MAX_WEIGHT * smooth;
+
+  return {
+    x: base.x + (anchor.cx - base.x) * weight,
+    y: base.y + (anchor.cy - base.y) * weight,
+  };
 }
