@@ -6,11 +6,8 @@ import { parseMidi, type ParsedMidi } from "./midiFile";
 import { getAudioContext } from "./metronome";
 import { emptyStems, peakOf, STEM_KINDS, STEM_LABEL, type StemKind, type StemMap } from "./stems";
 
-import rollingVocals from "@/assets/songs/rolling-in-the-deep_Vocals.mp3.asset.json";
-import rollingBass from "@/assets/songs/rolling-in-the-deep_Bass.mp3.asset.json";
-import rollingDrums from "@/assets/songs/rolling-in-the-deep_Drums.mp3.asset.json";
-import rollingOther from "@/assets/songs/rolling-in-the-deep_Other.mp3.asset.json";
-import rollingMidi from "@/assets/songs/rolling-in-the-deep.mid.asset.json";
+
+
 
 import hongseVocals from "@/assets/songs/hongse-gaogenxie_Vocals.mp3.asset.json";
 import hongseBass from "@/assets/songs/hongse-gaogenxie_Bass.mp3.asset.json";
