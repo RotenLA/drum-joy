@@ -44,6 +44,8 @@ export interface SongState {
   timeSignature: [number, number];
   difficulty: Difficulty;
   mix: MixState;
+  /** 音频开头空白长度（毫秒）：播放时跳过，谱面同步平移 */
+  audioLeadMs: number;
   chart: TaikoChart | null;
 }
 
