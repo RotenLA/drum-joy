@@ -292,6 +292,21 @@ export function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number
   ctx.fillRect(0, h * 0.72, w, h * 0.28);
 }
 
+/**
+ * 鼓盘渐变缓存：侧面/顶面渐变只随几何（半径、角度）变化，
+ * 命中回弹的 10% 缩放不再新建 Gradient（视觉上不可分辨），
+ * 每帧少建十几个对象，WebView 上 GC 卡顿明显下降。
+ */
+const padGradCache = new Map<string, CanvasGradient>();
+function cachedGrad(key: string, make: () => CanvasGradient): CanvasGradient {
+  let g = padGradCache.get(key);
+  if (!g) {
+    g = make();
+    padGradCache.set(key, g);
+  }
+  return g;
+}
+
 function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number, parts: readonly PartId[]) {
   ensureGradCache(ctx, w, h);
   ctx.save();
@@ -536,20 +551,22 @@ function drawSquarePad(
   miss = 0,
 ) {
   const s = 1 + 0.1 * intensity; // 命中回弹
-  const RX = rx * s;
   const RY = ry * s;
   const th = mirror ? -PEDAL_TILT : PEDAL_TILT;
   const cos = Math.cos(th);
   const sin = Math.sin(th);
   const depth = RY * 1.0; // 盒体厚度
+  const depth0 = ry * 1.0; // 未缩放厚度（渐变缓存用）
 
   // 顶面四角：地板坐标（未压扁的正方形）先旋转，再按 0.42 压扁 —— 与鼓面椭圆同一投影规则
-  const corner = (sx: number, sy: number) => {
-    const fx = sx * RX;
-    const fy = sy * RX;
+  // 先算未缩放角（top0），命中回弹只做整体缩放，渐变可按键 radius 缓存
+  const corner0 = (sx: number, sy: number) => {
+    const fx = sx * rx;
+    const fy = sy * rx;
     return { x: fx * cos - fy * sin, y: (fx * sin + fy * cos) * 0.42 };
   };
-  const top = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  const top0 = [corner0(-1, -1), corner0(1, -1), corner0(1, 1), corner0(-1, 1)];
+  const top = top0.map((p) => ({ x: p.x * s, y: p.y * s }));
   const bot = top.map((p) => ({ x: p.x, y: p.y + depth }));
 
   const topPath = () => {
@@ -580,14 +597,18 @@ function drawSquarePad(
   ctx.translate(cx, cy);
   ctx.lineJoin = "round";
 
-  // 侧面：上暗下更暗的纵向渐变 + 部件色淡染
+  // 侧面：上暗下更暗的纵向渐变 + 部件色淡染（渐变按未缩放几何缓存）
+  const gk = `sq|${mirror ? 1 : 0}|${rx.toFixed(1)}`;
   for (const [i, j] of visibleEdges) {
     const a = top[i]!;
     const b = top[j]!;
-    const my = (a.y + b.y) / 2;
-    const side = ctx.createLinearGradient(0, my, 0, my + depth);
-    side.addColorStop(0, "#1e1e24");
-    side.addColorStop(1, "#0a0a0d");
+    const my0 = (top0[i]!.y + top0[j]!.y) / 2;
+    const side = cachedGrad(`${gk}|s|${my0.toFixed(1)}`, () => {
+      const g = ctx.createLinearGradient(0, my0, 0, my0 + depth0);
+      g.addColorStop(0, "#1e1e24");
+      g.addColorStop(1, "#0a0a0d");
+      return g;
+    });
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
@@ -600,11 +621,16 @@ function drawSquarePad(
     ctx.fill();
   }
 
-  // 顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染
-  const ys = top.map((p) => p.y);
-  const face = ctx.createLinearGradient(0, Math.min(...ys), 0, Math.max(...ys));
-  face.addColorStop(0, "#17171b");
-  face.addColorStop(1, "#2b2b33");
+  // 顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染（缓存）
+  const ys0 = top0.map((p) => p.y);
+  const yMin = Math.min(...ys0);
+  const yMax = Math.max(...ys0);
+  const face = cachedGrad(`${gk}|f`, () => {
+    const g = ctx.createLinearGradient(0, yMin, 0, yMax);
+    g.addColorStop(0, "#17171b");
+    g.addColorStop(1, "#2b2b33");
+    return g;
+  });
   topPath();
   ctx.fillStyle = face;
   ctx.fill();
@@ -682,11 +708,15 @@ function drawPad(
   // 鼓盘整体随车道旋转：鼓腔/盘面/描边/命中闪一起转，等效鼓面朝向来球方向倾斜
   ctx.rotate(p.rot);
 
-  // 鼓腔侧面：强纵向明暗 + 部件色淡染
+  // 鼓腔侧面：强纵向明暗 + 部件色淡染（渐变按未缩放几何缓存）
   const depth = RY * 0.9;
-  const side = ctx.createLinearGradient(0, 0, 0, depth + RY);
-  side.addColorStop(0, "#232329");
-  side.addColorStop(1, "#0a0a0d");
+  const gk = `rd|${p.rx.toFixed(1)}`;
+  const side = cachedGrad(`${gk}|s`, () => {
+    const g = ctx.createLinearGradient(0, 0, 0, p.ry * 0.9 + p.ry);
+    g.addColorStop(0, "#232329");
+    g.addColorStop(1, "#0a0a0d");
+    return g;
+  });
   ctx.beginPath();
   ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI);
   ctx.lineTo(-RX, depth);
@@ -700,10 +730,13 @@ function drawPad(
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // 盘面：方向性顶光（上方来光）
-  const face = ctx.createRadialGradient(0, -RY * 0.45, RY * 0.2, 0, 0, RX);
-  face.addColorStop(0, "#2b2b32");
-  face.addColorStop(1, "#121215");
+  // 盘面：方向性顶光（上方来光，缓存）
+  const face = cachedGrad(`${gk}|f`, () => {
+    const g = ctx.createRadialGradient(0, -p.ry * 0.45, p.ry * 0.2, 0, 0, p.rx);
+    g.addColorStop(0, "#2b2b32");
+    g.addColorStop(1, "#121215");
+    return g;
+  });
   ctx.beginPath();
   ctx.ellipse(0, 0, RX, RY, 0, 0, Math.PI * 2);
   ctx.fillStyle = face;

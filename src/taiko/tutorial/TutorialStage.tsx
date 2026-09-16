@@ -80,6 +80,12 @@ export function TutorialStage({
     const holdNeedsHits = Boolean(lesson.hold && lesson.pattern.length > 0);
 
     const audio = getAudioContext();
+    // 切后台/锁屏：挂起音频时钟（rAF 后台自动停），回前台继续，避免时钟追帧
+    const onVis = () => {
+      if (document.hidden) void audio.suspend();
+      else void audio.resume();
+    };
+    document.addEventListener("visibilitychange", onVis);
     // 时钟 0 点 = 预热首拍，音符从 WARMUP_BEATS 拍之后开始 → 大号数字完整走 4、3、2、1
     const startSec = audio.currentTime + 0.4;
     const firstNoteMs = WARMUP_BEATS * BEAT_MS;
@@ -270,6 +276,8 @@ export function TutorialStage({
       cancelAnimationFrame(raf);
       ro.disconnect();
       window.clearInterval(schedule);
+      document.removeEventListener("visibilitychange", onVis);
+      void audio.resume();
       offNote();
       offUp();
     };

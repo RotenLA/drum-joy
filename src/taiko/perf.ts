@@ -36,6 +36,26 @@ export const TIER_LABEL: Record<QualityMode, string> = {
 
 const STORE_KEY = "taiko.quality.v1";
 const TIERS: QualityTier[] = ["high", "medium", "low"];
+
+/**
+ * Unity 内嵌 WebView 检测：安卓 System WebView（UA 含 "; wv)"）或宿主桥已注入。
+ * 内嵌环境 GPU/内存都更弱，auto 模式从「中」档起步，避开开局掉帧再降档的抖动期。
+ */
+export function isEmbeddedWebView(): boolean {
+  if (typeof navigator === "undefined") return false;
+  if (
+    typeof window !== "undefined" &&
+    typeof (window as unknown as { __pd2uNoteOn?: unknown }).__pd2uNoteOn === "function"
+  ) {
+    return true;
+  }
+  return /Android/.test(navigator.userAgent) && /; wv\)/.test(navigator.userAgent);
+}
+
+/** auto 模式的起步档 */
+function initialTier(): QualityTier {
+  return isEmbeddedWebView() ? "medium" : "high";
+}
 /** 平均帧时间超过该值视为跑不动（≈38 帧） */
 const SLOW_FRAME_MS = 26;
 /** 连续多少帧超标才降档 */
@@ -45,7 +65,7 @@ const COOLDOWN_MS = 3000;
 
 class QualityController {
   private mode: QualityMode = "auto";
-  private autoTier: QualityTier = "high";
+  private autoTier: QualityTier = initialTier();
   private slow = 0;
   private lastDrop = 0;
   private listeners = new Set<() => void>();
@@ -73,7 +93,7 @@ class QualityController {
   setMode(m: QualityMode): void {
     this.mode = m;
     this.slow = 0;
-    if (m === "auto") this.autoTier = "high";
+    if (m === "auto") this.autoTier = initialTier();
     try {
       localStorage.setItem(STORE_KEY, m);
     } catch {

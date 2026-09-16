@@ -271,6 +271,15 @@ export function FallScreen({ speed }: { speed: number }) {
     }
   }, [stems, setPhaseBoth]);
 
+  // Unity 把 H5 切后台/锁屏时自动暂停（rAF 后台本就不走，这里把音频也停下）
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden && phaseRef.current === "playing") togglePause();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [togglePause]);
+
   // 空格暂停/继续，回车开始
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
