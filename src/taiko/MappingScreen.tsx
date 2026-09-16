@@ -196,7 +196,7 @@ export function MappingScreen({
         <div
           ref={wrapRef}
           className="w-full overflow-hidden border border-[var(--taiko-line)]"
-          style={{ aspectRatio: "18 / 9", backgroundColor: "var(--taiko-paper)" }}
+          style={{ aspectRatio: "14 / 5", backgroundColor: "var(--taiko-paper)" }}
         >
           <canvas
             ref={canvasRef}

@@ -150,7 +150,12 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    display: grid;
+    place-items: center;
     margin: 0;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 100vh;
     min-height: 100dvh;
     overflow: hidden;
   }
@@ -161,26 +166,18 @@
   --safe-right: max(0.5rem, env(safe-area-inset-right));
   --safe-bottom: max(0.5rem, env(safe-area-inset-bottom));
   --safe-left: max(0.5rem, env(safe-area-inset-left));
+  width: min(100vw, calc(100vh * 17 / 7));
+  width: min(100vw, calc(100dvh * 17 / 7));
+  height: min(100vh, calc(100vw * 7 / 17));
+  height: min(100dvh, calc(100vw * 7 / 17));
+  margin: auto;
+  aspect-ratio: 17 / 7;
 }
 
-.taiko-play-controls {
-  right: var(--safe-right);
-  top: var(--safe-top);
-}
-
-.taiko-mixer {
-  left: var(--safe-left);
-  right: var(--safe-right);
-  bottom: var(--safe-bottom);
-}
-
-@media (min-width: 768px) {
-  .taiko-mixer {
-    left: 50%;
-    right: auto;
-    width: min(53.75rem, calc(100% - 2rem));
-    transform: translateX(-50%);
-  }
+.taiko-scroll {
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (orientation: landscape) and (max-height: 520px) {

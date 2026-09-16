@@ -242,10 +242,10 @@ export function PositionCaptureScreen() {
   };
 
   return (
-    <div className="grid min-h-full gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div
         ref={wrapRef}
-        className="relative min-h-[320px] overflow-hidden border border-[var(--taiko-line)] bg-[var(--taiko-paper)] lg:min-h-[540px]"
+        className="relative aspect-[14/5] min-h-0 overflow-hidden border border-[var(--taiko-line)] bg-[var(--taiko-paper)]"
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
         <div className="absolute left-4 top-4 border border-[var(--taiko-line)] bg-[var(--taiko-paper)]/90 px-3 py-2 backdrop-blur">
@@ -332,7 +332,7 @@ export function PositionCaptureScreen() {
           </div>
         </section>
 
-        <section className="max-h-[320px] overflow-auto border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-3">
+        <section className="border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-3">
           {CAPTURE_PARTS.map((part) => (
             <div
               key={part}

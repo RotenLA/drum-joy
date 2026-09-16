@@ -442,10 +442,10 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
 
   return (
-    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[var(--taiko-paper)]">
+    <div className="grid h-full min-h-0 w-full grid-rows-[5fr_2fr] overflow-hidden bg-[var(--taiko-paper)]">
       <div
         ref={wrapRef}
-        className="absolute inset-0 overflow-hidden bg-[var(--taiko-paper)]"
+        className="relative min-h-0 overflow-hidden bg-[var(--taiko-paper)]"
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
 
@@ -521,74 +521,43 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
         )}
       </div>
 
-      {/* 手机横屏保持四轨单行，固定在底部安全区内 */}
-      <div
-        className="taiko-mixer absolute z-20 border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/92 px-2 py-1.5 shadow-lg backdrop-blur md:px-3 md:py-2"
-      >
-        <div className="mb-2 hidden items-baseline gap-3 lg:flex">
-          <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">调音台</span>
-          <span className="text-[10px] text-[var(--taiko-ink)]/45">100% = 原始文件音量</span>
-        </div>
-        <div className="grid grid-cols-4 gap-2 md:gap-4">
-          {STEM_KINDS.map((key) => {
-            const track = stems[key];
-            const value = song.mix[key];
-            return (
-              <label key={key} className="flex min-w-0 flex-col gap-1">
-                <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 text-[10px] text-[var(--taiko-ink)]/70 md:text-[11px]">
-                  <span className={`truncate ${track ? "" : "text-[var(--taiko-ink)]/35"}`}>
-                    {STEM_LABEL[key]}
-                    {track ? "" : "（无）"}
+      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-[var(--safe-left)] py-2 pr-[var(--safe-right)]">
+        <div className="min-w-0">
+          <div className="mb-2 hidden items-baseline gap-3 lg:flex">
+            <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">调音台</span>
+            <span className="text-[10px] text-[var(--taiko-ink)]/45">100% = 原始文件音量</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2 md:gap-4">
+            {STEM_KINDS.map((key) => {
+              const track = stems[key];
+              const value = song.mix[key];
+              return (
+                <label key={key} className="flex min-w-0 flex-col gap-1">
+                  <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 text-[10px] text-[var(--taiko-ink)]/70 md:text-[11px]">
+                    <span className={`truncate ${track ? "" : "text-[var(--taiko-ink)]/35"}`}>
+                      {STEM_LABEL[key]}{track ? "" : "（无）"}
+                    </span>
+                    <span className="tabular-nums text-[var(--taiko-ink)]/55">{Math.round(value * 100)}%</span>
                   </span>
-                  <span className="tabular-nums text-[var(--taiko-ink)]/55">
-                    {Math.round(value * 100)}%
-                  </span>
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={Math.round(value * 100)}
-                  disabled={!track}
-                  onChange={(e) =>
-                    song.setSong({
-                      mix: { ...song.mix, [key]: Number(e.target.value) / 100 },
-                    })
-                  }
-                  className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)] disabled:cursor-not-allowed disabled:opacity-40"
-                />
-              </label>
-            );
-          })}
+                  <input type="range" min={0} max={100} step={1} value={Math.round(value * 100)} disabled={!track}
+                    onChange={(e) => song.setSong({ mix: { ...song.mix, [key]: Number(e.target.value) / 100 } })}
+                    className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)] disabled:cursor-not-allowed disabled:opacity-40" />
+                </label>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      <div className="taiko-play-controls absolute z-20 grid grid-cols-[auto_auto] items-center justify-end gap-2 border border-[var(--taiko-line)] bg-[var(--taiko-surface)]/92 p-1.5 shadow-lg backdrop-blur md:px-2 md:py-2">
-        <button
-          onClick={togglePause}
-          disabled={phase !== "playing" && phase !== "paused"}
-          className="h-9 min-w-16 border border-[var(--taiko-ink)] px-3 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:cursor-not-allowed disabled:opacity-30 md:min-w-20 md:px-5 md:text-sm"
-        >
-          {phase === "paused" ? "继续" : "暂停"}
-        </button>
-        <HelpDot label="游玩" text={HELP["play"]!} />
-        <span className="col-span-2 hidden text-xs text-[var(--taiko-ink)]/50 lg:block">
-          速度 {speed}x · 难度 {DIFFICULTIES.find((d) => d.id === song.difficulty)?.label} ·
-          参数都在「谱面」页
-        </span>
-
-        <span className="col-span-2 hidden flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--taiko-ink)]/55 xl:flex">
-          {parts.map((p) => (
-            <span key={p} className="flex items-center gap-1.5">
-              <i
-                className="inline-block h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: PART_BY_ID[p].color }}
-              />
-              {PART_BY_ID[p].label}
-            </span>
-          ))}
-        </span>
+        <div className="grid shrink-0 grid-cols-[auto_auto] items-center justify-end gap-2">
+          <button onClick={togglePause} disabled={phase !== "playing" && phase !== "paused"}
+            className="h-9 min-w-16 border border-[var(--taiko-ink)] px-3 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:cursor-not-allowed disabled:opacity-30 md:min-w-20 md:px-5 md:text-sm">
+            {phase === "paused" ? "继续" : "暂停"}
+          </button>
+          <HelpDot label="游玩" text={HELP["play"]!} />
+          <span className="col-span-2 hidden text-xs text-[var(--taiko-ink)]/50 lg:block">
+            速度 {speed}x · 难度 {DIFFICULTIES.find((d) => d.id === song.difficulty)?.label}
+          </span>
+        </div>
       </div>
     </div>
   );
