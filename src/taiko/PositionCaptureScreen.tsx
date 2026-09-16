@@ -198,6 +198,19 @@ export function PositionCaptureScreen() {
     apply({ step, samples: [] }, "本项已清空，重新采集");
   };
 
+  /** 把某个音符从原鼓件移出，归到目标鼓件（写入映射，立即生效） */
+  const remapNote = (note: number, to: CapturePart) => {
+    const current = getMapping();
+    const next = { ...current } as Record<PartId, number[]>;
+    for (const p of DRUM_PARTS) next[p.id] = current[p.id].filter((n) => n !== note);
+    next[to] = [...next[to], note].sort((a, b) => a - b);
+    setMapping(next);
+    setMismatch(null);
+    setRecent((old) => old.map((r) => (r.note === note ? { ...r, part: to } : r)));
+    setStatus(`音符 ${note} 已归到${PART_BY_ID[to].label}，请继续敲`);
+  };
+
+
   const calibration = useMemo(() => makeCalibration(groups), [groups]);
   const save = () => {
     saveStickCalibration(calibration);
