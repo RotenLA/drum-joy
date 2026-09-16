@@ -106,7 +106,7 @@ export function TutorialStage({
     };
 
     const bump = (ok: boolean) => {
-      if (passed || mode !== "practice") return;
+      if (passed) return;
       if (!ok) {
         setStreak(0);
         return;
