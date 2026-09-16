@@ -210,8 +210,7 @@ export function PositionCaptureScreen() {
       if (!parsed) throw new Error("invalid");
       saveStickCalibration(parsed);
       setGroups(parsed.groups);
-      setCapture(IDLE);
-      setStatus("校准文件已导入并应用");
+      apply(IDLE, "校准文件已导入并应用");
     } catch {
       setStatus("校准文件无效或鼓阵版本不匹配");
     }
