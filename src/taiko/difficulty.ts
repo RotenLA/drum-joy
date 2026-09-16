@@ -84,7 +84,9 @@ function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
     const n = bar.noteCount >= 8 ? 3 : 2;
     for (let k = 0; k < n; k++) {
       out.push({
-        step: start + Math.round((k * stepsPerBeat) / n),
+        // 三下也必须保持连续八分；原先把一拍三等分后吸附到 16 分网格，
+        // 会变成 0、1、3 格（十六分 + 八分），视觉和听感都不均匀。
+        step: start + k * (stepsPerBeat / 2),
         part: "snare",
         velocity: 100,
       });
