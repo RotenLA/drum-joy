@@ -81,6 +81,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
     timeSignature: [4, 4],
     difficulty: "easy",
     mix: { ...DEFAULT_MIX },
+    audioLeadMs: 0,
     chart: null,
   });
 
