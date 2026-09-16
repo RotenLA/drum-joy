@@ -10,6 +10,8 @@ import { renderPadArray } from "../stageRenderer";
 import { quality } from "../perf";
 import { LESSONS, TUTORIAL_PARTS } from "./steps";
 import { TutorialStage } from "./TutorialStage";
+import { loadKitEnabled, saveKitEnabled, subscribeKitEnabled } from "../drumKit";
+
 
 export const TUTORIAL_KEY = "taiko.tutorial.v1";
 
