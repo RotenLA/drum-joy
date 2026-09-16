@@ -267,7 +267,16 @@ export function PositionCaptureScreen() {
             <div className="text-base font-medium text-[var(--taiko-ink)]">位置捕捉</div>
           )}
           <div className="mt-1 max-w-[42ch] text-xs text-[var(--taiko-ink)]/65">{status}</div>
+          {mismatch && (
+            <button
+              onClick={() => remapNote(mismatch.note, mismatch.target)}
+              className="mt-2 border border-[var(--taiko-accent)] px-2 py-1 text-[11px] text-[var(--taiko-accent)]"
+            >
+              把 {mismatch.note} 归到{PART_BY_ID[mismatch.target].label}
+            </button>
+          )}
         </div>
+
       </div>
       <aside className="flex min-w-0 flex-col gap-4">
         <section className="border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-4">
@@ -307,6 +316,27 @@ export function PositionCaptureScreen() {
             </IconBtn>
           </div>
         </section>
+        <section className="border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-3">
+          <h2 className="text-sm font-medium">最近击打</h2>
+          <div className="mt-2 space-y-1">
+            {recent.length === 0 ? (
+              <div className="text-xs text-[var(--taiko-ink)]/45">敲任意鼓面，这里会显示音符号码</div>
+            ) : (
+              recent.map((r) => (
+                <div
+                  key={`${r.note}-${r.at}`}
+                  className="flex items-center justify-between gap-2 text-xs"
+                >
+                  <span className="tabular-nums text-[var(--taiko-accent)]">{r.note}</span>
+                  <span className="truncate text-[var(--taiko-ink)]/70">
+                    {r.part ? PART_BY_ID[r.part].label : "未映射"}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
         <section className="max-h-[320px] overflow-auto border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-3">
           {CAPTURE_PARTS.map((part) => (
             <div
