@@ -76,3 +76,42 @@ export const stemsDurationMs = (stems: StemMap): number => {
 };
 
 export const hasAnyStem = (stems: StemMap): boolean => STEM_KINDS.some((k) => stems[k] !== null);
+
+/** 静音阈值：约 -50dBFS 以下视为空白 */
+const SILENCE_THRESHOLD = 10 ** (-50 / 20);
+/** 裁切时往前保留的余量，避免削掉音头 */
+const LEAD_GUARD_MS = 30;
+
+/** 单轨开头空白长度（毫秒）：首个超过静音阈值的样本时刻 */
+export function leadSilenceMs(buffer: AudioBuffer): number {
+  const sr = buffer.sampleRate;
+  // 以 5ms 为一窗做粗扫，命中后在窗内细找，兼顾精度与速度
+  const win = Math.max(1, Math.round(sr * 0.005));
+  const len = buffer.length;
+  const chans: Float32Array[] = [];
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) chans.push(buffer.getChannelData(ch));
+  for (let start = 0; start < len; start += win) {
+    const end = Math.min(len, start + win);
+    for (const data of chans) {
+      for (let i = start; i < end; i++) {
+        if (Math.abs(data[i]!) > SILENCE_THRESHOLD) return (i / sr) * 1000;
+      }
+    }
+  }
+  return (len / sr) * 1000;
+}
+
+/**
+ * 四条音轨共同的开头空白长度（毫秒）：取最早出声的一轨，并留 30ms 余量。
+ * 所有音轨与 MIDI 统一减掉这个值，相对关系不变。
+ */
+export function stemsLeadMs(stems: StemMap): number {
+  let min = Infinity;
+  for (const k of STEM_KINDS) {
+    const t = stems[k];
+    if (!t) continue;
+    min = Math.min(min, leadSilenceMs(t.buffer));
+  }
+  if (!Number.isFinite(min)) return 0;
+  return Math.max(0, Math.round(min - LEAD_GUARD_MS));
+}

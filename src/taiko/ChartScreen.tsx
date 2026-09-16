@@ -9,12 +9,13 @@ import { analyzeMidi } from "./difficulty";
 import { clearChartCache, getPlayChart } from "./chartCache";
 import { DIFFICULTIES } from "./difficulty";
 import { countByPart } from "./midiChart";
+import { shiftChart } from "@/shared/taikoChart";
 import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
 import { layoutOf } from "./difficulty";
 import { PRESET_SONGS, loadPresetSong, type PresetSong } from "./presetSongs";
 import { songPlayer } from "./player";
 import { Metronome } from "./metronome";
-import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
+import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs, stemsLeadMs } from "./stems";
 import { GlobalSettings } from "./GlobalSettings";
 import { HelpDot } from "@/components/HelpDot";
 import { HELP } from "./helpTexts";
@@ -46,6 +47,9 @@ export function ChartScreen({
     songPlayer.stop();
     try {
       const loaded = await loadPresetSong(preset, (p) => setPercent(p));
+      // 开头空白长度：播放跳过 + 谱面同步平移，倒计时结束立刻出声
+      const leadMs = stemsLeadMs(loaded.stems);
+      songPlayer.setLeadMs(leadMs);
       songPlayer.load(loaded.stems);
       for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
       setPlaying(false);
@@ -60,6 +64,7 @@ export function ChartScreen({
         phaseBeatOffset: 0,
         bpm: Math.round(loaded.midi.bpm * 100) / 100,
         timeSignature: loaded.midi.timeSignature,
+        audioLeadMs: leadMs,
         chart: null,
       });
       setReady(true);
@@ -71,7 +76,7 @@ export function ChartScreen({
     }
   };
 
-  const audioDurationMs = stemsDurationMs(song.stems);
+  const audioDurationMs = Math.max(0, stemsDurationMs(song.stems) - song.audioLeadMs);
   const durationMs = audioDurationMs || (song.midi?.durationMs ?? 0);
   const anyStem = hasAnyStem(song.stems);
 
@@ -79,18 +84,29 @@ export function ChartScreen({
   const [chartNonce, setChartNonce] = useState(0);
   const chart = useMemo(() => {
     if (!song.midi) return null;
-    return getPlayChart(
-      song.midi,
-      {
-        title: song.fileName,
-        offsetMs: song.offsetMs,
-        phaseBeatOffset: song.phaseBeatOffset,
-      },
-      song.difficulty,
+    return shiftChart(
+      getPlayChart(
+        song.midi,
+        {
+          title: song.fileName,
+          offsetMs: song.offsetMs,
+          phaseBeatOffset: song.phaseBeatOffset,
+        },
+        song.difficulty,
+      ),
+      song.audioLeadMs,
     );
     // chartNonce 变化 = 手动「重新生成谱面」
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [song.midi, song.fileName, song.offsetMs, song.phaseBeatOffset, song.difficulty, chartNonce]);
+  }, [
+    song.midi,
+    song.fileName,
+    song.offsetMs,
+    song.phaseBeatOffset,
+    song.difficulty,
+    song.audioLeadMs,
+    chartNonce,
+  ]);
 
   const regenerate = () => {
     if (!song.midi) return;

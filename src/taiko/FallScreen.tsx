@@ -14,6 +14,7 @@ import { HELP } from "./helpTexts";
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
+import { shiftChart } from "@/shared/taikoChart";
 
 import { quality, type QualityTier } from "./perf";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
@@ -84,16 +85,26 @@ export function FallScreen({ speed }: { speed: number }) {
    */
   const playChart = useMemo(() => {
     if (!song.midi) return null;
-    return getPlayChart(
-      song.midi,
-      {
-        title: song.fileName,
-        offsetMs: song.offsetMs,
-        phaseBeatOffset: song.phaseBeatOffset,
-      },
-      song.difficulty,
+    return shiftChart(
+      getPlayChart(
+        song.midi,
+        {
+          title: song.fileName,
+          offsetMs: song.offsetMs,
+          phaseBeatOffset: song.phaseBeatOffset,
+        },
+        song.difficulty,
+      ),
+      song.audioLeadMs,
     );
-  }, [song.midi, song.fileName, song.offsetMs, song.phaseBeatOffset, song.difficulty]);
+  }, [
+    song.midi,
+    song.fileName,
+    song.offsetMs,
+    song.phaseBeatOffset,
+    song.difficulty,
+    song.audioLeadMs,
+  ]);
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -125,12 +136,13 @@ export function FallScreen({ speed }: { speed: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playChart]);
 
-  // 音频装载 / 卸载
+  // 音频装载 / 卸载（开头空白统一跳过）
   useEffect(() => {
+    songPlayer.setLeadMs(song.audioLeadMs);
     songPlayer.load(stems);
     setPhaseBoth("idle");
     return () => songPlayer.stop();
-  }, [stems, setPhaseBoth]);
+  }, [stems, song.audioLeadMs, setPhaseBoth]);
 
   // 调音台音量 → 播放器（实时生效）
   useEffect(() => {

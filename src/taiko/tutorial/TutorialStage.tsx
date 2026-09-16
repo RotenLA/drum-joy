@@ -80,7 +80,9 @@ export function TutorialStage({
     const holdNeedsHits = Boolean(lesson.hold && lesson.pattern.length > 0);
 
     const audio = getAudioContext();
+    // 时钟 0 点 = 预热首拍，音符从 WARMUP_BEATS 拍之后开始 → 大号数字完整走 4、3、2、1
     const startSec = audio.currentTime + 0.4;
+    const firstNoteMs = WARMUP_BEATS * BEAT_MS;
     const clockMs = () => (audio.currentTime - startSec) * 1000;
 
     let streak = 0;
@@ -252,7 +254,11 @@ export function TutorialStage({
         parts: TUTORIAL_PARTS,
         judgement: judgement && judgement.until > now ? judgement : null,
         countText:
-          t < 0 ? String(Math.min(WARMUP_BEATS, Math.max(1, Math.ceil(-t / BEAT_MS)))) : null,
+          t < firstNoteMs
+            ? String(
+                Math.min(WARMUP_BEATS, Math.max(1, Math.ceil((firstNoteMs - t) / BEAT_MS))),
+              )
+            : null,
         stats: null,
         showNotes: true,
         sticks: null,
