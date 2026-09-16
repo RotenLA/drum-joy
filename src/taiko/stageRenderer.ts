@@ -621,11 +621,16 @@ function drawSquarePad(
     ctx.fill();
   }
 
-  // 顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染
-  const ys = top.map((p) => p.y);
-  const face = ctx.createLinearGradient(0, Math.min(...ys), 0, Math.max(...ys));
-  face.addColorStop(0, "#17171b");
-  face.addColorStop(1, "#2b2b33");
+  // 顶面：后暗前亮（与鼓的方向性顶光一致）+ 部件色淡染（缓存）
+  const ys0 = top0.map((p) => p.y);
+  const yMin = Math.min(...ys0);
+  const yMax = Math.max(...ys0);
+  const face = cachedGrad(`${gk}|f`, () => {
+    const g = ctx.createLinearGradient(0, yMin, 0, yMax);
+    g.addColorStop(0, "#17171b");
+    g.addColorStop(1, "#2b2b33");
+    return g;
+  });
   topPath();
   ctx.fillStyle = face;
   ctx.fill();
