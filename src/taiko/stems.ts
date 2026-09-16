@@ -77,8 +77,8 @@ export const stemsDurationMs = (stems: StemMap): number => {
 
 export const hasAnyStem = (stems: StemMap): boolean => STEM_KINDS.some((k) => stems[k] !== null);
 
-/** 静音阈值：约 -50dBFS 以下视为空白 */
-const SILENCE_THRESHOLD = 10 ** (-50 / 20);
+/** 静音阈值：约 -24dBFS 以下视为空白（轻微底噪/引子也切掉） */
+const SILENCE_THRESHOLD = 10 ** (-24 / 20);
 /** 裁切时往前保留的余量，避免削掉音头 */
 const LEAD_GUARD_MS = 30;
 
