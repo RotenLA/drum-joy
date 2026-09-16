@@ -1,7 +1,7 @@
 /**
  * 教学用小舞台：与游玩屏同一套渲染（stageRenderer），只显示五个部件。
- * mode = "demo"     自动演示，音符到点自动闪光，不需要玩家输入
- * mode = "practice" 玩家跟着节拍器敲，连续完成 TARGET 次即通过
+ * 演示与练习合一：音符到点时对应鼓面自动亮一下做示范，同时接收玩家敲击，
+ * 连续完成 TARGET 次即通过。
  */
 import { useEffect, useRef, useState } from "react";
 import { renderStage } from "../stageRenderer";
@@ -27,12 +27,10 @@ const BARS = 24;
 
 export function TutorialStage({
   lesson,
-  mode,
   onPass,
   restartKey,
 }: {
   lesson: Lesson;
-  mode: "demo" | "practice";
   onPass?: () => void;
   restartKey: number;
 }) {
@@ -41,6 +39,13 @@ export function TutorialStage({
   const progressRef = useRef(0);
   const [progress, setProgress] = useState(0);
   const [tip, setTip] = useState("");
+  // 开头几秒提醒「可以跟着一起敲」，随后淡出
+  const [hintOn, setHintOn] = useState(true);
+  useEffect(() => {
+    setHintOn(true);
+    const timer = window.setTimeout(() => setHintOn(false), 6500);
+    return () => window.clearTimeout(timer);
+  }, [lesson, restartKey]);
   // 鼓音色开关与谱面页共用同一份状态，切换后立即生效
   const kitOnRef = useRef(true);
   useEffect(() => {
@@ -79,6 +84,8 @@ export function TutorialStage({
     const clockMs = () => (audio.currentTime - startSec) * 1000;
 
     let streak = 0;
+    /** 自动示范用游标 */
+    let demoCursor = 0;
     let pedalHeld = false;
     let holdActiveOk = false;
     let judgement: { text: string; color: string; until: number } | null = null;
@@ -108,7 +115,7 @@ export function TutorialStage({
     };
 
     const bump = (ok: boolean) => {
-      if (passed || mode !== "practice") return;
+      if (passed) return;
       if (!ok) {
         setStreak(0);
         return;
@@ -122,7 +129,7 @@ export function TutorialStage({
       const now = performance.now();
       if (kitOnRef.current) playDrum(part, vel);
       flashes[part] = now + FLASH_MS;
-      if (mode !== "practice" || passed) return;
+      if (passed) return;
       if (holdPart && part === holdPart) {
         pedalHeld = true;
         return;
@@ -187,49 +194,48 @@ export function TutorialStage({
       last = now;
       const t = clockMs();
 
-      if (mode === "demo") {
+      // 示范：短音符到点时对应鼓面自动亮一下（不影响判定，玩家仍要自己敲）
+      for (let i = demoCursor; i < notes.length; i++) {
+        const n = notes[i]!;
+        if (t < n.timeMs) break;
+        demoCursor = i + 1;
+        if ((n.holdMs ?? 0) > 0) continue;
+        const p = n.note !== undefined ? partOfNote(n.note) : null;
+        if (p && (flashes[p] ?? 0) < now) flashes[p] = now + FLASH_MS * 0.6;
+      }
+
+      // 短音符过窗未击 → 连击清零
+      for (let i = 0; i < notes.length; i++) {
+        const n = notes[i]!;
+        if (n.timeMs >= t - HIT_WINDOW) break;
+        if (judged[i] || (n.holdMs ?? 0) > 0) continue;
+        judged[i] = 2;
+        const p = n.note !== undefined ? partOfNote(n.note) : null;
+        if (p) missFlashes[p] = now + 240;
+        judgement = { text: "MISS", color: "#f87171", until: now + 450 };
+        if (!holdNeedsHits) bump(false);
+      }
+      // 长音符：整段按住不能松
+      if (holdPart) {
         for (let i = 0; i < notes.length; i++) {
-          if (judged[i]) continue;
           const n = notes[i]!;
-          if (t < n.timeMs) break;
-          judged[i] = 1;
-          const p = n.note !== undefined ? partOfNote(n.note) : null;
-          if (p) flashes[p] = now + FLASH_MS + (n.holdMs ?? 0);
-        }
-      } else {
-        // 短音符过窗未击 → 连击清零
-        for (let i = 0; i < notes.length; i++) {
-          const n = notes[i]!;
-          if (n.timeMs >= t - HIT_WINDOW) break;
-          if (judged[i] || (n.holdMs ?? 0) > 0) continue;
-          judged[i] = 2;
-          const p = n.note !== undefined ? partOfNote(n.note) : null;
-          if (p) missFlashes[p] = now + 240;
-          judgement = { text: "MISS", color: "#f87171", until: now + 450 };
-          if (!holdNeedsHits) bump(false);
-        }
-        // 长音符：整段按住不能松
-        if (holdPart) {
-          for (let i = 0; i < notes.length; i++) {
-            const n = notes[i]!;
-            const len = n.holdMs ?? 0;
-            if (len <= 0 || judged[i]) continue;
-            const end = n.timeMs + len;
-            if (t < n.timeMs || t > end + HIT_WINDOW) continue;
-            if (pedalHeld) {
-              holdActiveOk = true;
-              flashes[holdPart] = now + 120;
-              if (t >= end - 40) {
-                judged[i] = 1;
-                if (!holdNeedsHits) pass();
-              }
-            } else if (holdActiveOk) {
-              holdActiveOk = false;
-              judged[i] = 2;
-              missFlashes[holdPart] = now + 240;
-              setTip("左踏板松开了，重新踩住");
-              setStreak(0);
+          const len = n.holdMs ?? 0;
+          if (len <= 0 || judged[i]) continue;
+          const end = n.timeMs + len;
+          if (t < n.timeMs || t > end + HIT_WINDOW) continue;
+          if (pedalHeld) {
+            holdActiveOk = true;
+            flashes[holdPart] = now + 120;
+            if (t >= end - 40) {
+              judged[i] = 1;
+              if (!holdNeedsHits) pass();
             }
+          } else if (holdActiveOk) {
+            holdActiveOk = false;
+            judged[i] = 2;
+            missFlashes[holdPart] = now + 240;
+            setTip("左踏板松开了，重新踩住");
+            setStreak(0);
           }
         }
       }
@@ -241,7 +247,7 @@ export function TutorialStage({
         now,
         flashes,
         missFlashes,
-        combo: mode === "practice" ? progressRef.current : 0,
+        combo: progressRef.current,
         score: 0,
         parts: TUTORIAL_PARTS,
         judgement: judgement && judgement.until > now ? judgement : null,
@@ -261,8 +267,8 @@ export function TutorialStage({
       offNote();
       offUp();
     };
-    // restartKey 变化 = 重看一次 / 再练一次
-  }, [lesson, mode, onPass, restartKey]);
+    // restartKey 变化 = 再来一次
+  }, [lesson, onPass, restartKey]);
 
   // 铺满外层舞台框（由 TutorialOverlay 提供尺寸），卡片叠在同一块画面上
   return (
@@ -270,14 +276,22 @@ export function TutorialStage({
       <div ref={wrapRef} className="absolute inset-0 overflow-hidden bg-[#0a0a0c]">
         <canvas ref={canvasRef} className="block h-full w-full" />
       </div>
-      {mode === "practice" && (
-        <div className="absolute left-3 top-3 flex items-center gap-3 border border-white/15 bg-black/45 px-3 py-1 text-xs text-white/75 backdrop-blur">
-          <span className="tabular-nums">
-            进度 {Math.min(progress, TARGET)} / {TARGET}
-          </span>
-          {tip && <span className="text-white/50">{tip}</span>}
-        </div>
-      )}
+      <div className="absolute left-3 top-3 flex items-center gap-3 border border-white/15 bg-black/45 px-3 py-1 text-xs text-white/75 backdrop-blur">
+        <span className="tabular-nums">
+          进度 {Math.min(progress, TARGET)} / {TARGET}
+        </span>
+        {tip && <span className="text-white/50">{tip}</span>}
+      </div>
+      {/* 提醒玩家现在就可以跟着敲，几秒后淡出 */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-3 flex justify-center transition-opacity duration-700 ${
+          hintOn ? "opacity-100" : "opacity-0"
+        }`}
+      >
+        <span className="border border-[var(--taiko-accent)]/50 bg-black/55 px-4 py-1 text-xs tracking-wide text-white/85 backdrop-blur">
+          跟着音符一起敲 —— 连续 {TARGET} 次就通过
+        </span>
+      </div>
     </>
   );
 }

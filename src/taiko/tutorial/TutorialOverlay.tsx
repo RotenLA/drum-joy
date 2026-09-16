@@ -36,14 +36,15 @@ const DEVICE_RE = /pd2ultra|pd2max|pd2u|pd2|max/i;
 const PEDAL_NOTES = [36, 44];
 
 type Phase = "welcome" | "adapter" | "sticks" | "intro" | "lesson" | "done";
-type LessonPhase = "demo" | "practice" | "praise";
+/** learn = 演示与练习合一；praise = 通过后的鼓励 */
+type LessonPhase = "learn" | "praise";
 
 const TOTAL_STEPS = 4 + LESSONS.length; // 适配器/鼓槌/部件/课程.../完成
 
 export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
   const [phase, setPhase] = useState<Phase>("welcome");
   const [lessonIdx, setLessonIdx] = useState(0);
-  const [lessonPhase, setLessonPhase] = useState<LessonPhase>("demo");
+  const [lessonPhase, setLessonPhase] = useState<LessonPhase>("learn");
   const [restartKey, setRestartKey] = useState(0);
 
   const finish = () => {
@@ -65,7 +66,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
   const nextLesson = () => {
     if (lessonIdx + 1 < LESSONS.length) {
       setLessonIdx(lessonIdx + 1);
-      setLessonPhase("demo");
+      setLessonPhase("learn");
       setRestartKey((k) => k + 1);
     } else {
       setPhase("done");
@@ -118,9 +119,8 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                 <PartsPreview />
               ) : (
                 <TutorialStage
-                  key={`${lesson.id}-${lessonPhase === "practice" ? "practice" : "demo"}`}
+                  key={`${lesson.id}-${restartKey}`}
                   lesson={lesson}
-                  mode={lessonPhase === "practice" ? "practice" : "demo"}
                   restartKey={restartKey}
                   onPass={() => setLessonPhase("praise")}
                 />
@@ -151,36 +151,20 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                 </>
               )}
 
-              {phase === "lesson" && lessonPhase === "demo" && (
+              {phase === "lesson" && lessonPhase === "learn" && (
                 <>
                   <CardTitle>
-                    {lesson.title} · <span className="text-white/50">动画演示</span>
+                    {lesson.title} · <span className="text-white/50">边看边练</span>
                   </CardTitle>
                   {lesson.demo.map((line) => (
                     <p key={line} className="text-sm text-white/75">
                       {line}
                     </p>
                   ))}
-                  <div className="flex gap-3 pt-1">
-                    <PrimaryButton
-                      onClick={() => {
-                        setLessonPhase("practice");
-                        setRestartKey((k) => k + 1);
-                      }}
-                    >
-                      明白了，开始练习
-                    </PrimaryButton>
-                    <GhostButton onClick={() => setRestartKey((k) => k + 1)}>再看一次</GhostButton>
-                  </div>
-                </>
-              )}
-
-              {phase === "lesson" && lessonPhase === "practice" && (
-                <>
-                  <CardTitle>
-                    {lesson.title} · <span className="text-white/50">练习</span>
-                  </CardTitle>
                   <p className="text-sm text-white/75">{lesson.hint}</p>
+                  <p className="text-sm font-medium text-[var(--taiko-accent)]">
+                    音符会自动示范，现在就可以跟着一起敲，连续 8 次即通过。
+                  </p>
                   <div className="flex gap-3 pt-1">
                     <GhostButton onClick={() => setRestartKey((k) => k + 1)}>重新开始</GhostButton>
                     <GhostButton onClick={nextLesson}>跳过本节</GhostButton>
@@ -196,7 +180,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                     <PrimaryButton onClick={nextLesson}>下一步</PrimaryButton>
                     <GhostButton
                       onClick={() => {
-                        setLessonPhase("practice");
+                        setLessonPhase("learn");
                         setRestartKey((k) => k + 1);
                       }}
                     >
