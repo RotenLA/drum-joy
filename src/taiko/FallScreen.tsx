@@ -35,6 +35,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
+  const [fps, setFps] = useState(0);
 
   const phaseRef = useRef<Phase>("idle");
   const timeRef = useRef(0);
@@ -318,6 +319,8 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
 
     let raf = 0;
     let last = 0;
+    let fpsWindowStart = 0;
+    let renderedFrames = 0;
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, quality.params.maxDpr);
       canvas.width = wrap.clientWidth * dpr;
@@ -338,6 +341,19 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       if (dt && dt < minFrame) return;
       last = now;
       quality.sample(dt, now);
+
+      // 统计实际绘制帧（而非 rAF 回调数），每 500ms 才更新一次文字。
+      if (!fpsWindowStart || dt > 500) {
+        fpsWindowStart = now;
+        renderedFrames = 0;
+      }
+      renderedFrames++;
+      const fpsElapsed = now - fpsWindowStart;
+      if (fpsElapsed >= 500) {
+        setFps(Math.round((renderedFrames * 1000) / fpsElapsed));
+        fpsWindowStart = now;
+        renderedFrames = 0;
+      }
 
       let ph = phaseRef.current;
       const t = readTimeMs(now);
@@ -448,6 +464,10 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
         className="relative min-h-0 overflow-hidden bg-[var(--taiko-paper)]"
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
+
+        <div className="pointer-events-none absolute right-[var(--safe-right)] top-[var(--safe-top)] z-[5] border border-[var(--taiko-line)] bg-[var(--taiko-paper)]/75 px-2 py-1 text-[10px] tabular-nums text-[var(--taiko-ink)]/70 backdrop-blur-sm">
+          {fps} FPS
+        </div>
 
         {/* 可开关的调试打印小窗 */}
         <DebugLogPanel />
