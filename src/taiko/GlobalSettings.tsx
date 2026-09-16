@@ -58,14 +58,14 @@ export function GlobalSettings({
     const on = loadKitEnabled();
     setKitOn(on);
     kitOnRef.current = on;
-  }, []);
-  const toggleKit = () =>
-    setKitOn((on) => {
-      const next = !on;
+    // 教学里的同一个开关切换时立刻同步
+    return subscribeKitEnabled((next) => {
       kitOnRef.current = next;
-      saveKitEnabled(next);
-      return next;
+      setKitOn(next);
     });
+  }, []);
+  const toggleKit = () => saveKitEnabled(!kitOnRef.current);
+
 
   // ---- 自动校准（节拍器一直响，敲满 8 下自动结算） ----
   const runRef = useRef<{ startMs: number; beatMs: number; taps: number[] } | null>(null);
