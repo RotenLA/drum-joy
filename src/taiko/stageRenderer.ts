@@ -832,6 +832,76 @@ function cueItems(
   }));
 }
 
+/** 同刻音符的分组容差（毫秒） */
+const CHORD_TOL_MS = 15;
+
+/**
+ * 同刻音符之间的淡连线：提示「要一起敲」，刻意压低视觉，
+ * 只随接近判定位置略微提亮，永远淡于音符本身。
+ */
+function chordItems(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  f: StageFrame,
+): DepthItem[] {
+  const notes = f.chart.notes;
+  const span = LEAD_MS / Math.max(0.1, f.speed);
+  const from = f.timeMs;
+  const until = f.timeMs + span;
+  let lo = 0;
+  let hi = notes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (notes[mid]!.timeMs < from) lo = mid + 1;
+    else hi = mid;
+  }
+
+  const items: DepthItem[] = [];
+  let i = lo;
+  while (i < notes.length && notes[i]!.timeMs <= until) {
+    const t0 = notes[i]!.timeMs;
+    const group: { x: number; y: number }[] = [];
+    let progress = 0;
+    let j = i;
+    while (j < notes.length && notes[j]!.timeMs - t0 <= CHORD_TOL_MS) {
+      const n = notes[j]!;
+      j++;
+      if ((n.holdMs ?? 0) > 0 || n.note === undefined) continue;
+      const part = partOfNote(n.note);
+      if (!part) continue;
+      const pad = geomOf(part, w, h);
+      const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
+      if (t <= 0.02 || t >= 1) continue;
+      const p = Math.pow(Math.max(0.02, Math.min(1, t)), EASE);
+      progress = p;
+      group.push({ x: pad.gx + (pad.cx - pad.gx) * p, y: pad.gy + (pad.cy - pad.gy) * p });
+    }
+    i = j;
+    if (group.length < 2) continue;
+    group.sort((a, b) => a.x - b.x);
+    const alpha = (0.05 + 0.13 * progress) * Math.min(1, progress * 6);
+    const pts = group;
+    const depth = pts.reduce((m, pt) => Math.max(m, pt.y), 0) / h - 0.0005;
+    items.push({
+      depth,
+      draw: () => {
+        ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = `rgba(235,240,255,${alpha})`;
+        ctx.lineWidth = Math.max(1, h * 0.0022);
+        ctx.beginPath();
+        ctx.moveTo(pts[0]!.x, pts[0]!.y);
+        for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k]!.x, pts[k]!.y);
+        ctx.stroke();
+        ctx.restore();
+      },
+    });
+  }
+  return items;
+}
+
+
 export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
   ctx.save();
 
