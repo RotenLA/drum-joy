@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, RotateCcw, SkipForward, Upload } from "lucide-react";
-import { PART_BY_ID, partOfNote } from "./laneLayouts";
+import { DRUM_PARTS, PART_BY_ID, getMapping, partOfNote, setMapping, type PartId } from "./laneLayouts";
 import { midiManager } from "./midiInput";
 import { renderPadArray } from "./stageRenderer";
 import { stickManager } from "./stickInput";
@@ -47,6 +47,10 @@ export function PositionCaptureScreen() {
   const [online, setOnline] = useState<{ l: boolean; r: boolean }>({ l: false, r: false });
   const [midiSeen, setMidiSeen] = useState(false);
   const [status, setStatus] = useState("连接鼓棒姿态和 MIDI 后开始");
+  /** 最近击打（号码 + 当前被判成的鼓件），倒序 */
+  const [recent, setRecent] = useState<{ note: number; part: PartId | null; at: number }[]>([]);
+  /** 最近一次「敲错鼓面」，用于一键纠正 */
+  const [mismatch, setMismatch] = useState<{ note: number; target: CapturePart } | null>(null);
 
   /** 采集状态的唯一真源（击打回调里同步读写，避免读到旧值） */
   const captureRef = useRef<CaptureState>(IDLE);
@@ -77,21 +81,28 @@ export function PositionCaptureScreen() {
   useEffect(() => {
     const off = midiManager.onNote((note) => {
       setMidiSeen(true);
+      const actual = partOfNote(note);
+      const now = performance.now();
+      setRecent((old) => [{ note, part: actual, at: now }, ...old].slice(0, 8));
+
       const prev = captureRef.current;
       if (prev.step < 0) return;
       const target = ORDER[prev.step];
       if (!target) return;
 
-      const actual = partOfNote(note);
-      const now = performance.now();
       if (!actual) {
+        setMismatch({ note, target: target.part });
         setStatus(`音符 ${note} 尚未映射到鼓件`);
         return;
       }
       if (actual !== target.part) {
-        setStatus(`收到${PART_BY_ID[actual].label}，请敲高亮的${PART_BY_ID[target.part].label}`);
+        setMismatch({ note, target: target.part });
+        setStatus(
+          `收到 ${note} → ${PART_BY_ID[actual].label}，请敲高亮的${PART_BY_ID[target.part].label}`,
+        );
         return;
       }
+      setMismatch(null);
       const last = lastHitRef.current;
       if (last.part === actual && now - last.at < DEDUPE_MS) return;
       lastHitRef.current = { part: actual as CapturePart, at: now };
@@ -104,9 +115,10 @@ export function PositionCaptureScreen() {
 
       const samples = [...prev.samples, { ...pose, at: now }];
       if (samples.length < NEED) {
-        apply({ step: prev.step, samples }, `已捕捉 ${samples.length}/${NEED}`);
+        apply({ step: prev.step, samples }, `音符 ${note} · 已捕捉 ${samples.length}/${NEED}`);
         return;
       }
+
 
       const summary = summarizeSamples(samples);
       setGroups((old) => ({
@@ -186,6 +198,19 @@ export function PositionCaptureScreen() {
     apply({ step, samples: [] }, "本项已清空，重新采集");
   };
 
+  /** 把某个音符从原鼓件移出，归到目标鼓件（写入映射，立即生效） */
+  const remapNote = (note: number, to: CapturePart) => {
+    const current = getMapping();
+    const next = { ...current } as Record<PartId, number[]>;
+    for (const p of DRUM_PARTS) next[p.id] = current[p.id].filter((n) => n !== note);
+    next[to] = [...next[to], note].sort((a, b) => a - b);
+    setMapping(next);
+    setMismatch(null);
+    setRecent((old) => old.map((r) => (r.note === note ? { ...r, part: to } : r)));
+    setStatus(`音符 ${note} 已归到${PART_BY_ID[to].label}，请继续敲`);
+  };
+
+
   const calibration = useMemo(() => makeCalibration(groups), [groups]);
   const save = () => {
     saveStickCalibration(calibration);
@@ -242,7 +267,16 @@ export function PositionCaptureScreen() {
             <div className="text-base font-medium text-[var(--taiko-ink)]">位置捕捉</div>
           )}
           <div className="mt-1 max-w-[42ch] text-xs text-[var(--taiko-ink)]/65">{status}</div>
+          {mismatch && (
+            <button
+              onClick={() => remapNote(mismatch.note, mismatch.target)}
+              className="mt-2 border border-[var(--taiko-accent)] px-2 py-1 text-[11px] text-[var(--taiko-accent)]"
+            >
+              把 {mismatch.note} 归到{PART_BY_ID[mismatch.target].label}
+            </button>
+          )}
         </div>
+
       </div>
       <aside className="flex min-w-0 flex-col gap-4">
         <section className="border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-4">
@@ -282,6 +316,27 @@ export function PositionCaptureScreen() {
             </IconBtn>
           </div>
         </section>
+        <section className="border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-3">
+          <h2 className="text-sm font-medium">最近击打</h2>
+          <div className="mt-2 space-y-1">
+            {recent.length === 0 ? (
+              <div className="text-xs text-[var(--taiko-ink)]/45">敲任意鼓面，这里会显示音符号码</div>
+            ) : (
+              recent.map((r) => (
+                <div
+                  key={`${r.note}-${r.at}`}
+                  className="flex items-center justify-between gap-2 text-xs"
+                >
+                  <span className="tabular-nums text-[var(--taiko-accent)]">{r.note}</span>
+                  <span className="truncate text-[var(--taiko-ink)]/70">
+                    {r.part ? PART_BY_ID[r.part].label : "未映射"}
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+        </section>
+
         <section className="max-h-[320px] overflow-auto border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-3">
           {CAPTURE_PARTS.map((part) => (
             <div
