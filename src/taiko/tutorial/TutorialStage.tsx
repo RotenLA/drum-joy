@@ -284,7 +284,7 @@ export function TutorialStage({
       </div>
       {/* 提醒玩家现在就可以跟着敲，几秒后淡出 */}
       <div
-        className={`pointer-events-none absolute inset-x-0 bottom-3 flex justify-center transition-opacity duration-700 ${
+        className={`pointer-events-none absolute inset-x-0 top-3 flex justify-center transition-opacity duration-700 ${
           hintOn ? "opacity-100" : "opacity-0"
         }`}
       >
