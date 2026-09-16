@@ -449,6 +449,9 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
 
+        {/* 演奏区实测帧数 */}
+        <FpsBadge />
+
         {/* 可开关的调试打印小窗 */}
         <DebugLogPanel />
 
