@@ -15,7 +15,7 @@ import {
   type Calibration,
 } from "./calibration";
 import { click as metronomeClick } from "./metronome";
-import { loadKitEnabled, playDrum, saveKitEnabled } from "./drumKit";
+import { loadKitEnabled, playDrum, saveKitEnabled, subscribeKitEnabled } from "./drumKit";
 import { midiManager } from "./midiInput";
 import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
