@@ -36,7 +36,8 @@ const DEVICE_RE = /pd2ultra|pd2max|pd2u|pd2|max/i;
 const PEDAL_NOTES = [36, 44];
 
 type Phase = "welcome" | "adapter" | "sticks" | "intro" | "lesson" | "done";
-type LessonPhase = "demo" | "practice" | "praise";
+/** learn = 演示与练习合一；praise = 通过后的鼓励 */
+type LessonPhase = "learn" | "praise";
 
 const TOTAL_STEPS = 4 + LESSONS.length; // 适配器/鼓槌/部件/课程.../完成
 
