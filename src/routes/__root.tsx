@@ -80,7 +80,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         name: "viewport",
         content: "width=device-width, initial-scale=1, viewport-fit=cover",
       },
-      { name: "color-scheme", content: "dark" },
       { title: "LovableSynth" },
       { name: "description", content: "LovableSynth 桌面合成器与空气鼓工作台。" },
       { name: "author", content: "Lovable" },
@@ -106,7 +105,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="zh-CN" className="dark" style={{ colorScheme: "dark" }}>
+    <html lang="zh-CN">
       <head>
         <HeadContent />
       </head>
