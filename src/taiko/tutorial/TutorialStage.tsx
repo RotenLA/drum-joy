@@ -185,49 +185,48 @@ export function TutorialStage({
       last = now;
       const t = clockMs();
 
-      if (mode === "demo") {
+      // 示范：短音符到点时对应鼓面自动亮一下（不影响判定，玩家仍要自己敲）
+      for (let i = demoCursor; i < notes.length; i++) {
+        const n = notes[i]!;
+        if (t < n.timeMs) break;
+        demoCursor = i + 1;
+        if ((n.holdMs ?? 0) > 0) continue;
+        const p = n.note !== undefined ? partOfNote(n.note) : null;
+        if (p && (flashes[p] ?? 0) < now) flashes[p] = now + FLASH_MS * 0.6;
+      }
+
+      // 短音符过窗未击 → 连击清零
+      for (let i = 0; i < notes.length; i++) {
+        const n = notes[i]!;
+        if (n.timeMs >= t - HIT_WINDOW) break;
+        if (judged[i] || (n.holdMs ?? 0) > 0) continue;
+        judged[i] = 2;
+        const p = n.note !== undefined ? partOfNote(n.note) : null;
+        if (p) missFlashes[p] = now + 240;
+        judgement = { text: "MISS", color: "#f87171", until: now + 450 };
+        if (!holdNeedsHits) bump(false);
+      }
+      // 长音符：整段按住不能松
+      if (holdPart) {
         for (let i = 0; i < notes.length; i++) {
-          if (judged[i]) continue;
           const n = notes[i]!;
-          if (t < n.timeMs) break;
-          judged[i] = 1;
-          const p = n.note !== undefined ? partOfNote(n.note) : null;
-          if (p) flashes[p] = now + FLASH_MS + (n.holdMs ?? 0);
-        }
-      } else {
-        // 短音符过窗未击 → 连击清零
-        for (let i = 0; i < notes.length; i++) {
-          const n = notes[i]!;
-          if (n.timeMs >= t - HIT_WINDOW) break;
-          if (judged[i] || (n.holdMs ?? 0) > 0) continue;
-          judged[i] = 2;
-          const p = n.note !== undefined ? partOfNote(n.note) : null;
-          if (p) missFlashes[p] = now + 240;
-          judgement = { text: "MISS", color: "#f87171", until: now + 450 };
-          if (!holdNeedsHits) bump(false);
-        }
-        // 长音符：整段按住不能松
-        if (holdPart) {
-          for (let i = 0; i < notes.length; i++) {
-            const n = notes[i]!;
-            const len = n.holdMs ?? 0;
-            if (len <= 0 || judged[i]) continue;
-            const end = n.timeMs + len;
-            if (t < n.timeMs || t > end + HIT_WINDOW) continue;
-            if (pedalHeld) {
-              holdActiveOk = true;
-              flashes[holdPart] = now + 120;
-              if (t >= end - 40) {
-                judged[i] = 1;
-                if (!holdNeedsHits) pass();
-              }
-            } else if (holdActiveOk) {
-              holdActiveOk = false;
-              judged[i] = 2;
-              missFlashes[holdPart] = now + 240;
-              setTip("左踏板松开了，重新踩住");
-              setStreak(0);
+          const len = n.holdMs ?? 0;
+          if (len <= 0 || judged[i]) continue;
+          const end = n.timeMs + len;
+          if (t < n.timeMs || t > end + HIT_WINDOW) continue;
+          if (pedalHeld) {
+            holdActiveOk = true;
+            flashes[holdPart] = now + 120;
+            if (t >= end - 40) {
+              judged[i] = 1;
+              if (!holdNeedsHits) pass();
             }
+          } else if (holdActiveOk) {
+            holdActiveOk = false;
+            judged[i] = 2;
+            missFlashes[holdPart] = now + 240;
+            setTip("左踏板松开了，重新踩住");
+            setStreak(0);
           }
         }
       }
