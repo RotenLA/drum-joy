@@ -380,7 +380,29 @@ function StageFrame({ stage, card }: { stage: React.ReactNode; card: React.React
   );
 }
 
+/** 教学舞台角落的鼓音色开关：与谱面页全局参数同一份状态 */
+function KitToggle() {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    setOn(loadKitEnabled());
+    return subscribeKitEnabled(setOn);
+  }, []);
+  return (
+    <button
+      onClick={() => saveKitEnabled(!on)}
+      className={`absolute right-2 top-2 border px-2 py-1 text-[10px] tracking-wide transition-colors ${
+        on
+          ? "border-white/25 bg-white/10 text-white/75"
+          : "border-white/12 text-white/40 hover:text-white/70"
+      }`}
+    >
+      鼓音色 {on ? "开" : "关"}
+    </button>
+  );
+}
+
 function CardTitle({ children }: { children: React.ReactNode }) {
+
   return <h2 className="text-sm tracking-[0.12em] text-white">{children}</h2>;
 }
 
