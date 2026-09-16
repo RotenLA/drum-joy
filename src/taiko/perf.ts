@@ -69,6 +69,10 @@ class QualityController {
   private slow = 0;
   private lastDrop = 0;
   private listeners = new Set<() => void>();
+  /** 游玩屏实测帧率统计：1s 窗口内的已渲染帧数 */
+  private fpsFrames = 0;
+  private fpsWindowStart = 0;
+  private fpsValue = 0;
 
   /** hydration 之后再读本地设置，避免 SSR 与客户端首帧不一致 */
   hydrate(): void {
@@ -110,8 +114,20 @@ class QualityController {
     return QUALITY[this.tier];
   }
 
-  /** 每帧喂一个帧间隔（毫秒），auto 模式据此降档 */
+  /** 游玩屏实测帧率（只在真实渲染帧时更新，30 帧上限会如实体现） */
+  get fps(): number {
+    return this.fpsValue;
+  }
+
+  /** 每帧喂一个帧间隔（毫秒），auto 模式据此降档；同时统计实测帧率 */
   sample(dtMs: number, now: number): void {
+    if (this.fpsWindowStart === 0) this.fpsWindowStart = now;
+    this.fpsFrames++;
+    if (now - this.fpsWindowStart >= 1000) {
+      this.fpsValue = Math.round((this.fpsFrames * 1000) / (now - this.fpsWindowStart));
+      this.fpsFrames = 0;
+      this.fpsWindowStart = now;
+    }
     if (this.mode !== "auto") return;
     if (dtMs <= 0 || dtMs > 500) return; // 切后台等异常值忽略
     if (dtMs > SLOW_FRAME_MS) this.slow++;
