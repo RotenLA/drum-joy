@@ -27,12 +27,10 @@ const BARS = 24;
 
 export function TutorialStage({
   lesson,
-  mode,
   onPass,
   restartKey,
 }: {
   lesson: Lesson;
-  mode: "demo" | "practice";
   onPass?: () => void;
   restartKey: number;
 }) {
