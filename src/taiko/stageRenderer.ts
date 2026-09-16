@@ -551,20 +551,22 @@ function drawSquarePad(
   miss = 0,
 ) {
   const s = 1 + 0.1 * intensity; // 命中回弹
-  const RX = rx * s;
   const RY = ry * s;
   const th = mirror ? -PEDAL_TILT : PEDAL_TILT;
   const cos = Math.cos(th);
   const sin = Math.sin(th);
   const depth = RY * 1.0; // 盒体厚度
+  const depth0 = ry * 1.0; // 未缩放厚度（渐变缓存用）
 
   // 顶面四角：地板坐标（未压扁的正方形）先旋转，再按 0.42 压扁 —— 与鼓面椭圆同一投影规则
-  const corner = (sx: number, sy: number) => {
-    const fx = sx * RX;
-    const fy = sy * RX;
+  // 先算未缩放角（top0），命中回弹只做整体缩放，渐变可按键 radius 缓存
+  const corner0 = (sx: number, sy: number) => {
+    const fx = sx * rx;
+    const fy = sy * rx;
     return { x: fx * cos - fy * sin, y: (fx * sin + fy * cos) * 0.42 };
   };
-  const top = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  const top0 = [corner0(-1, -1), corner0(1, -1), corner0(1, 1), corner0(-1, 1)];
+  const top = top0.map((p) => ({ x: p.x * s, y: p.y * s }));
   const bot = top.map((p) => ({ x: p.x, y: p.y + depth }));
 
   const topPath = () => {
