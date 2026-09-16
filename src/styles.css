@@ -62,6 +62,7 @@
 }
 
 :root {
+  color-scheme: dark;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
@@ -148,8 +149,8 @@
   }
 
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: var(--taiko-paper);
+    color: var(--taiko-ink);
     display: grid;
     place-items: center;
     margin: 0;
@@ -158,6 +159,10 @@
     min-height: 100vh;
     min-height: 100dvh;
     overflow: hidden;
+  }
+
+  html {
+    background-color: var(--taiko-paper);
   }
 }
 
