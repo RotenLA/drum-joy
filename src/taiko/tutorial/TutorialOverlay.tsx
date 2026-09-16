@@ -370,7 +370,9 @@ function StageFrame({ stage, card }: { stage: React.ReactNode; card: React.React
         }}
       >
         {stage}
+        <KitToggle />
       </div>
+
       <div className="flex flex-col gap-2 border border-t-0 border-white/12 bg-white/[0.03] px-5 py-4">
         {card}
       </div>
