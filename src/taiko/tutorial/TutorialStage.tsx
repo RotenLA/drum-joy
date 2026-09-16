@@ -39,6 +39,13 @@ export function TutorialStage({
   const progressRef = useRef(0);
   const [progress, setProgress] = useState(0);
   const [tip, setTip] = useState("");
+  // 开头几秒提醒「可以跟着一起敲」，随后淡出
+  const [hintOn, setHintOn] = useState(true);
+  useEffect(() => {
+    setHintOn(true);
+    const timer = window.setTimeout(() => setHintOn(false), 6500);
+    return () => window.clearTimeout(timer);
+  }, [lesson, restartKey]);
   // 鼓音色开关与谱面页共用同一份状态，切换后立即生效
   const kitOnRef = useRef(true);
   useEffect(() => {
