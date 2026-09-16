@@ -46,3 +46,24 @@ export function splitByMeasure(chart: TaikoChart, offsetMs = 0): TaikoNote[][] {
   }
   return measures;
 }
+
+/**
+ * 整体平移谱面时间（毫秒，正数=提前）。
+ * 用于切掉音频开头空白后，让 MIDI 谱面与音轨保持同步。
+ * 平移到 0 之前的音符会被丢弃（长音符按剩余部分保留）。
+ */
+export function shiftChart(chart: TaikoChart, shiftMs: number): TaikoChart {
+  if (!shiftMs) return chart;
+  const notes: TaikoNote[] = [];
+  for (const n of chart.notes) {
+    const t = n.timeMs - shiftMs;
+    const hold = n.holdMs ?? 0;
+    if (t < 0) {
+      if (hold <= 0 || t + hold <= 0) continue;
+      notes.push({ ...n, timeMs: 0, holdMs: t + hold });
+      continue;
+    }
+    notes.push({ ...n, timeMs: t });
+  }
+  return { ...chart, durationMs: Math.max(0, chart.durationMs - shiftMs), notes };
+}
