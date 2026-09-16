@@ -1141,6 +1141,8 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   if (f.showNotes !== false) {
     items.push(...noteItems(ctx, v.w, v.h, f));
     items.push(...cueItems(ctx, v.w, v.h, f, parts));
+    items.push(...chordItems(ctx, v.w, v.h, f));
+
   }
   items.sort((a, b) => a.depth - b.depth);
   for (const it of items) it.draw();
