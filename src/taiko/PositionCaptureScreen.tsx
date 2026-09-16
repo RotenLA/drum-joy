@@ -48,8 +48,17 @@ export function PositionCaptureScreen() {
   const [midiSeen, setMidiSeen] = useState(false);
   const [status, setStatus] = useState("连接鼓棒姿态和 MIDI 后开始");
 
+  /** 采集状态的唯一真源（击打回调里同步读写，避免读到旧值） */
+  const captureRef = useRef<CaptureState>(IDLE);
   const stepRef = useRef(-1);
   stepRef.current = capture.step;
+
+  const apply = (next: CaptureState, note: string) => {
+    captureRef.current = next;
+    stepRef.current = next.step;
+    setCapture(next);
+    setStatus(note);
+  };
 
   const running = capture.step >= 0;
   const current = running ? ORDER[capture.step] ?? null : null;
@@ -64,57 +73,56 @@ export function PositionCaptureScreen() {
     return () => window.clearInterval(timer);
   }, []);
 
-  // 单一状态机：所有推进都基于上一次的状态计算，不使用延时回调
+  // 单一状态机：全部推进立即发生，不使用延时回调，也不在 setState 内做副作用
   useEffect(() => {
     const off = midiManager.onNote((note) => {
       setMidiSeen(true);
-      if (stepRef.current < 0) return;
+      const prev = captureRef.current;
+      if (prev.step < 0) return;
+      const target = ORDER[prev.step];
+      if (!target) return;
+
       const actual = partOfNote(note);
       const now = performance.now();
+      if (!actual) {
+        setStatus(`音符 ${note} 尚未映射到鼓件`);
+        return;
+      }
+      if (actual !== target.part) {
+        setStatus(`收到${PART_BY_ID[actual].label}，请敲高亮的${PART_BY_ID[target.part].label}`);
+        return;
+      }
+      const last = lastHitRef.current;
+      if (last.part === actual && now - last.at < DEDUPE_MS) return;
+      lastHitRef.current = { part: actual as CapturePart, at: now };
 
-      setCapture((prev) => {
-        if (prev.step < 0) return prev;
-        const target = ORDER[prev.step];
-        if (!target) return prev;
+      const pose = stickManager.latest()?.[target.side] ?? null;
+      if (!pose) {
+        setStatus(`${SIDE_LABEL[target.side]}姿态未收到，请确认该棒已连接后重敲`);
+        return;
+      }
 
-        if (!actual) {
-          setStatus(`音符 ${note} 尚未映射到鼓件`);
-          return prev;
-        }
-        if (actual !== target.part) {
-          setStatus(`收到${PART_BY_ID[actual].label}，请敲高亮的${PART_BY_ID[target.part].label}`);
-          return prev;
-        }
-        const last = lastHitRef.current;
-        if (last.part === actual && now - last.at < DEDUPE_MS) return prev;
-        lastHitRef.current = { part: actual as CapturePart, at: now };
+      const samples = [...prev.samples, { ...pose, at: now }];
+      if (samples.length < NEED) {
+        apply({ step: prev.step, samples }, `已捕捉 ${samples.length}/${NEED}`);
+        return;
+      }
 
-        const pose = stickManager.latest()?.[target.side] ?? null;
-        if (!pose) {
-          setStatus(`${SIDE_LABEL[target.side]}姿态未收到，请确认该棒已连接后重敲`);
-          return prev;
-        }
-
-        const samples = [...prev.samples, { ...pose, at: now }];
-        if (samples.length < NEED) {
-          setStatus(`已捕捉 ${samples.length}/${NEED}`);
-          return { step: prev.step, samples };
-        }
-
-        const summary = summarizeSamples(samples);
-        setGroups((old) => ({
-          ...old,
-          [target.part]: { ...old[target.part], [target.side]: summary },
-        }));
-        const nextStep = prev.step + 1;
-        if (nextStep >= ORDER.length) {
-          setStatus("全部位置已捕捉，请检查结果并保存");
-          return IDLE;
-        }
-        const item = ORDER[nextStep]!;
-        setStatus(`请用${SIDE_LABEL[item.side]}敲${PART_BY_ID[item.part].label}，共 ${NEED} 次`);
-        return { step: nextStep, samples: [] };
-      });
+      const summary = summarizeSamples(samples);
+      setGroups((old) => ({
+        ...old,
+        [target.part]: { ...old[target.part], [target.side]: summary },
+      }));
+      const nextStep = prev.step + 1;
+      if (nextStep >= ORDER.length) {
+        apply(IDLE, "全部位置已捕捉，请检查结果并保存");
+        return;
+      }
+      const item = ORDER[nextStep]!;
+      apply(
+        { step: nextStep, samples: [] },
+        `请用${SIDE_LABEL[item.side]}敲${PART_BY_ID[item.part].label}，共 ${NEED} 次`,
+      );
     });
     return off;
   }, []);
