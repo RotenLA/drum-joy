@@ -14,6 +14,7 @@ import { HELP } from "./helpTexts";
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
+import { shiftChart } from "@/shared/taikoChart";
 
 import { quality, type QualityTier } from "./perf";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
@@ -84,16 +85,26 @@ export function FallScreen({ speed }: { speed: number }) {
    */
   const playChart = useMemo(() => {
     if (!song.midi) return null;
-    return getPlayChart(
-      song.midi,
-      {
-        title: song.fileName,
-        offsetMs: song.offsetMs,
-        phaseBeatOffset: song.phaseBeatOffset,
-      },
-      song.difficulty,
+    return shiftChart(
+      getPlayChart(
+        song.midi,
+        {
+          title: song.fileName,
+          offsetMs: song.offsetMs,
+          phaseBeatOffset: song.phaseBeatOffset,
+        },
+        song.difficulty,
+      ),
+      song.audioLeadMs,
     );
-  }, [song.midi, song.fileName, song.offsetMs, song.phaseBeatOffset, song.difficulty]);
+  }, [
+    song.midi,
+    song.fileName,
+    song.offsetMs,
+    song.phaseBeatOffset,
+    song.difficulty,
+    song.audioLeadMs,
+  ]);
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -239,7 +250,7 @@ export function FallScreen({ speed }: { speed: number }) {
     const songStartSec = ctx.currentTime + LEAD_SEC + countdownMs / 1000;
     countdownStartRef.current = performance.now();
     timeRef.current = -countdownMs;
-    if (hasAudio) songPlayer.play(0, songStartSec);
+    if (hasAudio) songPlayer.play(song.audioLeadMs, songStartSec);
     else silentStartRef.current = performance.now() + LEAD_SEC * 1000 + countdownMs;
     setPhaseBoth("countdown");
     // 倒计时滴答挂在同一条音频时间轴上
