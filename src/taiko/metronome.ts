@@ -20,7 +20,7 @@ export function click(accent = false, whenSec?: number): void {
   const gain = ctx.createGain();
   osc.type = "square";
   osc.frequency.value = accent ? 2000 : 1300;
-  gain.gain.setValueAtTime(accent ? 0.22 : 0.15, t);
+  gain.gain.setValueAtTime(accent ? 0.14 : 0.1, t);
   gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
   osc.connect(gain);
   gain.connect(ctx.destination);
