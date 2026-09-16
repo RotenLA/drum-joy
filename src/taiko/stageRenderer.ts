@@ -597,14 +597,18 @@ function drawSquarePad(
   ctx.translate(cx, cy);
   ctx.lineJoin = "round";
 
-  // 侧面：上暗下更暗的纵向渐变 + 部件色淡染
+  // 侧面：上暗下更暗的纵向渐变 + 部件色淡染（渐变按未缩放几何缓存）
+  const gk = `sq|${mirror ? 1 : 0}|${rx.toFixed(1)}`;
   for (const [i, j] of visibleEdges) {
     const a = top[i]!;
     const b = top[j]!;
-    const my = (a.y + b.y) / 2;
-    const side = ctx.createLinearGradient(0, my, 0, my + depth);
-    side.addColorStop(0, "#1e1e24");
-    side.addColorStop(1, "#0a0a0d");
+    const my0 = (top0[i]!.y + top0[j]!.y) / 2;
+    const side = cachedGrad(`${gk}|s|${my0.toFixed(1)}`, () => {
+      const g = ctx.createLinearGradient(0, my0, 0, my0 + depth0);
+      g.addColorStop(0, "#1e1e24");
+      g.addColorStop(1, "#0a0a0d");
+      return g;
+    });
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
