@@ -95,7 +95,12 @@ export function loadStickCalibration(): StickCalibrationFile | null {
   try { cached = validateCalibration(JSON.parse(localStorage.getItem(STICK_CALIBRATION_KEY) ?? "null")); } catch { cached = null; }
   return cached;
 }
-export function saveStickCalibration(file: StickCalibrationFile): void { cached = file; localStorage.setItem(STICK_CALIBRATION_KEY, JSON.stringify(file)); }
+export function saveStickCalibration(file: StickCalibrationFile): void {
+  cached = file;
+  stickyPart.l = null;
+  stickyPart.r = null;
+  localStorage.setItem(STICK_CALIBRATION_KEY, JSON.stringify(file));
+}
 export function clearStickCalibration(): void {
   cached = null;
   stickyPart.l = null;
