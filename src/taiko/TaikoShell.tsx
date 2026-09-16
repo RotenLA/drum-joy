@@ -7,7 +7,6 @@ import { MappingScreen } from "./MappingScreen";
 import { PositionCaptureScreen } from "./PositionCaptureScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
-import { FpsBadge } from "./FpsBadge";
 
 type ScreenKey = "play" | "chart" | "mapping" | "capture";
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
@@ -41,8 +40,7 @@ function ShellInner() {
   });
 
   return (
-<div className="taiko-root relative grid grid-cols-[3fr_14fr] overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
-      <FpsBadge />
+<div className="taiko-root grid grid-cols-[3fr_14fr] overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
       <nav className="relative flex min-h-0 flex-col border-r border-[var(--taiko-line)] bg-[var(--taiko-paper)]">
         <div className="border-y border-[var(--taiko-line)] px-5 py-4">
           <div className="text-lg font-semibold text-[var(--taiko-accent)]">PD2U</div>

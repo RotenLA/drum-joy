@@ -17,6 +17,7 @@ import { getPlayChart } from "./chartCache";
 import { shiftChart } from "@/shared/taikoChart";
 
 import { quality, type QualityTier } from "./perf";
+import { FpsBadge } from "./FpsBadge";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
 
 const FLASH_MS = 200;
@@ -448,6 +449,9 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
         className="relative min-h-0 overflow-hidden bg-[var(--taiko-paper)]"
       >
         <canvas ref={canvasRef} className="block h-full w-full" />
+
+        {/* 演奏区实测帧数 */}
+        <FpsBadge />
 
         {/* 可开关的调试打印小窗 */}
         <DebugLogPanel />
