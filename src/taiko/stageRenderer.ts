@@ -809,8 +809,18 @@ function cueItems(
   const nearest = new Map<PartId, number>();
   const from = f.timeMs;
   const until = from + CUE_LEAD_MS;
-  for (const note of f.chart.notes) {
-    if (note.timeMs < from || note.timeMs > until || note.note === undefined) continue;
+  const notes = f.chart.notes;
+  let lo = 0;
+  let hi = notes.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (notes[mid]!.timeMs < from) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let i = lo; i < notes.length; i++) {
+    const note = notes[i]!;
+    if (note.timeMs > until) break;
+    if (note.note === undefined) continue;
     const part = partOfNote(note.note);
     if (!part || !allowed.has(part) || nearest.has(part)) continue;
     nearest.set(part, note.timeMs - from);
