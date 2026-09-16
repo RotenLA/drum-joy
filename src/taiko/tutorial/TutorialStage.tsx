@@ -41,6 +41,15 @@ export function TutorialStage({
   const progressRef = useRef(0);
   const [progress, setProgress] = useState(0);
   const [tip, setTip] = useState("");
+  // 鼓音色开关与谱面页共用同一份状态，切换后立即生效
+  const kitOnRef = useRef(true);
+  useEffect(() => {
+    kitOnRef.current = loadKitEnabled();
+    return subscribeKitEnabled((on) => {
+      kitOnRef.current = on;
+    });
+  }, []);
+
 
   useEffect(() => {
     const canvas = canvasRef.current;
