@@ -9,7 +9,7 @@ import { quality } from "../perf";
 import { partOfNote, type PartId } from "../laneLayouts";
 import { midiManager } from "../midiInput";
 import { click as metronomeClick, getAudioContext } from "../metronome";
-import { loadKitEnabled, playDrum } from "../drumKit";
+import { loadKitEnabled, playDrum, subscribeKitEnabled } from "../drumKit";
 import { loadCalibration } from "../calibration";
 import {
   BEAT_MS,
