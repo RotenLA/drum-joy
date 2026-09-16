@@ -40,8 +40,8 @@ function ShellInner() {
   });
 
   return (
-    <div className="taiko-root grid min-h-0 grid-cols-[3fr_14fr] overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
-      <nav className="relative flex h-full min-h-0 flex-col overflow-hidden border-r border-[var(--taiko-line)] bg-[var(--taiko-paper)]">
+    <div className="taiko-root grid grid-cols-[3fr_14fr] overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
+      <nav className="relative flex min-h-0 flex-col border-r border-[var(--taiko-line)] bg-[var(--taiko-paper)]">
         <div className="border-y border-[var(--taiko-line)] px-5 py-4">
           <div className="text-lg font-semibold text-[var(--taiko-accent)]">PD2U</div>
           <div className="mt-1 truncate text-xs text-[var(--taiko-ink)]/55">{song.fileName || "未选择歌曲"}</div>
@@ -54,13 +54,11 @@ function ShellInner() {
         <button onClick={() => { const el = document.querySelector(".taiko-root"); if (!document.fullscreenElement) void el?.requestFullscreen?.(); else void document.exitFullscreen?.(); }} className="mt-auto flex items-center gap-2 border-t border-[var(--taiko-line)] px-5 py-4 text-xs text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"><Maximize size={15}/>全屏显示</button>
       </nav>
 
-      <main className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--taiko-paper)]">
+      <main className="min-h-0 min-w-0 overflow-hidden">
         {screen === "play" ? (
-          <div className="absolute inset-0 overflow-hidden">
-            <FallScreen speed={settings.speed} />
-          </div>
+          <FallScreen speed={settings.speed} />
         ) : (
-          <section className="absolute inset-0 flex min-h-0 flex-col overflow-hidden bg-[var(--taiko-paper)]">
+          <section className="flex h-full min-h-0 flex-col bg-[var(--taiko-paper)]">
             <header className="flex h-14 shrink-0 items-center border-b border-[var(--taiko-line)] px-5">
               <div className="min-w-0"><h1 className="truncate text-sm font-medium">{screen === "chart" ? "谱面" : screen === "mapping" ? "映射" : "位置捕捉"}</h1><p className="truncate text-[10px] text-[var(--taiko-ink)]/45">{song.fileName || "PD2U AeroGame"}</p></div>
             </header>

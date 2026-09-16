@@ -148,26 +148,16 @@
   }
 
   body {
-    background-color: #161021;
-    background-color: var(--taiko-paper);
-    color: #eee7f2;
-    color: var(--taiko-ink);
+    background-color: var(--color-background);
+    color: var(--color-foreground);
     display: grid;
     place-items: center;
-    width: 100%;
     margin: 0;
     height: 100vh;
     height: 100dvh;
     min-height: 100vh;
     min-height: 100dvh;
     overflow: hidden;
-  }
-
-  html {
-    width: 100%;
-    height: 100%;
-    background-color: #161021;
-    background-color: var(--taiko-paper);
   }
 }
 
@@ -176,18 +166,12 @@
   --safe-right: max(0.5rem, env(safe-area-inset-right));
   --safe-bottom: max(0.5rem, env(safe-area-inset-bottom));
   --safe-left: max(0.5rem, env(safe-area-inset-left));
-  /* 先给旧 Android WebView 可识别的尺寸，再由现代浏览器使用精确 min()。 */
-  width: 100vw;
-  height: calc(100vw * 7 / 17);
-  max-width: calc(100vh * 17 / 7);
-  max-height: 100vh;
   width: min(100vw, calc(100vh * 17 / 7));
   width: min(100vw, calc(100dvh * 17 / 7));
   height: min(100vh, calc(100vw * 7 / 17));
   height: min(100dvh, calc(100vw * 7 / 17));
   margin: auto;
   aspect-ratio: 17 / 7;
-  background-color: #161021;
 }
 
 .taiko-scroll {
