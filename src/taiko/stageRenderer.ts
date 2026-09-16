@@ -768,8 +768,8 @@ function drawCueOutline(
   h: number,
 ) {
   const progress = Math.max(0, Math.min(1, 1 - remainingMs / CUE_LEAD_MS));
-  const scale = 1.42 - progress * 0.38;
-  const alpha = Math.sin(progress * Math.PI) * 0.38;
+  const scale = 1.55 - progress * 0.5;
+  const alpha = Math.sin(progress * Math.PI) * 0.55;
   if (alpha <= 0.01) return;
 
   const anchor = PAD_ANCHORS[partId];
@@ -778,9 +778,10 @@ function drawCueOutline(
   ctx.save();
   ctx.translate(pad.cx, pad.cy);
   ctx.strokeStyle = hexToRgba(color, alpha);
-  ctx.lineWidth = Math.max(1, pad.rx * 0.025);
+  ctx.lineWidth = Math.max(1.2, pad.rx * 0.034);
   ctx.shadowColor = color;
-  ctx.shadowBlur = GLOW ? 4 : 0;
+  ctx.shadowBlur = GLOW ? 5 : 0;
+
   ctx.beginPath();
   if (anchor.square) {
     const th = partId === "kick" ? -PEDAL_TILT : PEDAL_TILT;
