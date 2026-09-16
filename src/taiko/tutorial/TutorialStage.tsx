@@ -77,6 +77,8 @@ export function TutorialStage({
     const clockMs = () => (audio.currentTime - startSec) * 1000;
 
     let streak = 0;
+    /** 自动示范用游标 */
+    let demoCursor = 0;
     let pedalHeld = false;
     let holdActiveOk = false;
     let judgement: { text: string; color: string; until: number } | null = null;
