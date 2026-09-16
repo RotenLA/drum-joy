@@ -69,7 +69,7 @@ export function TutorialStage({
     const flashes: Record<string, number> = {};
     const missFlashes: Record<string, number> = {};
     const calib = loadCalibration();
-    const kitOn = loadKitEnabled();
+
     const holdPart = lesson.hold?.part ?? null;
     /** 组合课：踩住左踏板的同时还要敲够次数 */
     const holdNeedsHits = Boolean(lesson.hold && lesson.pattern.length > 0);
@@ -120,7 +120,7 @@ export function TutorialStage({
     /** 玩家敲击：找最近的未判定同部件短音符 */
     const hit = (part: PartId, atMs: number, vel: number) => {
       const now = performance.now();
-      if (kitOn) playDrum(part, vel);
+      if (kitOnRef.current) playDrum(part, vel);
       flashes[part] = now + FLASH_MS;
       if (mode !== "practice" || passed) return;
       if (holdPart && part === holdPart) {
