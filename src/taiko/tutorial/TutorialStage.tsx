@@ -120,7 +120,7 @@ export function TutorialStage({
       const now = performance.now();
       if (kitOnRef.current) playDrum(part, vel);
       flashes[part] = now + FLASH_MS;
-      if (mode !== "practice" || passed) return;
+      if (passed) return;
       if (holdPart && part === holdPart) {
         pedalHeld = true;
         return;
