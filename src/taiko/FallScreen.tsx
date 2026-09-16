@@ -136,12 +136,13 @@ export function FallScreen({ speed }: { speed: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playChart]);
 
-  // 音频装载 / 卸载
+  // 音频装载 / 卸载（开头空白统一跳过）
   useEffect(() => {
+    songPlayer.setLeadMs(song.audioLeadMs);
     songPlayer.load(stems);
     setPhaseBoth("idle");
     return () => songPlayer.stop();
-  }, [stems, setPhaseBoth]);
+  }, [stems, song.audioLeadMs, setPhaseBoth]);
 
   // 调音台音量 → 播放器（实时生效）
   useEffect(() => {
@@ -250,7 +251,7 @@ export function FallScreen({ speed }: { speed: number }) {
     const songStartSec = ctx.currentTime + LEAD_SEC + countdownMs / 1000;
     countdownStartRef.current = performance.now();
     timeRef.current = -countdownMs;
-    if (hasAudio) songPlayer.play(song.audioLeadMs, songStartSec);
+    if (hasAudio) songPlayer.play(0, songStartSec);
     else silentStartRef.current = performance.now() + LEAD_SEC * 1000 + countdownMs;
     setPhaseBoth("countdown");
     // 倒计时滴答挂在同一条音频时间轴上

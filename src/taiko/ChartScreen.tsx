@@ -49,6 +49,7 @@ export function ChartScreen({
       const loaded = await loadPresetSong(preset, (p) => setPercent(p));
       // 开头空白长度：播放跳过 + 谱面同步平移，倒计时结束立刻出声
       const leadMs = stemsLeadMs(loaded.stems);
+      songPlayer.setLeadMs(leadMs);
       songPlayer.load(loaded.stems);
       for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
       setPlaying(false);
