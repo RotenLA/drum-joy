@@ -9,7 +9,7 @@ import { quality } from "../perf";
 import { partOfNote, type PartId } from "../laneLayouts";
 import { midiManager } from "../midiInput";
 import { click as metronomeClick, getAudioContext } from "../metronome";
-import { loadKitEnabled, playDrum } from "../drumKit";
+import { loadKitEnabled, playDrum, subscribeKitEnabled } from "../drumKit";
 import { loadCalibration } from "../calibration";
 import {
   BEAT_MS,
@@ -41,6 +41,15 @@ export function TutorialStage({
   const progressRef = useRef(0);
   const [progress, setProgress] = useState(0);
   const [tip, setTip] = useState("");
+  // 鼓音色开关与谱面页共用同一份状态，切换后立即生效
+  const kitOnRef = useRef(true);
+  useEffect(() => {
+    kitOnRef.current = loadKitEnabled();
+    return subscribeKitEnabled((on) => {
+      kitOnRef.current = on;
+    });
+  }, []);
+
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -60,7 +69,7 @@ export function TutorialStage({
     const flashes: Record<string, number> = {};
     const missFlashes: Record<string, number> = {};
     const calib = loadCalibration();
-    const kitOn = loadKitEnabled();
+
     const holdPart = lesson.hold?.part ?? null;
     /** 组合课：踩住左踏板的同时还要敲够次数 */
     const holdNeedsHits = Boolean(lesson.hold && lesson.pattern.length > 0);
@@ -111,7 +120,7 @@ export function TutorialStage({
     /** 玩家敲击：找最近的未判定同部件短音符 */
     const hit = (part: PartId, atMs: number, vel: number) => {
       const now = performance.now();
-      if (kitOn) playDrum(part, vel);
+      if (kitOnRef.current) playDrum(part, vel);
       flashes[part] = now + FLASH_MS;
       if (mode !== "practice" || passed) return;
       if (holdPart && part === holdPart) {

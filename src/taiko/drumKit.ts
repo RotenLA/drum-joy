@@ -20,14 +20,24 @@ export function loadKitEnabled(): boolean {
   }
 }
 
+/** 开关变化的订阅者（谱面页全局参数与教学共享同一状态） */
+const kitListeners = new Set<(on: boolean) => void>();
+
+export function subscribeKitEnabled(fn: (on: boolean) => void): () => void {
+  kitListeners.add(fn);
+  return () => kitListeners.delete(fn);
+}
+
 export function saveKitEnabled(on: boolean): boolean {
   try {
     localStorage.setItem(KEY, on ? "1" : "0");
   } catch {
     // 忽略
   }
+  for (const fn of kitListeners) fn(on);
   return on;
 }
+
 
 let master: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;

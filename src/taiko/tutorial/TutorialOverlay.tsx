@@ -10,6 +10,8 @@ import { renderPadArray } from "../stageRenderer";
 import { quality } from "../perf";
 import { LESSONS, TUTORIAL_PARTS } from "./steps";
 import { TutorialStage } from "./TutorialStage";
+import { loadKitEnabled, saveKitEnabled, subscribeKitEnabled } from "../drumKit";
+
 
 export const TUTORIAL_KEY = "taiko.tutorial.v1";
 
@@ -370,7 +372,9 @@ function StageFrame({ stage, card }: { stage: React.ReactNode; card: React.React
         }}
       >
         {stage}
+        <KitToggle />
       </div>
+
       <div className="flex flex-col gap-2 border border-t-0 border-white/12 bg-white/[0.03] px-5 py-4">
         {card}
       </div>
@@ -378,7 +382,29 @@ function StageFrame({ stage, card }: { stage: React.ReactNode; card: React.React
   );
 }
 
+/** 教学舞台角落的鼓音色开关：与谱面页全局参数同一份状态 */
+function KitToggle() {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    setOn(loadKitEnabled());
+    return subscribeKitEnabled(setOn);
+  }, []);
+  return (
+    <button
+      onClick={() => saveKitEnabled(!on)}
+      className={`absolute right-2 top-2 border px-2 py-1 text-[10px] tracking-wide transition-colors ${
+        on
+          ? "border-white/25 bg-white/10 text-white/75"
+          : "border-white/12 text-white/40 hover:text-white/70"
+      }`}
+    >
+      鼓音色 {on ? "开" : "关"}
+    </button>
+  );
+}
+
 function CardTitle({ children }: { children: React.ReactNode }) {
+
   return <h2 className="text-sm tracking-[0.12em] text-white">{children}</h2>;
 }
 
