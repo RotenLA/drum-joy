@@ -1,7 +1,7 @@
 /**
  * 教学用小舞台：与游玩屏同一套渲染（stageRenderer），只显示五个部件。
- * mode = "demo"     自动演示，音符到点自动闪光，不需要玩家输入
- * mode = "practice" 玩家跟着节拍器敲，连续完成 TARGET 次即通过
+ * 演示与练习合一：音符到点时对应鼓面自动亮一下做示范，同时接收玩家敲击，
+ * 连续完成 TARGET 次即通过。
  */
 import { useEffect, useRef, useState } from "react";
 import { renderStage } from "../stageRenderer";
