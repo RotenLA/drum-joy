@@ -119,9 +119,8 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                 <PartsPreview />
               ) : (
                 <TutorialStage
-                  key={`${lesson.id}-${lessonPhase === "practice" ? "practice" : "demo"}`}
+                  key={`${lesson.id}-${restartKey}`}
                   lesson={lesson}
-                  mode={lessonPhase === "practice" ? "practice" : "demo"}
                   restartKey={restartKey}
                   onPass={() => setLessonPhase("praise")}
                 />
