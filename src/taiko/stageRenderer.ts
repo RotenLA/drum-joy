@@ -798,7 +798,13 @@ function drawCueOutline(
 }
 
 /** 每个部件只取最近一颗即将到达的音符，避免密集段叠出多圈。 */
-function cueItems(w: number, h: number, f: StageFrame, parts: readonly PartId[]): DepthItem[] {
+function cueItems(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  f: StageFrame,
+  parts: readonly PartId[],
+): DepthItem[] {
   const allowed = new Set(parts);
   const nearest = new Map<PartId, number>();
   const from = f.timeMs;
@@ -811,11 +817,9 @@ function cueItems(w: number, h: number, f: StageFrame, parts: readonly PartId[])
   }
   return [...nearest].map(([part, remaining]) => ({
     depth: PAD_ANCHORS[part].cy + 0.003,
-    draw: () => drawCueOutline(ctxForCue, part, remaining, w, h),
+    draw: () => drawCueOutline(ctx, part, remaining, w, h),
   }));
 }
-
-let ctxForCue: CanvasRenderingContext2D;
 
 export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
   ctx.save();
@@ -1028,7 +1032,6 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   const q = quality.params;
   GLOW = q.glow;
   SPARKS = q.particles;
-  ctxForCue = ctx;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
@@ -1056,7 +1059,7 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   }
   if (f.showNotes !== false) {
     items.push(...noteItems(ctx, v.w, v.h, f));
-    items.push(...cueItems(v.w, v.h, f, parts));
+    items.push(...cueItems(ctx, v.w, v.h, f, parts));
   }
   items.sort((a, b) => a.depth - b.depth);
   for (const it of items) it.draw();
