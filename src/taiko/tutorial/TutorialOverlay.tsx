@@ -83,7 +83,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-auto bg-[#07070a]/97 px-6 py-6 backdrop-blur">
       <header className="mx-auto flex w-full max-w-4xl items-baseline gap-4">
-        <span className="text-sm tracking-[0.3em] text-[var(--taiko-accent)]">PD2U 新手教程</span>
+        <span className="text-sm tracking-[0.3em] text-[var(--taiko-accent)]">新手教程</span>
         {phase !== "welcome" && (
           <span className="text-xs tabular-nums text-white/45">
             第 {stepNo} / {TOTAL_STEPS} 步
@@ -99,7 +99,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
 
       <div className="mx-auto mt-6 flex w-full max-w-4xl flex-1 flex-col gap-5">
         {phase === "welcome" && (
-          <Card title="欢迎使用 AeroGame 模块！">
+          <Card title="欢迎使用 AeroGame 模块！请使用Chrome浏览器打开，并允许MIDI设备。">
             <p className="text-sm text-white/70">
               这个教程会带你连接设备，并练习最基础的敲击方式，大约 5 分钟。
             </p>
