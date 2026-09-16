@@ -238,7 +238,7 @@ export function TutorialStage({
         now,
         flashes,
         missFlashes,
-        combo: mode === "practice" ? progressRef.current : 0,
+        combo: progressRef.current,
         score: 0,
         parts: TUTORIAL_PARTS,
         judgement: judgement && judgement.until > now ? judgement : null,
