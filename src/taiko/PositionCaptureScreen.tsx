@@ -81,21 +81,28 @@ export function PositionCaptureScreen() {
   useEffect(() => {
     const off = midiManager.onNote((note) => {
       setMidiSeen(true);
+      const actual = partOfNote(note);
+      const now = performance.now();
+      setRecent((old) => [{ note, part: actual, at: now }, ...old].slice(0, 8));
+
       const prev = captureRef.current;
       if (prev.step < 0) return;
       const target = ORDER[prev.step];
       if (!target) return;
 
-      const actual = partOfNote(note);
-      const now = performance.now();
       if (!actual) {
+        setMismatch({ note, target: target.part });
         setStatus(`音符 ${note} 尚未映射到鼓件`);
         return;
       }
       if (actual !== target.part) {
-        setStatus(`收到${PART_BY_ID[actual].label}，请敲高亮的${PART_BY_ID[target.part].label}`);
+        setMismatch({ note, target: target.part });
+        setStatus(
+          `收到 ${note} → ${PART_BY_ID[actual].label}，请敲高亮的${PART_BY_ID[target.part].label}`,
+        );
         return;
       }
+      setMismatch(null);
       const last = lastHitRef.current;
       if (last.part === actual && now - last.at < DEDUPE_MS) return;
       lastHitRef.current = { part: actual as CapturePart, at: now };
@@ -108,9 +115,10 @@ export function PositionCaptureScreen() {
 
       const samples = [...prev.samples, { ...pose, at: now }];
       if (samples.length < NEED) {
-        apply({ step: prev.step, samples }, `已捕捉 ${samples.length}/${NEED}`);
+        apply({ step: prev.step, samples }, `音符 ${note} · 已捕捉 ${samples.length}/${NEED}`);
         return;
       }
+
 
       const summary = summarizeSamples(samples);
       setGroups((old) => ({
