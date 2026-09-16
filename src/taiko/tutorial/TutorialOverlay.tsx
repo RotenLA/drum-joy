@@ -44,7 +44,7 @@ const TOTAL_STEPS = 4 + LESSONS.length; // 适配器/鼓槌/部件/课程.../完
 export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
   const [phase, setPhase] = useState<Phase>("welcome");
   const [lessonIdx, setLessonIdx] = useState(0);
-  const [lessonPhase, setLessonPhase] = useState<LessonPhase>("demo");
+  const [lessonPhase, setLessonPhase] = useState<LessonPhase>("learn");
   const [restartKey, setRestartKey] = useState(0);
 
   const finish = () => {
