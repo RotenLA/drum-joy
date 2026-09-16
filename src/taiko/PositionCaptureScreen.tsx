@@ -95,7 +95,7 @@ export function PositionCaptureScreen() {
     };
     resize(); const ro = new ResizeObserver(resize); ro.observe(wrap);
     const draw = (now: number) => {
-      renderPadArray(ctx, canvas.clientWidth, canvas.clientHeight, { parts: CAPTURE_PARTS, flashes: {}, now, selected: runningRef.current ? ORDER[stepRef.current]?.part : null, sticks: stickManager.latest() });
+      renderPadArray(ctx, canvas.clientWidth, canvas.clientHeight, { parts: CAPTURE_PARTS, flashes: {}, now, selected: runningRef.current ? (ORDER[stepRef.current]?.part ?? null) : null, sticks: stickManager.latest() });
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
