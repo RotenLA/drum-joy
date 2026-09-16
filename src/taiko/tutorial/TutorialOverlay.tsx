@@ -180,7 +180,7 @@ export function TutorialOverlay({ onFinish }: { onFinish: () => void }) {
                     <PrimaryButton onClick={nextLesson}>下一步</PrimaryButton>
                     <GhostButton
                       onClick={() => {
-                        setLessonPhase("practice");
+                        setLessonPhase("learn");
                         setRestartKey((k) => k + 1);
                       }}
                     >
