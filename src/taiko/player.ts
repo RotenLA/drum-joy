@@ -1,6 +1,9 @@
 import { getAudioContext } from "./metronome";
 import { STEM_KINDS, emptyStems, type StemKind, type StemMap } from "./stems";
 
+/** 四条分轨统一补偿 +3dB；用户滑杆仍保持 0~1 的原有语义。 */
+const STEM_MAKEUP_GAIN = 10 ** (3 / 20);
+
 /**
  * 多轨 stem 播放器：所有音轨共用一个起播时刻，各自一条 GainNode。
  * 时钟由 AudioContext.currentTime 换算，接口与单轨版本保持一致。
@@ -9,6 +12,7 @@ class SongPlayer {
   private stems: StemMap = emptyStems();
   private sources: Partial<Record<StemKind, AudioBufferSourceNode>> = {};
   private gains: Partial<Record<StemKind, GainNode>> = {};
+  private makeups: Partial<Record<StemKind, GainNode>> = {};
   private levels: Record<StemKind, number> = {
     vocals: 1,
     drums: 0,
@@ -87,7 +91,10 @@ class SongPlayer {
       if (!track) continue;
       const gain = ctx.createGain();
       gain.gain.value = this.levels[k];
-      gain.connect(ctx.destination);
+      const makeup = ctx.createGain();
+      makeup.gain.value = STEM_MAKEUP_GAIN;
+      gain.connect(makeup);
+      makeup.connect(ctx.destination);
       const src = ctx.createBufferSource();
       src.buffer = track.buffer;
       src.connect(gain);
@@ -106,6 +113,7 @@ class SongPlayer {
       );
       this.sources[k] = src;
       this.gains[k] = gain;
+      this.makeups[k] = makeup;
     }
     this.playing = true;
   }
@@ -171,6 +179,15 @@ class SongPlayer {
       if (g) {
         try {
           g.disconnect();
+        } catch {
+          // 已断开
+        }
+      }
+      const makeup = this.makeups[k];
+      delete this.makeups[k];
+      if (makeup) {
+        try {
+          makeup.disconnect();
         } catch {
           // 已断开
         }

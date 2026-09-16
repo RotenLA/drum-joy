@@ -20,7 +20,8 @@ import {
   type Lesson,
 } from "./steps";
 
-const HIT_WINDOW = 170;
+const HIT_WINDOW = 200;
+const PERFECT_WINDOW = 100;
 const FLASH_MS = 200;
 const BARS = 24;
 
@@ -138,8 +139,8 @@ export function TutorialStage({
       if (best < 0) return;
       judged[best] = 1;
       judgement = {
-        text: bestDiff <= 60 ? "PERFECT" : "GOOD",
-        color: bestDiff <= 60 ? "#ffd75e" : "#7dd3fc",
+        text: bestDiff <= PERFECT_WINDOW ? "PERFECT" : "GOOD",
+        color: bestDiff <= PERFECT_WINDOW ? "#ffd75e" : "#7dd3fc",
         until: now + 450,
       };
       setTip("");

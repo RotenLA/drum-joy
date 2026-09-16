@@ -87,8 +87,14 @@ export function buildSkeleton(clean: CleanedMidi): Skeleton {
     const cymbal = hat.length >= ride.length ? hat : ride;
     bar.ridePrimary = ride.length > hat.length;
     bar.hatDiv = divOf(cymbal, stepsPerBar, stepsPerBeat);
-    const toms = TOM_PARTS.reduce((n, p) => n + (bar.slots[p]?.length ?? 0), 0);
-    bar.isFill = toms >= 3 || (median > 0 && bar.noteCount > median * 1.6 && toms >= 2);
+    const tomCounts = TOM_PARTS.map((p) => bar.slots[p]?.length ?? 0);
+    const toms = tomCounts.reduce((n, count) => n + count, 0);
+    const distinctToms = tomCounts.filter((count) => count > 0).length;
+    // 鼓音转 MIDI 常把底鼓/军鼓串成单一通鼓；必须出现至少两种通鼓且密度明显升高，
+    // 才视为过门，避免整段主歌被误判成 fill 后在轻松档中变空。
+    bar.isFill =
+      (distinctToms >= 2 && toms >= 4) ||
+      (median > 0 && bar.noteCount > median * 1.8 && distinctToms >= 2 && toms >= 3);
     bar.isPhraseStart = bar.index % 4 === 0;
   }
 

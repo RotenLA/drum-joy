@@ -79,15 +79,18 @@ function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
   const beats = stepsPerBar / stepsPerBeat;
 
   if (bar.isFill) {
-    // 过门小节：最后一拍用地通 2~3 下简单收尾
+    // 轻松 / 入门过门：用允许出现的军鼓 + 踩镲收尾，避免地通被难度过滤后整拍变空。
     const start = stepsPerBar - stepsPerBeat;
     const n = bar.noteCount >= 8 ? 3 : 2;
     for (let k = 0; k < n; k++) {
       out.push({
         step: start + Math.round((k * stepsPerBeat) / n),
-        part: "floorTom",
+        part: "snare",
         velocity: 100,
       });
+    }
+    for (let s = 0; s < stepsPerBar; s += stepsPerBeat) {
+      out.push({ step: s, part: "hihat", velocity: 90 });
     }
     out.push({ step: 0, part: "kick", velocity: 110 });
     return out;

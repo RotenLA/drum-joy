@@ -92,6 +92,8 @@ const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
 const PAD_SPREAD = 0.34;
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
 const LEAD_MS = 2400;
+/** 判定提示圈只在临近落点时出现，避免长时间抢占视线。 */
+const CUE_LEAD_MS = 650;
 
 /** 透视加速指数：>1 让音符近大远小的同时近处加速 */
 const EASE = 1.55;
@@ -754,6 +756,67 @@ function drawPad(
   ctx.restore();
 }
 
+/**
+ * 轻量判定缩圈：形状与目标鼓面一致，从外侧收到鼓沿并在到点前淡出。
+ * 不使用填充，低画质也只需一条描边。
+ */
+function drawCueOutline(
+  ctx: CanvasRenderingContext2D,
+  partId: PartId,
+  remainingMs: number,
+  w: number,
+  h: number,
+) {
+  const progress = Math.max(0, Math.min(1, 1 - remainingMs / CUE_LEAD_MS));
+  const scale = 1.42 - progress * 0.38;
+  const alpha = Math.sin(progress * Math.PI) * 0.38;
+  if (alpha <= 0.01) return;
+
+  const anchor = PAD_ANCHORS[partId];
+  const pad = geomOf(partId, w, h);
+  const color = PART_BY_ID[partId].color;
+  ctx.save();
+  ctx.translate(pad.cx, pad.cy);
+  ctx.strokeStyle = hexToRgba(color, alpha);
+  ctx.lineWidth = Math.max(1, pad.rx * 0.025);
+  ctx.shadowColor = color;
+  ctx.shadowBlur = GLOW ? 4 : 0;
+  ctx.beginPath();
+  if (anchor.square) {
+    const th = partId === "kick" ? -PEDAL_TILT : PEDAL_TILT;
+    ctx.save();
+    ctx.scale(1, 0.42);
+    ctx.rotate(th);
+    const r = pad.rx * scale;
+    ctx.roundRect(-r, -r, r * 2, r * 2, r * 0.24);
+    ctx.restore();
+  } else {
+    ctx.ellipse(0, 0, pad.rx * scale, pad.ry * scale, pad.rot, 0, Math.PI * 2);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 每个部件只取最近一颗即将到达的音符，避免密集段叠出多圈。 */
+function cueItems(w: number, h: number, f: StageFrame, parts: readonly PartId[]): DepthItem[] {
+  const allowed = new Set(parts);
+  const nearest = new Map<PartId, number>();
+  const from = f.timeMs;
+  const until = from + CUE_LEAD_MS;
+  for (const note of f.chart.notes) {
+    if (note.timeMs < from || note.timeMs > until || note.note === undefined) continue;
+    const part = partOfNote(note.note);
+    if (!part || !allowed.has(part) || nearest.has(part)) continue;
+    nearest.set(part, note.timeMs - from);
+  }
+  return [...nearest].map(([part, remaining]) => ({
+    depth: PAD_ANCHORS[part].cy + 0.003,
+    draw: () => drawCueOutline(ctxForCue, part, remaining, w, h),
+  }));
+}
+
+let ctxForCue: CanvasRenderingContext2D;
+
 export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
   ctx.save();
 
@@ -965,6 +1028,7 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   const q = quality.params;
   GLOW = q.glow;
   SPARKS = q.particles;
+  ctxForCue = ctx;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
@@ -990,7 +1054,10 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
       draw: () => drawPad(ctx, id, intensity, v.w, v.h, miss),
     });
   }
-  if (f.showNotes !== false) items.push(...noteItems(ctx, v.w, v.h, f));
+  if (f.showNotes !== false) {
+    items.push(...noteItems(ctx, v.w, v.h, f));
+    items.push(...cueItems(v.w, v.h, f, parts));
+  }
   items.sort((a, b) => a.depth - b.depth);
   for (const it of items) it.draw();
 
