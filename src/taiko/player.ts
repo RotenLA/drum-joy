@@ -19,6 +19,7 @@ class SongPlayer {
     bass: 1,
     other: 1,
   };
+  private leadMs = 0;
   private startCtxSec = 0;
   private startOffsetMs = 0;
   private positionMs = 0;
@@ -39,13 +40,30 @@ class SongPlayer {
     return STEM_KINDS.some((k) => this.stems[k] !== null);
   }
 
-  get durationMs(): number {
+  /** 文件原始总长（含开头空白） */
+  private get rawDurationMs(): number {
     let max = 0;
     for (const k of STEM_KINDS) {
       const t = this.stems[k];
       if (t) max = Math.max(max, t.buffer.duration * 1000);
     }
     return max;
+  }
+
+  /** 对外时间轴：已扣掉开头空白 */
+  get durationMs(): number {
+    return Math.max(0, this.rawDurationMs - this.leadMs);
+  }
+
+  /**
+   * 设定开头空白长度（毫秒）。设定后所有对外时间（play / timeMs / durationMs）
+   * 都以「空白之后」为 0 点，四条音轨统一跳过同一段，彼此仍然对齐。
+   */
+  setLeadMs(ms: number): void {
+    const v = Number.isFinite(ms) ? Math.max(0, ms) : 0;
+    if (v === this.leadMs) return;
+    this.leadMs = v;
+    if (!this.playing) this.positionMs = 0;
   }
 
   /** 音量 0~1，1 = 原始文件音量（不做超过峰值的放大） */
@@ -109,7 +127,7 @@ class SongPlayer {
       }
       src.start(
         this.startCtxSec,
-        Math.min(offset / 1000, Math.max(0, track.buffer.duration - 0.01)),
+        Math.min((offset + this.leadMs) / 1000, Math.max(0, track.buffer.duration - 0.01)),
       );
       this.sources[k] = src;
       this.gains[k] = gain;
