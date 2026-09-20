@@ -150,8 +150,7 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    display: grid;
-    place-items: center;
+    display: block;
     margin: 0;
     height: 100vh;
     height: 100dvh;
@@ -161,17 +160,17 @@
   }
 }
 
+/* 铺满宿主窗口（Unity WebView 进入即全屏），不再锁定 17:7 留黑边 */
 .taiko-root {
   --safe-top: max(0.5rem, env(safe-area-inset-top));
   --safe-right: max(0.5rem, env(safe-area-inset-right));
   --safe-bottom: max(0.5rem, env(safe-area-inset-bottom));
   --safe-left: max(0.5rem, env(safe-area-inset-left));
-  width: min(100vw, calc(100vh * 17 / 7));
-  width: min(100vw, calc(100dvh * 17 / 7));
-  height: min(100vh, calc(100vw * 7 / 17));
-  height: min(100dvh, calc(100vw * 7 / 17));
-  margin: auto;
-  aspect-ratio: 17 / 7;
+  width: 100vw;
+  width: 100dvw;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
 }
 
 .taiko-scroll {
