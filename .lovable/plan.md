@@ -1,53 +1,55 @@
-# 输出 Unity C# 复刻版源码包
+# 输出《Unity ↔ Web 对接 API 文档》
 
-## 目标
-把网页版 PD2U 空气鼓模块的完整玩法逻辑翻译成 Unity C# 源码，交给 Unity 同事拷进工程即可复刻出与网页版一致的游戏：3D 场景画面、Unity 端解析 MIDI 实时编谱、Unity 原生读 MIDI。
+## 背景
+Unity 同事不开发网页业务，只需要一份正式、完整、可直接照着接入的「Unity ↔ Web 对接 API」文档。现有 `docs/unity-midi-bridge.md` 内容零散（夹杂历史方案），需整理成一份规范的接口文档。
 
-## 交付形态
-- 一个 zip 放 /mnt/documents/，按 `Assets/PD2U/Scripts/...` 目录组织，附 README 接入说明
-- 纯 C#，不依赖第三方包（MIDI 硬件读取留标准接口，同事接自己的原生插件）
-- 不改现有网页项目任何文件
+## 产出
+一份文档（Markdown 源文件 + PDF 各一，放 /mnt/documents/），不改动项目代码。
 
-## 代码模块（与网页版一一对应）
+## 文档结构
 
 ```text
-Assets/PD2U/
-├── README.md                     接入步骤、场景搭建清单、参数对照表
-├── Scripts/
-│   ├── Midi/
-│   │   ├── MidiFile.cs           SMF 0/1 解析：tempo map、拍号、note 事件（译自 midiFile.ts）
-│   │   ├── MidiChartCleaner.cs   去鼓轨清理（译自 midiClean.ts）
-│   │   └── IMidiInput.cs         原生 MIDI 输入接口：OnNoteOn(note, vel, hostTimeMs) / OnNoteOff
-│   ├── Chart/
-│   │   ├── DrumLaneMap.cs        GM 鼓件→9 部件映射表（译自 drumLaneMap.ts）
-│   │   ├── LaneLayouts.cs        分区定义、PAD_ANCHORS 摆位、鼓件色值（译自 laneLayouts.ts）
-│   │   ├── Difficulty.cs         四档难度编谱：轻松/入门/标准/困难全部规则（译自 difficulty.ts）
-│   │   └── TaikoChart.cs         谱面数据结构、shiftChart 开头空白平移
-│   ├── Play/
-│   │   ├── StageBuilder.cs       3D 场景生成：扇形鼓盘阵、车道、消失点、相机机位（译自 stageRenderer 几何）
-│   │   ├── NoteSpawner.cs        音符生成/回收、下落运动、缩圈提示、同刻淡连线
-│   │   ├── Judge.cs              判定：PERFECT 100ms / GOOD 200ms、长音符全程按住、连击计分
-│   │   ├── SongPlayer.cs         绝对起播时刻、leadMs 跳过空白、视觉/判定偏移（0 / -35ms）
-│   │   └── DrumSynth.cs          内置合成鼓音色（可开关，与网页同参数）
-│   ├── Sticks/
-│   │   ├── StickView.cs          两根 3D 鼓棒，pitch/yaw 驱动，约现有一半大小
-│   │   ├── StickCalibration.cs   校准文件读写 + 最近鼓面柔和吸附（18° 自由 / 4° 吸附 / 滞环）
-│   │   └── PositionCapture.cs    位置捕捉流程状态机（7 面 × 左右手 × 3 次，中位数摘要）
-│   └── Ui/
-│       ├── FpsBadge.cs           演奏帧数显示
-│       └── QualityGovernor.cs    三档画质 + 自动降档（对应 perf.ts 策略）
-└── Scenes/PD2U_Demo.unity 说明   README 内给出搭建步骤（无法离线生成 .unity 二进制）
+PD2U Web ↔ Unity 对接 API
+1. 概述与架构图
+   - 网页运行在 Unity 内嵌 WebView（Vuplex / CEF / 系统 WebView）
+   - 三条通道：网页直读 Web MIDI / Unity 原生读 MIDI 注入 / 鼓棒姿态注入
+2. 环境要求
+   - WebView 硬件加速、不透明叠加、尺寸按实际像素
+   - Chromium 内核需放行 midi 权限（含 CEF OnPermissionRequest 处理）
+3. API 一览表（速查）
+4. API 详细定义
+   4.1 window.__pd2uNoteOn(note, velocity, hostTimeMs?)
+       - 参数范围、非法值忽略、hostTimeMs 时钟对齐规则（偏差>1s 自动重对齐）
+   4.2 window.__pd2uNoteOff(note)
+       - 长音符判定依赖、0x80 与 0x90 vel=0 两种来源
+   4.3 window.__pd2uSticks(snapshot)
+       - JSON 协议 v1：l/r 可 null、p/y 角度范围、>300ms 无数据隐藏
+       - 角度→鼓面映射规则（偏航 ±45°→横向，俯仰 ±45°→纵向）
+       - 推送频率建议（≤60 次/秒，跟随显示帧率）
+   4.4 生命周期与幂等性
+       - 页面加载即挂载、重复注入 no-op、守卫式调用写法（C# 示例片段）
+5. 用户侧设置对输入的影响
+   - 部件映射（默认 36/44 等，用户可改）、视觉/判定偏移、自动校准、内置鼓声开关
+6. 性能约定
+   - 三档画质与自动降档行为、WebView 环境下的降档起点
+   - 宿主侧注意事项清单
+7. 调试手段
+   - 游玩页右下角调试日志浮层：注入事件/鼓棒快照/设备变化全量可见
+8. 常见问题
+   - 系统 WebView 无 Web MIDI 属正常（走注入通道）
+   - 安卓 Unity 上下滑动、页面叠加等已知注意事项
+9. 版本与变更记录
 ```
 
-## 关键规则原样保留
-- 咚 = note 36/44，嗒 = 其余；判定 PERFECT 100ms / GOOD 200ms；校准初值 视觉 0 / 判定 -35ms
-- 四档难度部件集与互斥规则（踩镲与低通/吊镲/叮叮镲不同刻等）逐条翻译
-- 开头空白 -24dB 阈值裁剪由调用方传入 leadMs（Unity 侧音频裁剪接口留在 README）
-- 鼓盘摆位、色值直接取 laneLayouts.ts 的常量表，README 附对照
+## 关键内容来源
+- `docs/unity-midi-bridge.md`（现有协议描述）
+- `src/taiko/midiInput.ts`（__pd2uNoteOn/__pd2uNoteOff 实际行为与校验规则）
+- `src/taiko/stickInput.ts`（__pd2uSticks 协议）
+- `src/taiko/perf.ts`（画质档位）
 
 ## 验证
-- 沙箱内无法跑 Unity，只做 C# 语法级自检（dotnet/mcs 若可用）+ 与网页版常量的逐项对照
-- README 写明同事的验收路径：导入 → 建场景 → 挂 StageBuilder → 选 MIDI → 应看到与网页一致的鼓阵与谱面
+- 文档中每个接口行为与源码逐项核对，不写与实现不符的内容
+- PDF 生成后逐页转图检查排版
 
 ## 交付
-zip + 文件清单 txt 放 /mnt/documents/，回复附简短说明。
+- `pd2u-unity-web-api.md` + `pd2u-unity-web-api.pdf` 放 /mnt/documents/
