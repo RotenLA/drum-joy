@@ -212,10 +212,12 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * @param part 鼓件
  * @param velocity MIDI 力度 1~127（键盘触发默认 100）
  */
-export function playDrum(part: PartId, velocity = 100): void {
+export function playDrum(part: PartId, velocity = 100, kitId?: number): void {
   const ctx = getAudioContext();
   const t = ctx.currentTime + 0.001;
   const v = Math.max(0.25, Math.min(1, velocity / 110));
+
+  if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
 
   switch (part) {
     case "kick":
