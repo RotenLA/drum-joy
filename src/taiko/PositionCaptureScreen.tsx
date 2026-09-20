@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, RotateCcw, SkipForward, Upload } from "lucide-react";
-import { DRUM_PARTS, PART_BY_ID, getMapping, partOfNote, setMapping, type PartId } from "./laneLayouts";
+import { DRUM_PARTS, PART_BY_ID, getMapping, partLabel, partOfNote, setMapping, type PartId } from "./laneLayouts";
+import { useLanguage } from "./i18n";
 import { midiManager } from "./midiInput";
 import { renderPadArray } from "./stageRenderer";
 import { stickManager } from "./stickInput";
@@ -19,7 +20,10 @@ import {
   type StickSide,
 } from "./stickCalibration";
 
-const SIDE_LABEL: Record<StickSide, string> = { l: "左棒", r: "右棒" };
+const SIDE_LABEL: Record<StickSide, { zh: string; en: string }> = {
+  l: { zh: "左棒", en: "left stick" },
+  r: { zh: "右棒", en: "right stick" },
+};
 const ORDER = CAPTURE_PARTS.flatMap((part) => [
   { part, side: "l" as StickSide },
   { part, side: "r" as StickSide },
@@ -37,6 +41,10 @@ interface CaptureState {
 const IDLE: CaptureState = { step: -1, samples: [] };
 
 export function PositionCaptureScreen() {
+  const { tr, language } = useLanguage();
+  const sideLabel = (side: StickSide) => tr(SIDE_LABEL[side].zh, SIDE_LABEL[side].en);
+  const label = (part: PartId) => partLabel(PART_BY_ID[part], language);
+
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -46,7 +54,7 @@ export function PositionCaptureScreen() {
   const [capture, setCapture] = useState<CaptureState>(IDLE);
   const [online, setOnline] = useState<{ l: boolean; r: boolean }>({ l: false, r: false });
   const [midiSeen, setMidiSeen] = useState(false);
-  const [status, setStatus] = useState("连接鼓棒姿态和 MIDI 后开始");
+  const [status, setStatus] = useState(() => tr("连接鼓棒姿态和 MIDI 后开始", "Connect stick pose and MIDI to begin"));
   /** 最近击打（号码 + 当前被判成的鼓件），倒序 */
   const [recent, setRecent] = useState<{ note: number; part: PartId | null; at: number }[]>([]);
   /** 最近一次「敲错鼓面」，用于一键纠正 */
@@ -92,13 +100,16 @@ export function PositionCaptureScreen() {
 
       if (!actual) {
         setMismatch({ note, target: target.part });
-        setStatus(`音符 ${note} 尚未映射到鼓件`);
+        setStatus(tr(`音符 ${note} 尚未映射到鼓件`, `Note ${note} isn't mapped to a pad yet`));
         return;
       }
       if (actual !== target.part) {
         setMismatch({ note, target: target.part });
         setStatus(
-          `收到 ${note} → ${PART_BY_ID[actual].label}，请敲高亮的${PART_BY_ID[target.part].label}`,
+          tr(
+            `收到 ${note} → ${label(actual)}，请敲高亮的${label(target.part)}`,
+            `Received ${note} → ${label(actual)}. Hit the highlighted ${label(target.part)}`,
+          ),
         );
         return;
       }
@@ -109,13 +120,21 @@ export function PositionCaptureScreen() {
 
       const pose = stickManager.latest()?.[target.side] ?? null;
       if (!pose) {
-        setStatus(`${SIDE_LABEL[target.side]}姿态未收到，请确认该棒已连接后重敲`);
+        setStatus(
+          tr(
+            `${sideLabel(target.side)}姿态未收到，请确认该棒已连接后重敲`,
+            `No pose data from the ${sideLabel(target.side)}. Confirm it's connected, then hit again`,
+          ),
+        );
         return;
       }
 
       const samples = [...prev.samples, { ...pose, at: now }];
       if (samples.length < NEED) {
-        apply({ step: prev.step, samples }, `音符 ${note} · 已捕捉 ${samples.length}/${NEED}`);
+        apply(
+          { step: prev.step, samples },
+          tr(`音符 ${note} · 已捕捉 ${samples.length}/${NEED}`, `Note ${note} · captured ${samples.length}/${NEED}`),
+        );
         return;
       }
 
@@ -127,17 +146,20 @@ export function PositionCaptureScreen() {
       }));
       const nextStep = prev.step + 1;
       if (nextStep >= ORDER.length) {
-        apply(IDLE, "全部位置已捕捉，请检查结果并保存");
+        apply(IDLE, tr("全部位置已捕捉，请检查结果并保存", "All positions captured — review results and save"));
         return;
       }
       const item = ORDER[nextStep]!;
       apply(
         { step: nextStep, samples: [] },
-        `请用${SIDE_LABEL[item.side]}敲${PART_BY_ID[item.part].label}，共 ${NEED} 次`,
+        tr(
+          `请用${sideLabel(item.side)}敲${label(item.part)}，共 ${NEED} 次`,
+          `Hit ${label(item.part)} with the ${sideLabel(item.side)}, ${NEED} times`,
+        ),
       );
     });
     return off;
-  }, []);
+  }, [language]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -179,7 +201,10 @@ export function PositionCaptureScreen() {
     const item = ORDER[step]!;
     apply(
       { step, samples: [] },
-      `${note ?? ""}请用${SIDE_LABEL[item.side]}敲${PART_BY_ID[item.part].label}，共 ${NEED} 次`,
+      tr(
+        `${note ?? ""}请用${sideLabel(item.side)}敲${label(item.part)}，共 ${NEED} 次`,
+        `${note ?? ""}Hit ${label(item.part)} with the ${sideLabel(item.side)}, ${NEED} times`,
+      ),
     );
   };
 
@@ -190,12 +215,12 @@ export function PositionCaptureScreen() {
   const retest = (part: CapturePart, side: StickSide) => {
     const index = ORDER.findIndex((item) => item.part === part && item.side === side);
     setGroups((old) => ({ ...old, [part]: { ...old[part], [side]: undefined } }));
-    goTo(index, "重新测试：");
+    goTo(index, tr("重新测试：", "Retest: "));
   };
   const resetCurrent = () => {
     const step = captureRef.current.step;
     if (step < 0) return;
-    apply({ step, samples: [] }, "本项已清空，重新采集");
+    apply({ step, samples: [] }, tr("本项已清空，重新采集", "Cleared — recapturing this item"));
   };
 
   /** 把某个音符从原鼓件移出，归到目标鼓件（写入映射，立即生效） */
@@ -207,14 +232,14 @@ export function PositionCaptureScreen() {
     setMapping(next);
     setMismatch(null);
     setRecent((old) => old.map((r) => (r.note === note ? { ...r, part: to } : r)));
-    setStatus(`音符 ${note} 已归到${PART_BY_ID[to].label}，请继续敲`);
+    setStatus(tr(`音符 ${note} 已归到${label(to)}，请继续敲`, `Note ${note} reassigned to ${label(to)} — keep hitting`));
   };
 
 
   const calibration = useMemo(() => makeCalibration(groups), [groups]);
   const save = () => {
     saveStickCalibration(calibration);
-    setStatus("校准已保存，鼓棒会柔和吸附到最接近的鼓面");
+    setStatus(tr("校准已保存，鼓棒会柔和吸附到最接近的鼓面", "Calibration saved — sticks will softly snap to the nearest pad"));
   };
   const download = () => {
     const file = makeCalibration(groups);
@@ -235,9 +260,9 @@ export function PositionCaptureScreen() {
       if (!parsed) throw new Error("invalid");
       saveStickCalibration(parsed);
       setGroups(parsed.groups);
-      apply(IDLE, "校准文件已导入并应用");
+      apply(IDLE, tr("校准文件已导入并应用", "Calibration file imported and applied"));
     } catch {
-      setStatus("校准文件无效或鼓阵版本不匹配");
+      setStatus(tr("校准文件无效或鼓阵版本不匹配", "Invalid calibration file or drum layout mismatch"));
     }
   };
 
@@ -252,14 +277,14 @@ export function PositionCaptureScreen() {
           {current ? (
             <div className="flex items-baseline gap-2">
               <span className="text-base font-medium text-[var(--taiko-ink)]">
-                {PART_BY_ID[current.part].label} · {SIDE_LABEL[current.side]}
+                {label(current.part)} · {sideLabel(current.side)}
               </span>
               <span className="text-base tabular-nums text-[var(--taiko-accent)]">
                 {capture.samples.length}/{NEED}
               </span>
             </div>
           ) : (
-            <div className="text-base font-medium text-[var(--taiko-ink)]">位置捕捉</div>
+            <div className="text-base font-medium text-[var(--taiko-ink)]">{tr("位置捕捉", "Position Capture")}</div>
           )}
           <div className="mt-1 max-w-[42ch] text-xs text-[var(--taiko-ink)]/65">{status}</div>
           {mismatch && (
@@ -267,7 +292,7 @@ export function PositionCaptureScreen() {
               onClick={() => remapNote(mismatch.note, mismatch.target)}
               className="mt-2 border border-[var(--taiko-accent)] px-2 py-1 text-[11px] text-[var(--taiko-accent)]"
             >
-              把 {mismatch.note} 归到{PART_BY_ID[mismatch.target].label}
+              {tr(`把 ${mismatch.note} 归到${label(mismatch.target)}`, `Reassign ${mismatch.note} to ${label(mismatch.target)}`)}
             </button>
           )}
         </div>
@@ -275,11 +300,11 @@ export function PositionCaptureScreen() {
       </div>
       <aside className="flex min-w-0 flex-col gap-4">
         <section className="border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-4">
-          <h2 className="text-sm font-medium">采集状态</h2>
+          <h2 className="text-sm font-medium">{tr("采集状态", "Capture Status")}</h2>
           <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-            <Status ok={online.l} label="左棒姿态" />
-            <Status ok={online.r} label="右棒姿态" />
-            <Status ok={midiSeen} label="MIDI 击打" waiting="等待击打" />
+            <Status ok={online.l} label={tr("左棒姿态", "Left stick pose")} connectedLabel={tr("已连接", "Connected")} waiting={tr("未连接", "Not connected")} />
+            <Status ok={online.r} label={tr("右棒姿态", "Right stick pose")} connectedLabel={tr("已连接", "Connected")} waiting={tr("未连接", "Not connected")} />
+            <Status ok={midiSeen} label={tr("MIDI 击打", "MIDI hits")} connectedLabel={tr("已连接", "Connected")} waiting={tr("等待击打", "Waiting for hit")} />
           </div>
           <div className="mt-4 h-1.5 overflow-hidden bg-[var(--taiko-ink)]/15">
             <div
@@ -288,34 +313,38 @@ export function PositionCaptureScreen() {
             />
           </div>
           <div className="mt-2 text-xs tabular-nums text-[var(--taiko-ink)]/55">
-            {completed}/{ORDER.length} 组 · 每组 {NEED} 次
+            {tr(`${completed}/${ORDER.length} 组 · 每组 ${NEED} 次`, `${completed}/${ORDER.length} groups · ${NEED} hits each`)}
           </div>
           <button
             onClick={begin}
             className="mt-4 w-full border border-[var(--taiko-ink)] px-4 py-2 text-sm"
           >
-            {running ? "重新定位到未完成项" : completed ? "继续未完成项目" : "开始位置捕捉"}
+            {running
+              ? tr("重新定位到未完成项", "Jump to incomplete item")
+              : completed
+                ? tr("继续未完成项目", "Continue remaining items")
+                : tr("开始位置捕捉", "Start position capture")}
           </button>
           <div className="mt-2 grid grid-cols-4 gap-1">
-            <IconBtn onClick={() => goTo(capture.step - 1)} disabled={!running} title="上一项">
+            <IconBtn onClick={() => goTo(capture.step - 1)} disabled={!running} title={tr("上一项", "Previous item")}>
               <ChevronLeft size={14} />
             </IconBtn>
-            <IconBtn onClick={() => goTo(capture.step + 1)} disabled={!running} title="下一项">
+            <IconBtn onClick={() => goTo(capture.step + 1)} disabled={!running} title={tr("下一项", "Next item")}>
               <ChevronRight size={14} />
             </IconBtn>
-            <IconBtn onClick={() => goTo(capture.step + 1, "已跳过：")} disabled={!running} title="跳过本项">
+            <IconBtn onClick={() => goTo(capture.step + 1, tr("已跳过：", "Skipped: "))} disabled={!running} title={tr("跳过本项", "Skip this item")}>
               <SkipForward size={14} />
             </IconBtn>
-            <IconBtn onClick={resetCurrent} disabled={!running} title="重置本项">
+            <IconBtn onClick={resetCurrent} disabled={!running} title={tr("重置本项", "Reset this item")}>
               <RotateCcw size={14} />
             </IconBtn>
           </div>
         </section>
         <section className="border border-[var(--taiko-line)] bg-[var(--taiko-surface)] p-3">
-          <h2 className="text-sm font-medium">最近击打</h2>
+          <h2 className="text-sm font-medium">{tr("最近击打", "Recent Hits")}</h2>
           <div className="mt-2 space-y-1">
             {recent.length === 0 ? (
-              <div className="text-xs text-[var(--taiko-ink)]/45">敲任意鼓面，这里会显示音符号码</div>
+              <div className="text-xs text-[var(--taiko-ink)]/45">{tr("敲任意鼓面，这里会显示音符号码", "Hit any pad to see note numbers here")}</div>
             ) : (
               recent.map((r) => (
                 <div
@@ -324,7 +353,7 @@ export function PositionCaptureScreen() {
                 >
                   <span className="tabular-nums text-[var(--taiko-accent)]">{r.note}</span>
                   <span className="truncate text-[var(--taiko-ink)]/70">
-                    {r.part ? PART_BY_ID[r.part].label : "未映射"}
+                    {r.part ? label(r.part) : tr("未映射", "Unmapped")}
                   </span>
                 </div>
               ))
@@ -338,7 +367,7 @@ export function PositionCaptureScreen() {
               key={part}
               className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-[var(--taiko-line)] py-2 last:border-0"
             >
-              <span className="truncate text-xs">{PART_BY_ID[part].label}</span>
+              <span className="truncate text-xs">{label(part)}</span>
               {(["l", "r"] as const).map((side) => {
                 const g = groups[part]?.[side];
                 const active = current?.part === part && current?.side === side;
@@ -348,7 +377,7 @@ export function PositionCaptureScreen() {
                     onClick={() => retest(part, side)}
                     className={`min-w-16 border px-2 py-1 text-[10px] ${active ? "border-[var(--taiko-accent)] text-[var(--taiko-accent)]" : g ? (g.spread > 6 ? "border-amber-400 text-amber-300" : "border-emerald-400/50 text-emerald-300") : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/45"}`}
                   >
-                    {SIDE_LABEL[side]} {g ? `${g.spread.toFixed(1)}°` : "未采"}
+                    {sideLabel(side)} {g ? `${g.spread.toFixed(1)}°` : tr("未采", "not set")}
                   </button>
                 );
               })}
@@ -361,7 +390,7 @@ export function PositionCaptureScreen() {
             disabled={!done}
             className="border border-[var(--taiko-ink)] px-3 py-2 text-xs disabled:opacity-30"
           >
-            保存并应用
+            {tr("保存并应用", "Save & apply")}
           </button>
           <button
             onClick={download}
@@ -369,25 +398,25 @@ export function PositionCaptureScreen() {
             className="flex items-center justify-center gap-1 border border-[var(--taiko-line)] px-3 py-2 text-xs disabled:opacity-30"
           >
             <Download size={14} />
-            导出文件
+            {tr("导出文件", "Export file")}
           </button>
           <button
             onClick={() => fileRef.current?.click()}
             className="flex items-center justify-center gap-1 border border-[var(--taiko-line)] px-3 py-2 text-xs"
           >
             <Upload size={14} />
-            导入文件
+            {tr("导入文件", "Import file")}
           </button>
           <button
             onClick={() => {
               clearStickCalibration();
               setGroups({});
-              apply(IDLE, "已恢复默认鼓棒位置");
+              apply(IDLE, tr("已恢复默认鼓棒位置", "Restored default stick positions"));
             }}
             className="flex items-center justify-center gap-1 border border-[var(--taiko-line)] px-3 py-2 text-xs"
           >
             <RotateCcw size={14} />
-            恢复默认
+            {tr("恢复默认", "Restore defaults")}
           </button>
           <input
             ref={fileRef}
@@ -426,10 +455,20 @@ function IconBtn({
   );
 }
 
-function Status({ ok, label, waiting = "未连接" }: { ok: boolean; label: string; waiting?: string }) {
+function Status({
+  ok,
+  label,
+  waiting,
+  connectedLabel,
+}: {
+  ok: boolean;
+  label: string;
+  waiting: string;
+  connectedLabel: string;
+}) {
   return (
     <div className="border border-[var(--taiko-line)] p-2">
-      <div className={ok ? "text-emerald-300" : "text-amber-300"}>{ok ? "已连接" : waiting}</div>
+      <div className={ok ? "text-emerald-300" : "text-amber-300"}>{ok ? connectedLabel : waiting}</div>
       <div className="mt-1 text-[10px] text-[var(--taiko-ink)]/45">{label}</div>
     </div>
   );
