@@ -67,7 +67,6 @@ function ShellInner() {
             <li key={item.hint}><button onClick={() => setScreen(item.key)} className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--taiko-line)] px-4 py-3.5 text-left transition-colors ${active ? "bg-[var(--taiko-accent)] text-[var(--taiko-paper)]" : "hover:bg-[var(--taiko-ink)]/10"}`}><Icon size={17}/><span className="truncate text-sm">{language === "en" ? item.en : item.zh}</span><span className="text-[10px] opacity-50">{item.hint}</span></button></li>
           ); })}
         </ul>
-        <button onClick={() => { const el = document.querySelector(".taiko-root"); if (!document.fullscreenElement) void el?.requestFullscreen?.(); else void document.exitFullscreen?.(); }} className="mt-auto flex items-center gap-2 border-t border-[var(--taiko-line)] px-4 py-3.5 text-xs text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"><Maximize size={15}/>{tr("全屏显示", "Fullscreen")}</button>
       </nav>
 
       <main className="min-h-0 min-w-0 overflow-hidden">
