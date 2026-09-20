@@ -445,7 +445,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
 
   return (
-    {/* 演奏区吃掉全部剩余高度，底部控制栏按内容高度自适应（窄高窗口自动压扁） */}
+    // 演奏区吃掉全部剩余高度，底部控制栏按内容高度自适应（窄高窗口自动压扁）
     <div className="grid h-full min-h-0 w-full grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[var(--taiko-paper)]">
 
       <div
