@@ -15,11 +15,41 @@ import { matchPattern } from "./patternLib";
 
 export type Difficulty = "easy" | "beginner" | "standard" | "hard";
 
-export const DIFFICULTIES: readonly { id: Difficulty; label: string; hint: string }[] = [
-  { id: "easy", label: "轻松", hint: "军鼓 · 踩镲 · 左踏板踩住" },
-  { id: "beginner", label: "入门", hint: "轻松 + 右踏板" },
-  { id: "standard", label: "标准", hint: "加入低通 / 吊镲 / 叮叮镲" },
-  { id: "hard", label: "困难", hint: "全部鼓件，含高通 / 中通" },
+export const DIFFICULTIES: readonly {
+  id: Difficulty;
+  label: string;
+  labelEn: string;
+  hint: string;
+  hintEn: string;
+}[] = [
+  {
+    id: "easy",
+    label: "轻松",
+    labelEn: "Easy",
+    hint: "军鼓 · 踩镲 · 左踏板踩住",
+    hintEn: "Snare · hi-hat · left pedal held",
+  },
+  {
+    id: "beginner",
+    label: "入门",
+    labelEn: "Beginner",
+    hint: "轻松 + 右踏板",
+    hintEn: "Easy + right pedal",
+  },
+  {
+    id: "standard",
+    label: "标准",
+    labelEn: "Standard",
+    hint: "加入低通 / 吊镲 / 叮叮镲",
+    hintEn: "Adds floor tom / crash / ride",
+  },
+  {
+    id: "hard",
+    label: "困难",
+    labelEn: "Hard",
+    hint: "全部鼓件，含高通 / 中通",
+    hintEn: "All nine pieces, incl. high / mid tom",
+  },
 ];
 
 export function layoutOf(diff: Difficulty): LayoutMode {
