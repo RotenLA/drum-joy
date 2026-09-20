@@ -34,6 +34,13 @@ export const TIER_LABEL: Record<QualityMode, string> = {
   low: "低",
 };
 
+export const TIER_LABEL_EN: Record<QualityMode, string> = {
+  auto: "Auto",
+  high: "High",
+  medium: "Mid",
+  low: "Low",
+};
+
 const STORE_KEY = "taiko.quality.v1";
 const TIERS: QualityTier[] = ["high", "medium", "low"];
 

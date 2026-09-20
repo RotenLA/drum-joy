@@ -1,14 +1,28 @@
 /**
- * 内置鼓音色（纯 WebAudio 合成，不下载任何采样文件）：
- * 命中鼓面时按力度触发对应音色，走独立的总音量节点，
- * 与 stem 播放互不影响。安卓中低端机上开销极小（每次几个 node，短促释放）。
+ * 本地鼓音色：优先播放真实采样（9 套鼓组，后台按需加载），
+ * 采样未就绪或加载失败时自动退回 WebAudio 合成音，保证一定有声音。
  *
- * 默认开启，可在演奏界面关闭；开关状态存 localStorage。
+ * 默认开启，可在谱面页全局参数里关闭；开关与鼓组选择都存 localStorage。
  */
 import { getAudioContext } from "./metronome";
 import type { PartId } from "./laneLayouts";
+import { KIT_SAMPLES } from "./kitSamples";
 
 const KEY = "taiko.kit.v1";
+const KIT_ID_KEY = "taiko.kit.id.v1";
+
+/** 9 套鼓组（来自 PD2U 音色库 preset 0~8） */
+export const KIT_NAMES: { id: number; zh: string; en: string }[] = [
+  { id: 0, zh: "Pop 流行", en: "Pop" },
+  { id: 1, zh: "Funk 放克", en: "Funk" },
+  { id: 2, zh: "Rock 摇滚", en: "Rock" },
+  { id: 3, zh: "808 电子", en: "808" },
+  { id: 4, zh: "Club 俱乐部", en: "Club" },
+  { id: 5, zh: "Sub 低频", en: "Sub" },
+  { id: 6, zh: "Perc 打击", en: "Perc" },
+  { id: 7, zh: "Table 桌面", en: "Table" },
+  { id: 8, zh: "Toy 玩具", en: "Toy" },
+];
 
 export function loadKitEnabled(): boolean {
   if (typeof localStorage === "undefined") return true;
@@ -20,7 +34,7 @@ export function loadKitEnabled(): boolean {
   }
 }
 
-/** 开关变化的订阅者（谱面页全局参数与教学共享同一状态） */
+/** 开关变化的订阅者（谱面页全局参数与演奏页共享同一状态） */
 const kitListeners = new Set<(on: boolean) => void>();
 
 export function subscribeKitEnabled(fn: (on: boolean) => void): () => void {
@@ -35,8 +49,86 @@ export function saveKitEnabled(on: boolean): boolean {
     // 忽略
   }
   for (const fn of kitListeners) fn(on);
+  if (on) void ensureKitLoaded(loadKitId());
   return on;
 }
+
+// ---------------- 鼓组选择 ----------------
+
+export function loadKitId(): number {
+  if (typeof localStorage === "undefined") return 0;
+  try {
+    const raw = Number(localStorage.getItem(KIT_ID_KEY));
+    return Number.isFinite(raw) && raw >= 0 && raw <= 8 ? Math.floor(raw) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+const kitIdListeners = new Set<(id: number) => void>();
+
+export function subscribeKitId(fn: (id: number) => void): () => void {
+  kitIdListeners.add(fn);
+  return () => kitIdListeners.delete(fn);
+}
+
+export function saveKitId(id: number): number {
+  try {
+    localStorage.setItem(KIT_ID_KEY, String(id));
+  } catch {
+    // 忽略
+  }
+  for (const fn of kitIdListeners) fn(id);
+  void ensureKitLoaded(id);
+  return id;
+}
+
+// ---------------- 采样加载 ----------------
+
+/** `${kitId}:${part}` -> AudioBuffer */
+const buffers = new Map<string, AudioBuffer>();
+const loading = new Set<number>();
+
+/** 后台加载某套鼓组的全部样本；加载完成前继续用合成音兜底 */
+export async function ensureKitLoaded(kitId: number): Promise<void> {
+  if (typeof window === "undefined") return;
+  const kit = KIT_SAMPLES[kitId];
+  if (!kit || loading.has(kitId)) return;
+  if (buffers.has(`${kitId}:kick`)) return;
+  loading.add(kitId);
+  const ctx = getAudioContext();
+  await Promise.all(
+    Object.entries(kit).map(async ([part, urls]) => {
+      try {
+        const res = await fetch(urls.m4a);
+        const raw = await res.arrayBuffer();
+        const buf = await ctx.decodeAudioData(raw);
+        buffers.set(`${kitId}:${part}`, buf);
+      } catch {
+        // 单个样本失败就继续用合成音
+      }
+    }),
+  );
+  loading.delete(kitId);
+}
+
+function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v: number): boolean {
+  const buf = buffers.get(`${kitId}:${part}`);
+  if (!buf) {
+    void ensureKitLoaded(kitId);
+    return false;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  const g = ctx.createGain();
+  g.gain.value = v;
+  src.connect(g);
+  g.connect(bus(ctx));
+  src.start(t);
+  return true;
+}
+
+
 
 
 let master: GainNode | null = null;
@@ -120,10 +212,12 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * @param part 鼓件
  * @param velocity MIDI 力度 1~127（键盘触发默认 100）
  */
-export function playDrum(part: PartId, velocity = 100): void {
+export function playDrum(part: PartId, velocity = 100, kitId?: number): void {
   const ctx = getAudioContext();
   const t = ctx.currentTime + 0.001;
   const v = Math.max(0.25, Math.min(1, velocity / 110));
+
+  if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
 
   switch (part) {
     case "kick":

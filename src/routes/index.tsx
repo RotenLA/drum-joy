@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { TaikoShell } from "@/taiko/TaikoShell";
+import { LanguageProvider } from "@/taiko/i18n";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -23,5 +24,9 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  return <TaikoShell />;
+  return (
+    <LanguageProvider>
+      <TaikoShell />
+    </LanguageProvider>
+  );
 }

@@ -13,7 +13,8 @@ import { partAtPoint, renderPadArray } from "./stageRenderer";
 import { midiManager, type MidiInputInfo } from "./midiInput";
 import { getDrumNoteName } from "@/shared/drumLaneMap";
 import { HelpDot } from "@/components/HelpDot";
-import { HELP } from "./helpTexts";
+import { helpText } from "./helpTexts";
+import { useLanguage } from "./i18n";
 
 const ALL_PARTS = DRUM_PARTS.map((p) => p.id);
 
@@ -28,6 +29,7 @@ export function MappingScreen({
   deviceId: string | null;
   onDeviceChange: (id: string | null) => void;
 }) {
+  const { tr, language } = useLanguage();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const flashesRef = useRef<Record<string, number>>({});
@@ -154,12 +156,15 @@ export function MappingScreen({
       {/* MIDI 设备 */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
         <span className="flex items-center gap-1 text-xs text-[var(--taiko-ink)]/60">
-          MIDI 输入设备
-          <HelpDot label="MIDI 输入设备" text={HELP["midiDevice"]!} />
+          {tr("MIDI 输入设备", "MIDI input device")}
+          <HelpDot label={tr("MIDI 输入设备", "MIDI input device")} text={helpText("midiDevice", language)} />
         </span>
         {midiReady === false ? (
           <span className="text-xs text-[var(--taiko-ink)]/45">
-            当前环境不支持 Web MIDI（请在 Chrome / Electron 中使用）
+            {tr(
+              "当前环境不支持 Web MIDI（请在 Chrome / Electron 中使用）",
+              "Web MIDI isn't supported here (use Chrome or Electron)",
+            )}
           </span>
         ) : (
           <select
@@ -167,7 +172,7 @@ export function MappingScreen({
             onChange={(e) => onDeviceChange(e.target.value || null)}
             className="border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm text-[var(--taiko-ink)]"
           >
-            <option value="">全部输入（未指定）</option>
+            <option value="">{tr("全部输入（未指定）", "All inputs (unspecified)")}</option>
             {devices.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -177,8 +182,11 @@ export function MappingScreen({
         )}
         <span className="text-xs tabular-nums text-[var(--taiko-ink)]/45">
           {lastNote !== null
-            ? `最近收到音符：${lastNote}（${getDrumNoteName(lastNote)}）`
-            : "等待 MIDI 输入…"}
+            ? tr(
+                `最近收到音符：${lastNote}（${getDrumNoteName(lastNote)}）`,
+                `Last note received: ${lastNote} (${getDrumNoteName(lastNote)})`,
+              )
+            : tr("等待 MIDI 输入…", "Waiting for MIDI input…")}
         </span>
         <button
           onClick={() => {
@@ -187,7 +195,7 @@ export function MappingScreen({
           }}
           className="ml-auto border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/70 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
         >
-          恢复默认映射
+          {tr("恢复默认映射", "Reset to defaults")}
         </button>
       </div>
 
@@ -216,13 +224,18 @@ export function MappingScreen({
                 />
                 <span className="text-sm font-medium">{sel.label}</span>
                 <span className="ml-auto text-xs tabular-nums text-[var(--taiko-ink)]/45">
-                  {mappingState[selected].length} 个音符
+                  {tr(
+                    `${mappingState[selected].length} 个音符`,
+                    `${mappingState[selected].length} note${mappingState[selected].length === 1 ? "" : "s"}`,
+                  )}
                 </span>
               </div>
 
               <div className="flex flex-wrap gap-1.5">
                 {mappingState[selected].length === 0 && (
-                  <span className="text-xs text-[var(--taiko-ink)]/40">未映射任何音符</span>
+                  <span className="text-xs text-[var(--taiko-ink)]/40">
+                    {tr("未映射任何音符", "No notes mapped")}
+                  </span>
                 )}
                 {mappingState[selected].map((n) => (
                   <span
@@ -234,7 +247,7 @@ export function MappingScreen({
                     <button
                       onClick={() => removeNote(selected, n)}
                       className="text-[var(--taiko-ink)]/40 hover:text-[var(--taiko-ink)]"
-                      aria-label={`移除音符 ${n}`}
+                      aria-label={tr(`移除音符 ${n}`, `Remove note ${n}`)}
                     >
                       ×
                     </button>
@@ -249,7 +262,7 @@ export function MappingScreen({
                   max={127}
                   value={noteInput}
                   onChange={(e) => setNoteInput(e.target.value)}
-                  placeholder="音符号 0-127"
+                  placeholder={tr("音符号 0-127", "Note 0-127")}
                   className="w-full border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm tabular-nums text-[var(--taiko-ink)]"
                 />
                 <button
@@ -262,7 +275,7 @@ export function MappingScreen({
                   }}
                   className="shrink-0 border border-[var(--taiko-ink)] px-3 py-1 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
                 >
-                  添加
+                  {tr("添加", "Add")}
                 </button>
               </div>
 
@@ -275,18 +288,26 @@ export function MappingScreen({
                       : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
                   }`}
                 >
-                  {learning ? "敲一下实体鼓…（点击取消）" : "MIDI Learn"}
+                  {learning
+                    ? tr("敲一下实体鼓…（点击取消）", "Hit the drum now… (click to cancel)")
+                    : "MIDI Learn"}
                 </button>
-                <HelpDot label="MIDI Learn" text={HELP["mapping"]!} />
+                <HelpDot label="MIDI Learn" text={helpText("mapping", language)} />
               </div>
 
               <p className="text-xs leading-relaxed text-[var(--taiko-ink)]/45">
-                音符会同时从其他部件移除（一个音符只归属一个部件）。游玩屏判定与键盘图例即时生效。
+                {tr(
+                  "音符会同时从其他部件移除（一个音符只归属一个部件）。游玩屏判定与键盘图例即时生效。",
+                  "The note is removed from other pieces (each note belongs to only one piece). Play-screen judging and the keyboard legend update instantly.",
+                )}
               </p>
             </>
           ) : (
             <p className="text-xs leading-relaxed text-[var(--taiko-ink)]/45">
-              点击左侧鼓盘，编辑该部件映射的 MIDI 音符。敲鼓时对应鼓盘会闪光，可用来验证接线与映射。
+              {tr(
+                "点击左侧鼓盘，编辑该部件映射的 MIDI 音符。敲鼓时对应鼓盘会闪光，可用来验证接线与映射。",
+                "Click a pad on the left to edit its mapped MIDI notes. Hitting a drum flashes the matching pad, handy for checking wiring and mapping.",
+              )}
             </p>
           )}
         </aside>

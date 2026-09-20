@@ -10,7 +10,8 @@ import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick, getAudioContext } from "./metronome";
 import { loadKitEnabled, playDrum } from "./drumKit";
 import { HelpDot } from "@/components/HelpDot";
-import { HELP } from "./helpTexts";
+import { helpText } from "./helpTexts";
+import { useLanguage } from "./i18n";
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
@@ -30,6 +31,7 @@ const COUNT_IN_BEATS = 4;
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
 export function FallScreen({ speed, suspended = false }: { speed: number; suspended?: boolean }) {
+  const { tr, language } = useLanguage();
   const song = useSong();
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
@@ -209,7 +211,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       maxComboRef.current = Math.max(maxComboRef.current, comboRef.current);
       scoreRef.current += perfect ? 300 : 100;
       judgementRef.current = {
-        text: perfect ? "PERFECT" : "GOOD",
+        text: perfect ? tr("完美", "PERFECT") : tr("良好", "GOOD"),
         color: perfect ? "#ffd75e" : "#7dd3fc",
         until: now + 500,
       };
@@ -370,7 +372,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
             const note = notes[c]!.note;
             const p = note !== undefined ? partOfNote(note) : null;
             if (p) missFlashesRef.current[p] = now + 240;
-            judgementRef.current = { text: "MISS", color: "#f87171", until: now + 500 };
+            judgementRef.current = { text: tr("失误", "MISS"), color: "#f87171", until: now + 500 };
           }
           c++;
         }
@@ -390,7 +392,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
           statsRef.current.miss++;
           comboRef.current = 0;
           missFlashesRef.current["pedalHat"] = now + 240;
-          judgementRef.current = { text: "MISS", color: "#f87171", until: now + 500 };
+          judgementRef.current = { text: tr("失误", "MISS"), color: "#f87171", until: now + 500 };
         }
       }
 
@@ -443,7 +445,9 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
 
   return (
-    <div className="grid h-full min-h-0 w-full grid-rows-[5fr_2fr] overflow-hidden bg-[var(--taiko-paper)]">
+    // 演奏区吃掉全部剩余高度，底部控制栏按内容高度自适应（窄高窗口自动压扁）
+    <div className="grid h-full min-h-0 w-full grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[var(--taiko-paper)]">
+
       <div
         ref={wrapRef}
         className="relative min-h-0 overflow-hidden bg-[var(--taiko-paper)]"
@@ -459,14 +463,16 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
         {/* 空态 / 开始 / 暂停 / 结算遮罩 */}
         {!song.midi && (
           <Overlay>
-            <p className="text-sm text-white/80">还没有谱面</p>
-            <p className="text-xs text-white/50">请先到「谱面」屏导入去鼓伴奏音频与对应的鼓 MIDI</p>
+            <p className="text-sm text-white/80">{tr("还没有谱面", "No chart yet")}</p>
+            <p className="text-xs text-white/50">
+              {tr("请先到「谱面」屏导入去鼓伴奏音频与对应的鼓 MIDI", "Go to the Chart screen to import a no-drums backing track and its drum MIDI")}
+            </p>
           </Overlay>
         )}
         {song.midi && (!playChart || playChart.notes.length === 0) && (
           <Overlay>
-            <p className="text-sm text-white/80">谱面为空</p>
-            <p className="text-xs text-white/50">该 MIDI 中没有可识别的鼓音符</p>
+            <p className="text-sm text-white/80">{tr("谱面为空", "Chart is empty")}</p>
+            <p className="text-xs text-white/50">{tr("该 MIDI 中没有可识别的鼓音符", "No recognizable drum notes in this MIDI")}</p>
           </Overlay>
         )}
         {song.midi && playChart && playChart.notes.length > 0 && phase === "idle" && (
@@ -475,29 +481,30 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
               onClick={start}
               className="border border-white/70 px-10 py-3 text-base tracking-[0.3em] text-white transition-colors hover:bg-white hover:text-black"
             >
-              开始
+              {tr("开始", "Start")}
             </button>
             <p className="text-xs text-white/40">
-              回车也可开始 · 空格暂停{hasAudio ? "" : " · 无音频，静音试玩"}
+              {tr("回车也可开始 · 空格暂停", "Enter to start · Space to pause")}
+              {hasAudio ? "" : tr(" · 无音频，静音试玩", " · No audio, silent practice")}
             </p>
           </Overlay>
         )}
 
         {phase === "paused" && (
           <Overlay>
-            <p className="text-lg tracking-[0.3em] text-white">已暂停</p>
+            <p className="text-lg tracking-[0.3em] text-white">{tr("已暂停", "PAUSED")}</p>
             <div className="flex gap-3">
               <button
                 onClick={togglePause}
                 className="border border-white/70 px-6 py-2 text-sm text-white transition-colors hover:bg-white hover:text-black"
               >
-                继续
+                {tr("继续", "Resume")}
               </button>
               <button
                 onClick={start}
                 className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
               >
-                重新开始
+                {tr("重新开始", "Restart")}
               </button>
             </div>
           </Overlay>
@@ -510,7 +517,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
               {String(scoreRef.current).padStart(7, "0")}
             </p>
             <p className="text-sm tabular-nums text-white/75">
-              最大连击 {maxComboRef.current} · 准确率 {acc.toFixed(1)}%
+              {tr("最大连击", "Max combo")} {maxComboRef.current} · {tr("准确率", "Accuracy")} {acc.toFixed(1)}%
             </p>
             <p className="text-xs tabular-nums text-white/50">
               Perfect {judged.perfect} · Good {judged.good} · Miss {judged.miss}
@@ -519,7 +526,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
               onClick={start}
               className="mt-2 border border-white/70 px-8 py-2 text-sm tracking-[0.2em] text-white transition-colors hover:bg-white hover:text-black"
             >
-              再来一次
+              {tr("再来一次", "Retry")}
             </button>
           </Overlay>
         )}
@@ -528,8 +535,8 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-[var(--safe-left)] py-2 pr-[var(--safe-right)]">
         <div className="min-w-0">
           <div className="mb-2 hidden items-baseline gap-3 lg:flex">
-            <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">调音台</span>
-            <span className="text-[10px] text-[var(--taiko-ink)]/45">100% = 原始文件音量</span>
+            <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">{tr("调音台", "Mixer")}</span>
+            <span className="text-[10px] text-[var(--taiko-ink)]/45">{tr("100% = 原始文件音量", "100% = original file volume")}</span>
           </div>
           <div className="grid grid-cols-4 gap-2 md:gap-4">
             {STEM_KINDS.map((key) => {
@@ -539,7 +546,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
                 <label key={key} className="flex min-w-0 flex-col gap-1">
                   <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 text-[10px] text-[var(--taiko-ink)]/70 md:text-[11px]">
                     <span className={`truncate ${track ? "" : "text-[var(--taiko-ink)]/35"}`}>
-                      {STEM_LABEL[key]}{track ? "" : "（无）"}
+                      {STEM_LABEL[key]}{track ? "" : tr("（无）", " (none)")}
                     </span>
                     <span className="tabular-nums text-[var(--taiko-ink)]/55">{Math.round(value * 100)}%</span>
                   </span>
@@ -555,11 +562,15 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
         <div className="grid shrink-0 grid-cols-[auto_auto] items-center justify-end gap-2">
           <button onClick={togglePause} disabled={phase !== "playing" && phase !== "paused"}
             className="h-9 min-w-16 border border-[var(--taiko-ink)] px-3 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:cursor-not-allowed disabled:opacity-30 md:min-w-20 md:px-5 md:text-sm">
-            {phase === "paused" ? "继续" : "暂停"}
+            {phase === "paused" ? tr("继续", "Resume") : tr("暂停", "Pause")}
           </button>
-          <HelpDot label="游玩" text={HELP["play"]!} />
+          <HelpDot label={tr("游玩", "Play")} text={helpText("play", language)} />
           <span className="col-span-2 hidden text-xs text-[var(--taiko-ink)]/50 lg:block">
-            速度 {speed}x · 难度 {DIFFICULTIES.find((d) => d.id === song.difficulty)?.label}
+            {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
+            {(() => {
+              const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
+              return d ? (language === "en" ? d.labelEn : d.label) : "";
+            })()}
           </span>
         </div>
       </div>

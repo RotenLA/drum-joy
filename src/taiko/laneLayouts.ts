@@ -13,22 +13,29 @@ export type PartId =
 export interface DrumPart {
   id: PartId;
   label: string;
+  /** 英文名（界面切到 English 时使用） */
+  labelEn: string;
   /** 默认映射的 MIDI 音符（映射屏修改后以 localStorage 为准） */
   notes: readonly number[];
   color: string;
 }
 
 export const DRUM_PARTS: readonly DrumPart[] = [
-  { id: "pedalHat", label: "踩镲踏板", notes: [44], color: "#2DD4BF" },
-  { id: "kick", label: "底鼓", notes: [35, 36], color: "#FF4D4D" },
-  { id: "hihat", label: "踩镲", notes: [42, 46], color: "#F48419" },
-  { id: "crash", label: "吊镲", notes: [49, 52], color: "#F1E12F" },
-  { id: "snare", label: "军鼓", notes: [38, 40], color: "#5D8CF4" },
-  { id: "highTom", label: "高通", notes: [48, 50], color: "#F978C1" },
-  { id: "midTom", label: "中通", notes: [47], color: "#90FBE9" },
-  { id: "floorTom", label: "地通", notes: [41, 43, 45], color: "#95F96F" },
-  { id: "ride", label: "叮叮镲", notes: [51], color: "#8341F1" },
+  { id: "pedalHat", label: "踩镲踏板", labelEn: "Hi-hat Pedal", notes: [44], color: "#2DD4BF" },
+  { id: "kick", label: "底鼓", labelEn: "Kick", notes: [35, 36], color: "#FF4D4D" },
+  { id: "hihat", label: "踩镲", labelEn: "Hi-hat", notes: [42, 46], color: "#F48419" },
+  { id: "crash", label: "吊镲", labelEn: "Crash", notes: [49, 52], color: "#F1E12F" },
+  { id: "snare", label: "军鼓", labelEn: "Snare", notes: [38, 40], color: "#5D8CF4" },
+  { id: "highTom", label: "高通", labelEn: "High Tom", notes: [48, 50], color: "#F978C1" },
+  { id: "midTom", label: "中通", labelEn: "Mid Tom", notes: [47], color: "#90FBE9" },
+  { id: "floorTom", label: "地通", labelEn: "Floor Tom", notes: [41, 43, 45], color: "#95F96F" },
+  { id: "ride", label: "叮叮镲", labelEn: "Ride", notes: [51], color: "#8341F1" },
 ];
+
+/** 按当前语言取鼓件名 */
+export function partLabel(part: DrumPart, language: string): string {
+  return language === "en" ? part.labelEn : part.label;
+}
 
 export const PART_BY_ID = Object.fromEntries(DRUM_PARTS.map((p) => [p.id, p])) as Record<
   PartId,

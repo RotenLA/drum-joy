@@ -10,7 +10,7 @@ import { clearChartCache, getPlayChart } from "./chartCache";
 import { DIFFICULTIES } from "./difficulty";
 import { countByPart } from "./midiChart";
 import { shiftChart } from "@/shared/taikoChart";
-import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS } from "./laneLayouts";
+import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS, partLabel } from "./laneLayouts";
 import { layoutOf } from "./difficulty";
 import { PRESET_SONGS, loadPresetSong, type PresetSong } from "./presetSongs";
 import { songPlayer } from "./player";
@@ -18,7 +18,8 @@ import { Metronome } from "./metronome";
 import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs, stemsLeadMs } from "./stems";
 import { GlobalSettings } from "./GlobalSettings";
 import { HelpDot } from "@/components/HelpDot";
-import { HELP } from "./helpTexts";
+import { helpText } from "./helpTexts";
+import { useLanguage } from "./i18n";
 
 export function ChartScreen({
   speed,
@@ -28,6 +29,7 @@ export function ChartScreen({
   onSpeedChange: (s: number) => void;
 }) {
   const song = useSong();
+  const { tr, language } = useLanguage();
 
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [percent, setPercent] = useState(0);
@@ -70,7 +72,7 @@ export function ChartScreen({
       setReady(true);
     } catch (err) {
       console.error(err);
-      setWarn("加载失败，请检查网络后重试");
+      setWarn(tr("加载失败，请检查网络后重试", "Failed to load, check your network and retry"));
     } finally {
       setLoadingId(null);
     }
@@ -171,9 +173,11 @@ export function ChartScreen({
   const songList = (
     <div className="border border-[var(--taiko-line)] px-4 py-3">
       <div className="mb-3 flex items-center gap-2">
-        <span className="text-sm font-medium">选择歌曲</span>
-        <HelpDot label="选择歌曲" text={HELP["song"]!} />
-        {ready && !loadingId && <span className="ml-1 text-xs text-emerald-400">已就绪</span>}
+        <span className="text-sm font-medium">{tr("选择歌曲", "Choose a song")}</span>
+        <HelpDot label={tr("选择歌曲", "Choose a song")} text={helpText("song", language)} />
+        {ready && !loadingId && (
+          <span className="ml-1 text-xs text-emerald-400">{tr("已就绪", "Ready")}</span>
+        )}
         {warn && <span className="text-xs text-[var(--taiko-ink)]/60">{warn}</span>}
       </div>
 
@@ -194,7 +198,11 @@ export function ChartScreen({
             >
               <span className="relative z-10 block truncate">{p.title}</span>
               <span className="relative z-10 block text-xs tabular-nums text-[var(--taiko-ink)]/50">
-                {busyThis ? `${percent}%` : active ? "已加载" : "点击加载"}
+                {busyThis
+                  ? `${percent}%`
+                  : active
+                    ? tr("已加载", "Loaded")
+                    : tr("点击加载", "Tap to load")}
               </span>
               {busyThis && (
                 <span
@@ -228,10 +236,12 @@ export function ChartScreen({
       {/* 当前歌曲信息 */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
         <div className="min-w-0">
-          <div className="truncate text-sm font-medium">{song.fileName || "未命名"}</div>
+          <div className="truncate text-sm font-medium">
+            {song.fileName || tr("未命名", "Untitled")}
+          </div>
           <div className="text-xs tabular-nums text-[var(--taiko-ink)]/50">
             {fmtTime(durationMs)}
-            {anyStem ? "" : " · 无音频（静音试玩）"}
+            {anyStem ? "" : tr(" · 无音频（静音试玩）", " · No audio (silent practice)")}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-x-5 gap-y-1 text-xs">
@@ -242,7 +252,7 @@ export function ChartScreen({
                 key={k}
                 className={t ? "text-[var(--taiko-ink)]/70" : "text-[var(--taiko-ink)]/30"}
               >
-                {STEM_LABEL[k]}：{t ? "已就绪" : "无"}
+                {STEM_LABEL[k]}：{t ? tr("已就绪", "Ready") : tr("无", "None")}
               </span>
             );
           })}
@@ -252,37 +262,51 @@ export function ChartScreen({
       {/* MIDI 拆解结果 */}
       {analysis && (
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border border-[var(--taiko-line)] px-4 py-3 text-xs text-[var(--taiko-ink)]/70">
-          <span className="font-medium text-[var(--taiko-ink)]">MIDI 拆解</span>
-          <span className="tabular-nums">量化后 {analysis.clean.hits.length} 击</span>
-          <span className="tabular-nums">{analysis.skeleton.bars.length} 小节</span>
-          <span className="tabular-nums">
-            过门 {analysis.skeleton.bars.filter((b) => b.isFill).length} 小节
+          <span className="font-medium text-[var(--taiko-ink)]">
+            {tr("MIDI 拆解", "MIDI breakdown")}
           </span>
           <span className="tabular-nums">
-            小节相位 {analysis.clean.phaseSteps / analysis.clean.stepsPerBeat} 拍
+            {tr(`量化后 ${analysis.clean.hits.length} 击`, `${analysis.clean.hits.length} hits after quantizing`)}
+          </span>
+          <span className="tabular-nums">
+            {tr(`${analysis.skeleton.bars.length} 小节`, `${analysis.skeleton.bars.length} bars`)}
+          </span>
+          <span className="tabular-nums">
+            {tr(
+              `过门 ${analysis.skeleton.bars.filter((b) => b.isFill).length} 小节`,
+              `${analysis.skeleton.bars.filter((b) => b.isFill).length} fill bars`,
+            )}
+          </span>
+          <span className="tabular-nums">
+            {tr(
+              `小节相位 ${analysis.clean.phaseSteps / analysis.clean.stepsPerBeat} 拍`,
+              `Bar phase ${analysis.clean.phaseSteps / analysis.clean.stepsPerBeat} beats`,
+            )}
           </span>
           <span className="flex items-center gap-1">
-            微调
-            <HelpDot label="小节相位微调" text={HELP["phase"]!} />
+            {tr("微调", "Adjust")}
+            <HelpDot label={tr("小节相位微调", "Bar phase adjust")} text={helpText("phase", language)} />
             <button
               onClick={() => song.setSong({ phaseBeatOffset: song.phaseBeatOffset - 1 })}
               className="border border-[var(--taiko-line)] px-2 py-0.5 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
             >
-              −1 拍
+              {tr("−1 拍", "−1 beat")}
             </button>
             <button
               onClick={() => song.setSong({ phaseBeatOffset: song.phaseBeatOffset + 1 })}
               className="border border-[var(--taiko-line)] px-2 py-0.5 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
             >
-              +1 拍
+              {tr("+1 拍", "+1 beat")}
             </button>
             {song.phaseBeatOffset !== 0 && (
               <button
                 onClick={() => song.setSong({ phaseBeatOffset: 0 })}
                 className="px-1 underline decoration-dotted"
               >
-                复位（{song.phaseBeatOffset > 0 ? "+" : ""}
-                {song.phaseBeatOffset}）
+                {tr(
+                  `复位（${song.phaseBeatOffset > 0 ? "+" : ""}${song.phaseBeatOffset}）`,
+                  `Reset (${song.phaseBeatOffset > 0 ? "+" : ""}${song.phaseBeatOffset})`,
+                )}
               </button>
             )}
           </span>
@@ -293,16 +317,18 @@ export function ChartScreen({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border border-[var(--taiko-line)] px-4 py-3">
         <span className="text-xs tabular-nums text-[var(--taiko-ink)]/70">
           BPM {song.bpm}
-          {tempoChanges > 0 ? ` · ${tempoChanges} 处变速` : ""}
+          {tempoChanges > 0 ? tr(` · ${tempoChanges} 处变速`, ` · ${tempoChanges} tempo changes`) : ""}
         </span>
         <span className="text-xs tabular-nums text-[var(--taiko-ink)]/70">
-          拍号 {song.timeSignature[0]}/{song.timeSignature[1]}
+          {tr("拍号", "Time sig")} {song.timeSignature[0]}/{song.timeSignature[1]}
         </span>
-        <span className="text-xs text-[var(--taiko-ink)]/45">来自 MIDI tempo map</span>
+        <span className="text-xs text-[var(--taiko-ink)]/45">
+          {tr("来自 MIDI tempo map", "From MIDI tempo map")}
+        </span>
 
         <label className="flex items-center gap-2 text-xs text-[var(--taiko-ink)]/60">
-          对齐偏移 ms
-          <HelpDot label="对齐偏移" text={HELP["offset"]!} />
+          {tr("对齐偏移 ms", "Align offset ms")}
+          <HelpDot label={tr("对齐偏移", "Align offset")} text={helpText("offset", language)} />
           <input
             type="number"
             step={10}
@@ -321,7 +347,7 @@ export function ChartScreen({
           disabled={!anyStem}
           className="border border-[var(--taiko-ink)] px-4 py-1.5 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:opacity-30"
         >
-          {playing ? "暂停" : "播放"}
+          {playing ? tr("暂停", "Pause") : tr("播放", "Play")}
         </button>
         <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
           {fmtTime(playing ? posMs : songPlayer.timeMs())} / {fmtTime(durationMs)}
@@ -334,16 +360,16 @@ export function ChartScreen({
               : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
           }`}
         >
-          节拍器 {metroOn ? "开" : "关"}
+          {tr("节拍器", "Metronome")} {metroOn ? tr("开", "On") : tr("关", "Off")}
         </button>
-        <HelpDot label="节拍器" text={HELP["metronome"]!} />
+        <HelpDot label={tr("节拍器", "Metronome")} text={helpText("metronome", language)} />
       </div>
 
       {/* 难度 + 谱面统计 */}
       <section className="flex flex-col gap-3 border border-[var(--taiko-line)] px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="mr-1 text-sm font-medium">难度</h2>
-          <HelpDot label="难度" text={HELP["difficulty"]!} />
+          <h2 className="mr-1 text-sm font-medium">{tr("难度", "Difficulty")}</h2>
+          <HelpDot label={tr("难度", "Difficulty")} text={helpText("difficulty", language)} />
           {DIFFICULTIES.map((d) => (
             <button
               key={d.id}
@@ -354,22 +380,30 @@ export function ChartScreen({
                   : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
               }`}
             >
-              {d.label}
+              {language === "en" ? d.labelEn : d.label}
             </button>
           ))}
           <span className="text-xs text-[var(--taiko-ink)]/45">
-            {DIFFICULTIES.find((d) => d.id === song.difficulty)?.hint}
+            {(() => {
+              const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
+              return d ? (language === "en" ? d.hintEn : d.hint) : "";
+            })()}
           </span>
           <span className="ml-auto text-xs tabular-nums text-[var(--taiko-ink)]/60">
-            {chart ? `${chart.notes.length} 音符` : "缺少 MIDI，无法生成谱面"}
+            {chart
+              ? tr(`${chart.notes.length} 音符`, `${chart.notes.length} notes`)
+              : tr("缺少 MIDI，无法生成谱面", "No MIDI, cannot generate chart")}
           </span>
           {song.midi && (
             <button
               onClick={regenerate}
-              title="谱面按歌曲固化，只有点这里才会重算"
+              title={tr(
+                "谱面按歌曲固化，只有点这里才会重算",
+                "Charts are fixed per song; tap here to recompute",
+              )}
               className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:text-[var(--taiko-ink)]"
             >
-              重新生成谱面
+              {tr("重新生成谱面", "Regenerate chart")}
             </button>
           )}
         </div>
@@ -386,7 +420,7 @@ export function ChartScreen({
                     className="inline-block h-2.5 w-2.5 rounded-full"
                     style={{ backgroundColor: PART_BY_ID[p.id].color }}
                   />
-                  {p.label} {counts[p.id]}
+                  {partLabel(p, language)} {counts[p.id]}
                 </span>
               ),
             )}
