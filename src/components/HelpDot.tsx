@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/taiko/i18n";
 
 /**
- * 参数旁的圆形「?」：点击弹出一段中文说明，点击外部或再次点击关闭。
+ * 参数旁的圆形「?」：点击弹出一段说明（跟随界面语言），点击外部或再次点击关闭。
  */
 export function HelpDot({ text, label }: { text: string; label?: string }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLSpanElement | null>(null);
+  const { tr } = useLanguage();
 
   useEffect(() => {
     if (!open) return;
@@ -20,7 +22,7 @@ export function HelpDot({ text, label }: { text: string; label?: string }) {
     <span ref={boxRef} className="relative inline-flex align-middle">
       <button
         type="button"
-        aria-label={label ? `${label} 说明` : "说明"}
+        aria-label={label ? `${label} ${tr("说明", "help")}` : tr("说明", "Help")}
         onClick={() => setOpen((v) => !v)}
         className={`flex h-4 w-4 items-center justify-center rounded-full border text-[10px] leading-none transition-colors ${
           open
