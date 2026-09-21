@@ -20,6 +20,9 @@ import {
 } from "./laneLayouts";
 import { quality } from "./perf";
 import { calibratedPoint } from "./stickCalibration";
+import { padSprite, pedalSprite, preloadPadSprites, stageBgSprite } from "./padSprites";
+
+if (typeof document !== "undefined") preloadPadSprites();
 
 /**
  * 当前帧的画质开关（每帧进入 renderStage / renderPadArray 时刷新）。
@@ -256,10 +259,23 @@ function buildBackground(w: number, h: number, scale: number) {
 }
 
 export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  if (typeof document === "undefined") return;
+
+  // 实拍舞台背景：等比裁切铺满，再压暗一层保证鼓面/音符对比度
+  const bg = stageBgSprite();
+  if (bg) {
+    const s = Math.max(w / bg.naturalWidth, h / bg.naturalHeight);
+    const dw = bg.naturalWidth * s;
+    const dh = bg.naturalHeight * s;
+    ctx.drawImage(bg, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    ctx.fillStyle = "rgba(6,6,9,0.42)";
+    ctx.fillRect(0, 0, w, h);
+    return;
+  }
+
   // 画布已带 dpr 变换，按同一比例烘焙背景，避免贴图被放大发虚
   const scale = Math.min(2, Math.max(1, ctx.getTransform().a || 1));
   const key = `${Math.round(w)}x${Math.round(h)}@${scale}`;
-  if (typeof document === "undefined") return;
   if (key !== bgKey || !bgCanvas) {
     buildBackground(w, h, scale);
     bgKey = key;
@@ -696,10 +712,64 @@ function drawPad(
   const p = geomOf(partId, w, h);
 
   if (anchor.square) {
+    // 踏板：实拍贴图（踩下=橙，松开=黑），未加载完退回代码画法
+    const sp = pedalSprite(partId, intensity > 0.02);
+    if (sp) {
+      const dw = p.rx * 2.6 * (1 + 0.06 * intensity);
+      const dh = (dw * sp.naturalHeight) / sp.naturalWidth;
+      ctx.save();
+      ctx.translate(p.cx, p.cy);
+      if (GLOW && intensity > 0) {
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 24 * intensity;
+      }
+      ctx.drawImage(sp, -dw / 2, -dh / 2, dw, dh);
+      if (miss > 0) {
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 0.5 * miss;
+        ctx.fillStyle = "rgba(8,8,10,1)";
+        ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+      }
+      ctx.restore();
+      return;
+    }
     // 左右踏板镜像「外八」斜放
     drawSquarePad(ctx, color, p.cx, p.cy, p.rx, p.ry, intensity, partId === "kick", miss);
     return;
   }
+
+  // 手击鼓面：实拍贴图（压扁比与车道视角一致），未加载完退回代码画法
+  const sprite = padSprite(partId);
+  if (sprite) {
+    const sc = 1 + 0.08 * intensity;
+    const dw = p.rx * 2.34 * sc;
+    const dh = ((dw * sprite.naturalHeight) / sprite.naturalWidth) * 0.68;
+    ctx.save();
+    ctx.translate(p.cx, p.cy);
+    ctx.rotate(p.rot);
+    if (GLOW) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8 + 26 * intensity;
+    }
+    ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
+    if (intensity > 0) {
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.35 * intensity;
+      ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
+      ctx.globalAlpha = 1;
+    }
+    if (miss > 0) {
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.5 * miss;
+      ctx.fillStyle = "rgba(8,8,10,1)";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, dw / 2, dh / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+
 
   const s = 1 + 0.1 * intensity; // 命中回弹
   const RX = p.rx * s;
