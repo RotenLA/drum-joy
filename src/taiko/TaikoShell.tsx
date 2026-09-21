@@ -12,6 +12,8 @@ import { DeviceToast } from "./DeviceToast";
 import { useLanguage } from "./i18n";
 import { ensureKitLoaded, loadKitEnabled, loadKitId } from "./drumKit";
 import { Toaster } from "@/components/ui/sonner";
+import { debugLog } from "./debugLog";
+
 
 type ScreenKey = "play" | "chart" | "mapping" | "capture";
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
@@ -33,11 +35,13 @@ function hostExitAvailable(): boolean {
 /** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等 */
 function exitApp(): void {
   try {
+    debugLog.push("system", "调用 window.__pd2uExit()");
     (window as unknown as { __pd2uExit?: () => void }).__pd2uExit?.();
   } catch {
     // 宿主未就绪时忽略
   }
 }
+
 
 
 
