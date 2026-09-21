@@ -19,7 +19,7 @@ import {
   type PartId,
 } from "./laneLayouts";
 import { quality } from "./perf";
-import { calibratedPoint } from "./stickCalibration";
+import { stickPoint } from "./stickMapping";
 import {
   padSprite,
   padSpriteHit,
