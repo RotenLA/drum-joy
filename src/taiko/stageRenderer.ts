@@ -375,6 +375,30 @@ export interface DepthItem {
 }
 
 /**
+ * 真实架子鼓的高度分层（用于遮挡）：
+ * - 地面层：两个踏板放在地板上，其在途音符全程贴地滑行，
+ *   因此必须从所有空中鼓件（上排 0.33~0.37、中排 0.57~0.61）的「下方/背后」穿过；
+ * - 空中层：手击鼓与镲片悬在支架上，音符按自身当前高度参与排序即符合透视。
+ *
+ * GROUND_* 区间整体小于所有手击鼓盘的 cy，保证地面音符永远被实心鼓面切齐；
+ * 只有临近判定点时（p ≥ ARRIVE_P）才平滑抬到踏板顶面之上，保证落点清晰可见。
+ */
+const GROUND_FAR = 0.02;
+const GROUND_NEAR = 0.26;
+const ARRIVE_P = 0.93;
+
+/** 音符/色带的绘制纵深：地面层（踏板）与空中层（手击鼓）分别计算 */
+function noteDepth(anchor: PadAnchor, yNorm: number, p: number): number {
+  if (anchor.row !== 2) return yNorm + 0.0015;
+  const ground = GROUND_FAR + (GROUND_NEAR - GROUND_FAR) * Math.max(0, Math.min(1, p));
+  if (p < ARRIVE_P) return ground;
+  const k = Math.min(1, (p - ARRIVE_P) / (1 - ARRIVE_P));
+  const smooth = k * k * (3 - 2 * k);
+  const arrived = anchor.cy + 0.0015;
+  return ground + (arrived - ground) * smooth;
+}
+
+/**
  * 飞行中的音符 → 纵深绘制项。
  * 音符按当前所在高度参与统一排序：飞过某个鼓盘所在深度之前会被该鼓面遮挡，
  * 越过之后才压在上层；到达自己鼓盘时（同深度 + 微小偏置）始终可见。
