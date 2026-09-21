@@ -256,10 +256,23 @@ function buildBackground(w: number, h: number, scale: number) {
 }
 
 export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  if (typeof document === "undefined") return;
+
+  // 实拍舞台背景：等比裁切铺满，再压暗一层保证鼓面/音符对比度
+  const bg = stageBgSprite();
+  if (bg) {
+    const s = Math.max(w / bg.naturalWidth, h / bg.naturalHeight);
+    const dw = bg.naturalWidth * s;
+    const dh = bg.naturalHeight * s;
+    ctx.drawImage(bg, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    ctx.fillStyle = "rgba(6,6,9,0.42)";
+    ctx.fillRect(0, 0, w, h);
+    return;
+  }
+
   // 画布已带 dpr 变换，按同一比例烘焙背景，避免贴图被放大发虚
   const scale = Math.min(2, Math.max(1, ctx.getTransform().a || 1));
   const key = `${Math.round(w)}x${Math.round(h)}@${scale}`;
-  if (typeof document === "undefined") return;
   if (key !== bgKey || !bgCanvas) {
     buildBackground(w, h, scale);
     bgKey = key;
