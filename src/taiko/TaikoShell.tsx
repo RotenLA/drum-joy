@@ -32,11 +32,20 @@ function hostExitAvailable(): boolean {
   return typeof (window as unknown as Record<string, unknown>)["__pd2uExit"] === "function";
 }
 
-/** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等 */
+/** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等；300ms 内去重（开发环境可能双触发） */
+let lastExitAt = 0;
 function exitApp(): void {
   try {
+    const now = Date.now();
+    if (now - lastExitAt < 300) return;
+    lastExitAt = now;
+    const fn = (window as unknown as { __pd2uExit?: () => void }).__pd2uExit;
+    if (typeof fn !== "function") {
+      debugLog.push("system", "__pd2uExit 尚未注入，本次点击忽略");
+      return;
+    }
     debugLog.push("system", "调用 window.__pd2uExit()");
-    (window as unknown as { __pd2uExit?: () => void }).__pd2uExit?.();
+    fn();
   } catch {
     // 宿主未就绪时忽略
   }
@@ -67,9 +76,21 @@ function ShellInner() {
     // mount 后必查一次：初始状态的唯一来源
     deviceState.query();
     if (deviceState.available) setDevices(deviceState.state);
-    setCanExit(hostExitAvailable());
-    return deviceState.subscribe((s) => setDevices(s));
+    // Unity 可能在页面加载完成后才注入 __pd2uExit：轮询检测，注入即显示退出按钮
+    let tries = 0;
+    const exitTimer = setInterval(() => {
+      tries += 1;
+      if (hostExitAvailable()) {
+        setCanExit(true);
+        debugLog.push("system", "检测到宿主退出接口 __pd2uExit");
+        clearInterval(exitTimer);
+      } else if (tries >= 60) {
+        clearInterval(exitTimer);
+      }
+    }, 500);
+    return () => { clearInterval(exitTimer); };
   }, []);
+  useEffect(() => deviceState.subscribe((s) => setDevices(s)), []);
   useEffect(() => { void midiManager.init().then(() => midiManager.select(settings.midiDeviceId)); }, [settings.midiDeviceId]);
   // 鼓声开启时后台预载当前鼓组样本，未就绪前由合成音兜底
   useEffect(() => { if (loadKitEnabled()) void ensureKitLoaded(loadKitId()); }, []);
