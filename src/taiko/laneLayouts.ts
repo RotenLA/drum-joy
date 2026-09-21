@@ -21,8 +21,8 @@ export interface DrumPart {
 }
 
 export const DRUM_PARTS: readonly DrumPart[] = [
-  { id: "pedalHat", label: "踩镲踏板", labelEn: "Hi-hat Pedal", notes: [44], color: "#2DD4BF" },
-  { id: "kick", label: "底鼓", labelEn: "Kick", notes: [35, 36], color: "#FF4D4D" },
+  { id: "pedalHat", label: "踩镲踏板", labelEn: "Hi-hat Pedal", notes: [44], color: "#FFB65C" },
+  { id: "kick", label: "底鼓", labelEn: "Kick", notes: [35, 36], color: "#FF7A29" },
   { id: "hihat", label: "踩镲", labelEn: "Hi-hat", notes: [42, 46], color: "#F48419" },
   { id: "crash", label: "吊镲", labelEn: "Crash", notes: [49, 52], color: "#F1E12F" },
   { id: "snare", label: "军鼓", labelEn: "Snare", notes: [38, 40], color: "#5D8CF4" },
