@@ -9,6 +9,8 @@ import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
 import { useLanguage } from "./i18n";
 import { ensureKitLoaded, loadKitEnabled, loadKitId } from "./drumKit";
+import { toast } from "sonner";
+import { Toaster } from "@/components/ui/sonner";
 
 type ScreenKey = "play" | "chart" | "mapping" | "capture";
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
