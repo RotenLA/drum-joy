@@ -21,14 +21,23 @@ const NAV = [
   { key: "capture" as const, zh: "位置捕捉", en: "Capture", icon: Crosshair },
 ];
 
-function exitApp() {
-  try {
-    const w = window as unknown as Record<string, any>;
-    if (w["vuplex"]?.postMessage) w["vuplex"].postMessage({ type: "exit" });
-    if (w["Unity"]?.call) w["Unity"].call("exit");
-    w["parent"]?.postMessage?.({ type: "pd2u-exit" }, "*");
-  } catch { /* 忽略桥接失败 */ }
+/** 多通道通知宿主退出：UniWebView / Vuplex / Unity / postMessage / iOS WKWebView，最后再试关闭窗口 */
+function exitApp(notify: (msg: string) => void) {
+  const w = window as unknown as Record<string, any>;
+  const payload = { type: "pd2u-exit", action: "exit" };
+  try { w["vuplex"]?.postMessage?.(payload); } catch { /* 忽略 */ }
+  try { w["Vuplex"]?.postMessage?.(payload); } catch { /* 忽略 */ }
+  try { w["Unity"]?.call?.("exit"); } catch { /* 忽略 */ }
+  try { w["unityInstance"]?.SendMessage?.("WebViewBridge", "OnWebMessage", "exit"); } catch { /* 忽略 */ }
+  try { w["webkit"]?.messageHandlers?.unityControl?.postMessage?.("exit"); } catch { /* 忽略 */ }
+  try { w["__pd2uExit"]?.(); } catch { /* 忽略 */ }
+  try { window.parent?.postMessage?.(payload, "*"); } catch { /* 忽略 */ }
+  try { (w["ReactNativeWebView"] as any)?.postMessage?.(JSON.stringify(payload)); } catch { /* 忽略 */ }
+  // UniWebView / 自定义 scheme：Unity 侧监听 uniwebview://exit
+  try { window.location.href = "uniwebview://exit"; } catch { /* 忽略 */ }
   try { window.close(); } catch { /* 忽略 */ }
+  // 浏览器不允许脚本关闭非脚本打开的页面，1 秒后仍在则提示
+  window.setTimeout(() => { if (!window.closed) notify(""); }, 800);
 }
 
 
