@@ -420,14 +420,15 @@ export function PositionCaptureScreen() {
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={save}
-            disabled={!done}
+            disabled={completed === 0}
             className="border border-[var(--taiko-ink)] px-3 py-2 text-xs disabled:opacity-30"
           >
             {tr("保存并应用", "Save & apply")}
           </button>
           <button
-            onClick={download}
+            onClick={() => void download()}
             disabled={completed === 0}
+
             className="flex items-center justify-center gap-1 border border-[var(--taiko-line)] px-3 py-2 text-xs disabled:opacity-30"
           >
             <Download size={14} />
