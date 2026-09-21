@@ -380,13 +380,13 @@ export function ChartScreen({
                   : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
               }`}
             >
-              {language === "en" ? d.labelEn : d.label}
+              {tr(d.label, d.labelEn)}
             </button>
           ))}
           <span className="text-xs text-[var(--taiko-ink)]/45">
             {(() => {
               const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
-              return d ? (language === "en" ? d.hintEn : d.hint) : "";
+              return d ? tr(d.hint, d.hintEn) : "";
             })()}
           </span>
           <span className="ml-auto text-xs tabular-nums text-[var(--taiko-ink)]/60">

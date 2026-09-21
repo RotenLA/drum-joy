@@ -569,7 +569,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
             {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
             {(() => {
               const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
-              return d ? (language === "en" ? d.labelEn : d.label) : "";
+              return d ? tr(d.label, d.labelEn) : "";
             })()}
           </span>
         </div>

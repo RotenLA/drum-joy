@@ -185,7 +185,7 @@ export function GlobalSettings({
                 : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
             }`}
           >
-            {language === "en" ? TIER_LABEL_EN[m] : TIER_LABEL[m]}
+            {tr(TIER_LABEL[m], TIER_LABEL_EN[m])}
           </button>
         ))}
         <span className="text-[10px] text-[var(--taiko-ink)]/45">

@@ -34,7 +34,7 @@ export const DRUM_PARTS: readonly DrumPart[] = [
 
 /** 按当前语言取鼓件名 */
 export function partLabel(part: DrumPart, language: string): string {
-  return language === "en" ? part.labelEn : part.label;
+  return localize(language as Language, part.label, part.labelEn);
 }
 
 export const PART_BY_ID = Object.fromEntries(DRUM_PARTS.map((p) => [p.id, p])) as Record<
