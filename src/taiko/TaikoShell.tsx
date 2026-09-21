@@ -32,9 +32,13 @@ function hostExitAvailable(): boolean {
   return typeof (window as unknown as Record<string, unknown>)["__pd2uExit"] === "function";
 }
 
-/** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等 */
+/** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等；300ms 内去重（开发环境可能双触发） */
+let lastExitAt = 0;
 function exitApp(): void {
   try {
+    const now = Date.now();
+    if (now - lastExitAt < 300) return;
+    lastExitAt = now;
     const fn = (window as unknown as { __pd2uExit?: () => void }).__pd2uExit;
     if (typeof fn !== "function") {
       debugLog.push("system", "__pd2uExit 尚未注入，本次点击忽略");
