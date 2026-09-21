@@ -450,11 +450,11 @@ function noteItems(
     // 长音符色带沿同一朝向取宽度方向，才和踏板/音符块看起来是一体的。
     const pedalTh = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
 
-    // 长音色带固定置于所有手击鼓面之后；头部仍按自身飞行纵深排序。
-    // 避免一条跨越多个纵深的色带整体盖在高通等前景鼓面上。
+    // 长音色带按所属层的纵深排序：踏板色带在地面层，被所有空中鼓面实心遮挡；
+    // 手击鼓的色带按自身高度参与排序。取头部纵深再退让 ε，保证头部压在色带上。
     if (hold) {
       items.push({
-        depth: 0.3,
+        depth: noteDepth(anchor, y / h, p) - 0.0005,
         draw: () => {
         ctx.save();
         ctx.globalAlpha = alpha;
