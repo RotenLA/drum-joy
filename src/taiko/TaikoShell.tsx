@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Crosshair, Gamepad2, ListMusic, Settings2, Languages, LogOut } from "lucide-react";
+import { Crosshair, Gamepad2, ListMusic, Settings2, LogOut } from "lucide-react";
 import { SongProvider, useSong } from "./songStore";
 import { FallScreen } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
@@ -7,9 +7,10 @@ import { MappingScreen } from "./MappingScreen";
 import { PositionCaptureScreen } from "./PositionCaptureScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
+import { installDeviceBridge, deviceState, type DeviceSnapshot } from "./deviceState";
+import { DeviceToast } from "./DeviceToast";
 import { useLanguage } from "./i18n";
 import { ensureKitLoaded, loadKitEnabled, loadKitId } from "./drumKit";
-import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
 
 type ScreenKey = "play" | "chart" | "mapping" | "capture";
@@ -23,24 +24,21 @@ const NAV = [
   { key: "capture" as const, zh: "位置捕捉", en: "Capture", icon: Crosshair },
 ];
 
-/** 多通道通知宿主退出：UniWebView / Vuplex / Unity / postMessage / iOS WKWebView，最后再试关闭窗口 */
-function exitApp(notify: (msg: string) => void) {
-  const w = window as unknown as Record<string, any>;
-  const payload = { type: "pd2u-exit", action: "exit" };
-  try { w["vuplex"]?.postMessage?.(payload); } catch { /* 忽略 */ }
-  try { w["Vuplex"]?.postMessage?.(payload); } catch { /* 忽略 */ }
-  try { w["Unity"]?.call?.("exit"); } catch { /* 忽略 */ }
-  try { w["unityInstance"]?.SendMessage?.("WebViewBridge", "OnWebMessage", "exit"); } catch { /* 忽略 */ }
-  try { w["webkit"]?.messageHandlers?.unityControl?.postMessage?.("exit"); } catch { /* 忽略 */ }
-  try { w["__pd2uExit"]?.(); } catch { /* 忽略 */ }
-  try { window.parent?.postMessage?.(payload, "*"); } catch { /* 忽略 */ }
-  try { (w["ReactNativeWebView"] as any)?.postMessage?.(JSON.stringify(payload)); } catch { /* 忽略 */ }
-  // UniWebView / 自定义 scheme：Unity 侧监听 uniwebview://exit
-  try { window.location.href = "uniwebview://exit"; } catch { /* 忽略 */ }
-  try { window.close(); } catch { /* 忽略 */ }
-  // 浏览器不允许脚本关闭非脚本打开的页面，1 秒后仍在则提示
-  window.setTimeout(() => { if (!window.closed) notify(""); }, 800);
+/** 宿主退出接口是否已注入（未注入时不显示退出按钮） */
+function hostExitAvailable(): boolean {
+  if (typeof window === "undefined") return false;
+  return typeof (window as unknown as Record<string, unknown>)["__pd2uExit"] === "function";
 }
+
+/** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等 */
+function exitApp(): void {
+  try {
+    (window as unknown as { __pd2uExit?: () => void }).__pd2uExit?.();
+  } catch {
+    // 宿主未就绪时忽略
+  }
+}
+
 
 
 export function TaikoShell() {
