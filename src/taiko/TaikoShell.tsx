@@ -26,12 +26,6 @@ const NAV = [
   { key: "capture" as const, zh: "位置捕捉", en: "Capture", icon: Crosshair },
 ];
 
-/** 宿主退出接口是否已注入（未注入时不显示退出按钮） */
-function hostExitAvailable(): boolean {
-  if (typeof window === "undefined") return false;
-  return typeof (window as unknown as Record<string, unknown>)["__pd2uExit"] === "function";
-}
-
 /** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等；300ms 内去重（开发环境可能双触发） */
 let lastExitAt = 0;
 function exitApp(): void {
@@ -62,7 +56,6 @@ function ShellInner() {
   const [screen, setScreen] = useState<ScreenKey>("chart");
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
   const [devices, setDevices] = useState<DeviceSnapshot | null>(null);
-  const [canExit, setCanExit] = useState(false);
   const song = useSong();
   const { tr } = useLanguage();
 
@@ -76,19 +69,6 @@ function ShellInner() {
     // mount 后必查一次：初始状态的唯一来源
     deviceState.query();
     if (deviceState.available) setDevices(deviceState.state);
-    // Unity 可能在页面加载完成后才注入 __pd2uExit：轮询检测，注入即显示退出按钮
-    let tries = 0;
-    const exitTimer = setInterval(() => {
-      tries += 1;
-      if (hostExitAvailable()) {
-        setCanExit(true);
-        debugLog.push("system", "检测到宿主退出接口 __pd2uExit");
-        clearInterval(exitTimer);
-      } else if (tries >= 60) {
-        clearInterval(exitTimer);
-      }
-    }, 500);
-    return () => { clearInterval(exitTimer); };
   }, []);
   useEffect(() => deviceState.subscribe((s) => setDevices(s)), []);
   useEffect(() => { void midiManager.init().then(() => midiManager.select(settings.midiDeviceId)); }, [settings.midiDeviceId]);
@@ -104,18 +84,15 @@ function ShellInner() {
 <div className="taiko-root grid grid-cols-[clamp(116px,18%,232px)_minmax(0,1fr)] overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
       <nav className="relative flex min-h-0 flex-col border-r border-[var(--taiko-line)] bg-[var(--taiko-paper)]">
         <div className="border-y border-[var(--taiko-line)] px-4 py-3">
-          {canExit && (
-            <button
-              type="button"
-              onClick={exitApp}
-              aria-label={tr("退出", "Exit")}
-              className="flex min-w-0 items-center gap-1.5 border border-[var(--taiko-line)] px-2 py-1 text-xs font-medium text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
-            >
-              <LogOut size={13} />
-              <span className="truncate">{tr("退出", "Exit")}</span>
-            </button>
-          )}
-          <div className="mt-1 truncate text-xs text-[var(--taiko-ink)]/55">{song.fileName || tr("未选择歌曲", "No song selected")}</div>
+          <button
+            type="button"
+            onClick={exitApp}
+            aria-label={tr("退出", "Exit")}
+            className="flex min-w-0 items-center gap-1.5 border border-[var(--taiko-line)] px-2 py-1 text-xs font-medium text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+          >
+            <LogOut size={13} />
+            <span className="truncate">{tr("退出", "Exit")}</span>
+          </button>
           {devices && (
             <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-[var(--taiko-ink)]/60">
               {([
