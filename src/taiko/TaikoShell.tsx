@@ -15,11 +15,22 @@ interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
 const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.5, midiDeviceId: null };
 const NAV = [
-  { key: "play" as const, zh: "游玩", en: "Play", hint: "PLAY", icon: Gamepad2 },
-  { key: "chart" as const, zh: "谱面", en: "Chart", hint: "CHART", icon: ListMusic },
-  { key: "mapping" as const, zh: "映射", en: "Mapping", hint: "MAP", icon: Settings2 },
-  { key: "capture" as const, zh: "位置捕捉", en: "Capture", hint: "CAPTURE", icon: Crosshair },
+  { key: "play" as const, zh: "游玩", en: "Play", icon: Gamepad2 },
+  { key: "chart" as const, zh: "谱面", en: "Chart", icon: ListMusic },
+  { key: "mapping" as const, zh: "映射", en: "Mapping", icon: Settings2 },
+  { key: "capture" as const, zh: "位置捕捉", en: "Capture", icon: Crosshair },
 ];
+
+function exitApp() {
+  try {
+    const w = window as unknown as Record<string, any>;
+    if (w["vuplex"]?.postMessage) w["vuplex"].postMessage({ type: "exit" });
+    if (w["Unity"]?.call) w["Unity"].call("exit");
+    w["parent"]?.postMessage?.({ type: "pd2u-exit" }, "*");
+  } catch { /* 忽略桥接失败 */ }
+  try { window.close(); } catch { /* 忽略 */ }
+}
+
 
 export function TaikoShell() {
   return <SongProvider><ShellInner /></SongProvider>;
