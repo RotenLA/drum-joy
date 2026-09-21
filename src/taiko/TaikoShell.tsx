@@ -111,7 +111,7 @@ function ShellInner() {
         </div>
         <ul>
           {NAV.map((item) => { const Icon = item.icon; const active = screen === item.key; return (
-            <li key={item.key}><button onClick={() => setScreen(item.key)} className={`grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-[var(--taiko-line)] px-4 py-3.5 text-left transition-colors ${active ? "bg-[var(--taiko-accent)] text-[var(--taiko-paper)]" : "hover:bg-[var(--taiko-ink)]/10"}`}><Icon size={17}/><span className="truncate text-sm">{language === "en" ? item.en : item.zh}</span></button></li>
+            <li key={item.key}><button onClick={() => setScreen(item.key)} className={`grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-[var(--taiko-line)] px-4 py-3.5 text-left transition-colors ${active ? "bg-[var(--taiko-accent)] text-[var(--taiko-paper)]" : "hover:bg-[var(--taiko-ink)]/10"}`}><Icon size={17}/><span className="truncate text-sm">{tr(item.zh, item.en)}</span></button></li>
           ); })}
         </ul>
       </nav>
