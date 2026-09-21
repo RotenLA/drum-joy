@@ -1166,13 +1166,17 @@ function drawStick(
   const color = STICK_COLORS[side];
 
   // 棒尖落点：偏航 → 横向，俯仰 → 纵向（抬头往上）
+  // 横向与鼓盘锚点同一坐标系（16:9 参考宽），保证吸附点与鼓面一致
+  const rw = refWidth(w, h);
+  const toX = (nx: number) => w / 2 + (nx - 0.5) * rw;
   const calibrated = calibratedPoint(pose, side);
-  const tipX = (calibrated?.x ?? 0.5 + yaw * STICK_X_SPREAD) * w;
+  const tipX = toX(calibrated?.x ?? 0.5 + yaw * STICK_X_SPREAD);
   const tipY = (calibrated?.y ?? STICK_Y_CENTER - pitch * STICK_Y_SPREAD) * h;
 
   // 棒身方向：由屏幕下方玩家手部指向棒尖，左右手各自外偏
-  const handX = (side === "l" ? 0.3 : 0.7) * w + yaw * 0.06 * w;
+  const handX = toX(side === "l" ? 0.3 : 0.7) + yaw * 0.06 * rw;
   const handY = h * 1.06 + pitch * 0.05 * h;
+
   const dx = tipX - handX;
   const dy = tipY - handY;
   const len = Math.hypot(dx, dy) || 1;
