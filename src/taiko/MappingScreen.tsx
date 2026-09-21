@@ -170,11 +170,17 @@ export function MappingScreen({
           <select
             value={deviceId ?? ""}
             onChange={(e) => onDeviceChange(e.target.value || null)}
-            className="border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-sm text-[var(--taiko-ink)]"
+            className="border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-2 py-1 text-sm text-[var(--taiko-ink)]"
           >
-            <option value="">{tr("全部输入（未指定）", "All inputs (unspecified)")}</option>
+            <option value="" className="bg-[var(--taiko-surface)] text-[var(--taiko-ink)]">
+              {tr("全部输入（未指定）", "All inputs (unspecified)")}
+            </option>
             {devices.map((d) => (
-              <option key={d.id} value={d.id}>
+              <option
+                key={d.id}
+                value={d.id}
+                className="bg-[var(--taiko-surface)] text-[var(--taiko-ink)]"
+              >
                 {d.name}
               </option>
             ))}
@@ -284,7 +290,7 @@ export function MappingScreen({
                   onClick={() => setLearning((v) => !v)}
                   className={`border px-3 py-2 text-xs transition-colors ${
                     learning
-                      ? "animate-pulse border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                      ? "animate-pulse border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                       : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
                   }`}
                 >
