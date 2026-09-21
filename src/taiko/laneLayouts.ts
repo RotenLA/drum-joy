@@ -116,8 +116,13 @@ export interface PadAnchor {
   cx: number;
   /** 中心 y（0-1，相对画布高，越大越靠近玩家） */
   cy: number;
-  /** 横向半径（相对画布宽）；纵向半径按 kind 比例推算 */
+  /**
+   * 横向半径：相对「16:9 参考宽」（= 画布高 × 16/9），不是画布宽，
+   * 这样在 18:9 等更宽的画布里鼓阵不会被拉宽变形。
+   */
   r: number;
+  /** 纵向半径 / 横向半径（素材实测的透视压扁比；缺省 0.42） */
+  ratio?: number;
   kind: PadKind;
   /** 所属排（0=上排 1=中排 2=踏板排）：车道收束段按排独立计算，同列车道接近平行 */
   row: 0 | 1 | 2;
@@ -125,43 +130,29 @@ export interface PadAnchor {
   square?: boolean;
 }
 
-/** 上排中心高度：按 ~16:9 画布标定，旋转后顶缘（鼓阵最高点）落在屏高 1/2 处，微调只改这个数 */
-const TOP_ROW_CY = 0.568;
-/** 中排中心高度（与上排保持 0.16 排距，整体随之上移） */
-const MID_ROW_CY = 0.728;
-/** 上排横坐标：中排踩镲/地通的车道端点取相邻上排两端点的正中 */
-const TOP_CX = { crash: 0.16, highTom: 0.38, midTom: 0.62, ride: 0.84 } as const;
-
-/** 鼓盘半径（整体缩小约 12%，音符仍取鼓面 70%） */
-const PAD_R = 0.042;
-const PEDAL_R = 0.04;
+/**
+ * 摆位与尺寸全部按官方「演奏 toast」参考图实测（1920×1080 归一化），
+ * 半径统一乘 GAME_SCALE 让鼓面比参考图略小一点，更适合游戏视野。
+ * 想整体调大调小只动 GAME_SCALE。
+ */
+const GAME_SCALE = 0.88;
+const S = (r: number) => +(r * GAME_SCALE).toFixed(4);
 
 export const PAD_ANCHORS: Record<PartId, PadAnchor> = {
-  // 上排（row 0，全员圆柱同尺寸）
-  crash: { cx: TOP_CX.crash, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
-  highTom: { cx: TOP_CX.highTom, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
-  midTom: { cx: TOP_CX.midTom, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
-  ride: { cx: TOP_CX.ride, cy: TOP_ROW_CY, r: PAD_R, kind: "drum", row: 0 },
-  // 中排（row 1，车道端点分别处于吊镲/高通与中通/叮叮镲端点的正中）
-  hihat: {
-    cx: (TOP_CX.crash + TOP_CX.highTom) / 2,
-    cy: MID_ROW_CY,
-    r: PAD_R,
-    kind: "drum",
-    row: 1,
-  },
-  snare: { cx: 0.5, cy: MID_ROW_CY, r: PAD_R, kind: "drum", row: 1 },
-  floorTom: {
-    cx: (TOP_CX.midTom + TOP_CX.ride) / 2,
-    cy: MID_ROW_CY,
-    r: PAD_R,
-    kind: "drum",
-    row: 1,
-  },
-  // 下排（row 2，方形踏板与手击鼓盘区分，两踏板等大）
-  pedalHat: { cx: 0.35, cy: 0.92, r: PEDAL_R, kind: "pedal", square: true, row: 2 },
-  kick: { cx: 0.65, cy: 0.92, r: PEDAL_R, kind: "drum", square: true, row: 2 },
+  // 上排：两片镲（吊镲黄 / 叮叮镲紫）在最外侧，两个鼓垫（高通粉 / 中通青）居中
+  crash: { cx: 0.2367, cy: 0.3347, r: S(0.0794), ratio: 0.608, kind: "cymbal", row: 0 },
+  highTom: { cx: 0.4237, cy: 0.3699, r: S(0.0576), ratio: 0.703, kind: "drum", row: 0 },
+  midTom: { cx: 0.5716, cy: 0.3699, r: S(0.0576), ratio: 0.703, kind: "drum", row: 0 },
+  ride: { cx: 0.7583, cy: 0.3389, r: S(0.076), ratio: 0.631, kind: "cymbal", row: 0 },
+  // 中排：踩镲（橙镲）/ 军鼓（蓝）/ 地通（绿）
+  hihat: { cx: 0.3234, cy: 0.5949, r: S(0.0635), ratio: 0.608, kind: "cymbal", row: 1 },
+  snare: { cx: 0.4982, cy: 0.6106, r: S(0.0617), ratio: 0.597, kind: "drum", row: 1 },
+  floorTom: { cx: 0.6885, cy: 0.5713, r: S(0.0682), ratio: 0.665, kind: "drum", row: 1 },
+  // 下排：两个踏板（左=踩镲踏板，右=底鼓），保持参考图原始大小
+  pedalHat: { cx: 0.3951, cy: 0.85, r: 0.0201, ratio: 2.12, kind: "pedal", square: true, row: 2 },
+  kick: { cx: 0.605, cy: 0.85, r: 0.0201, ratio: 2.12, kind: "pedal", square: true, row: 2 },
 };
+
 
 // ================= 分区显示集 =================
 

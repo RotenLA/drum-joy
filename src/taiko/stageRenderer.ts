@@ -20,7 +20,14 @@ import {
 } from "./laneLayouts";
 import { quality } from "./perf";
 import { calibratedPoint } from "./stickCalibration";
-import { padSprite, pedalSprite, preloadPadSprites, stageBgSprite } from "./padSprites";
+import {
+  padSprite,
+  padSpriteHit,
+  padSpriteMeta,
+  pedalSprite,
+  preloadPadSprites,
+  stageBgSprite,
+} from "./padSprites";
 
 if (typeof document !== "undefined") preloadPadSprites();
 
@@ -87,13 +94,14 @@ const STICK_YAW_RANGE = 45;
 const STICK_PITCH_RANGE = 45;
 /** 鼓棒可达区域（归一化，与鼓阵摆位对应） */
 const STICK_X_SPREAD = 0.4;
-const STICK_Y_CENTER = 0.6;
+const STICK_Y_CENTER = 0.5;
 const STICK_Y_SPREAD = 0.26;
 /** 左右鼓棒颜色 */
 const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
 
-/** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
-const PAD_SPREAD = 0.34;
+/** 鼓盘 cx 的分布半径（最外侧鼓盘偏离中心的距离），用于把车道起点映射进收束段 */
+const PAD_SPREAD = 0.26;
+
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
 const LEAD_MS = 2400;
 /** 判定提示圈只在临近落点时出现，避免长时间抢占视线。 */
@@ -159,11 +167,19 @@ export function hexToRgba(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+/**
+ * 参考宽：摆位按官方 16:9 参考图标定，画布更宽时只在两侧留白，
+ * 鼓阵本体不被拉宽（角度与间距与参考图一致）。
+ */
+export function refWidth(w: number, h: number) {
+  return Math.min((h * 16) / 9, w);
+}
+
 /** 鼓盘锚点 → 像素几何 */
 function padPixels(a: PadAnchor, w: number, h: number) {
-  const rx = a.r * w;
-  // 同一地板视角：鼓面与平放的踏板共享压扁比 0.42
-  return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * 0.42 };
+  const rw = refWidth(w, h);
+  const rx = a.r * rw;
+  return { cx: w / 2 + (a.cx - 0.5) * rw, cy: a.cy * h, rx, ry: rx * (a.ratio ?? 0.42) };
 }
 
 /**
@@ -172,9 +188,11 @@ function padPixels(a: PadAnchor, w: number, h: number) {
  */
 function gatePoint(anchor: PadAnchor, w: number, h: number) {
   const g = ROW_GATES[anchor.row]!;
-  const x = (0.5 + (anchor.cx - 0.5) * (g.halfW / PAD_SPREAD)) * w;
+  const rw = refWidth(w, h);
+  const x = w / 2 + (anchor.cx - 0.5) * (g.halfW / PAD_SPREAD) * rw;
   return { x, y: (anchor.cy - TRAVEL_H) * h };
 }
+
 
 /*
  * 鼓盘随车道旋转角在 geomOf() 里按尺寸缓存（长轴垂直于车道，面向消失点）。
@@ -712,10 +730,10 @@ function drawPad(
   const p = geomOf(partId, w, h);
 
   if (anchor.square) {
-    // 踏板：实拍贴图（踩下=橙，松开=黑），未加载完退回代码画法
+    // 踏板：官方素材（踩下=橙，松开=黑），未加载完退回代码画法
     const sp = pedalSprite(partId, intensity > 0.02);
     if (sp) {
-      const dw = p.rx * 2.6 * (1 + 0.06 * intensity);
+      const dw = p.rx * 2 * (1 + 0.06 * intensity);
       const dh = (dw * sp.naturalHeight) / sp.naturalWidth;
       ctx.save();
       ctx.translate(p.cx, p.cy);
@@ -738,37 +756,47 @@ function drawPad(
     return;
   }
 
-  // 手击鼓面：实拍贴图（压扁比与车道视角一致），未加载完退回代码画法
+  // 手击鼓面 / 镲片：官方素材按原生比例绘制，彩圈对齐判定锚点；
+  // 命中时交叉淡入「敲击发光」素材，未加载完退回代码画法。
   const sprite = padSprite(partId);
-  if (sprite) {
-    const sc = 1 + 0.08 * intensity;
-    const dw = p.rx * 2.34 * sc;
-    const dh = ((dw * sprite.naturalHeight) / sprite.naturalWidth) * 0.68;
+  const meta = padSpriteMeta(partId);
+  if (sprite && meta) {
+    const sc = 1 + 0.05 * intensity;
+    const ringW = p.rx * 2 * sc;
+    const dw = ringW / meta.ringFrac;
+    const dh = (dw * sprite.naturalHeight) / sprite.naturalWidth;
+    const ox = -meta.offX * ringW;
+    const oy = -meta.offY * ringW * (anchor.ratio ?? 0.42);
     ctx.save();
-    ctx.translate(p.cx, p.cy);
-    ctx.rotate(p.rot);
-    if (GLOW) {
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 8 + 26 * intensity;
-    }
+    ctx.translate(p.cx + ox, p.cy + oy);
     ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
     if (intensity > 0) {
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 0.35 * intensity;
-      ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
+      const hit = padSpriteHit(partId);
+      ctx.globalAlpha = Math.min(1, intensity * 1.2);
+      if (hit) {
+        ctx.drawImage(hit, -dw / 2, -dh / 2, dw, dh);
+      } else {
+        if (GLOW) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 26 * intensity;
+        }
+        ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
+        ctx.shadowBlur = 0;
+      }
       ctx.globalAlpha = 1;
     }
     if (miss > 0) {
-      ctx.shadowBlur = 0;
       ctx.globalAlpha = 0.5 * miss;
       ctx.fillStyle = "rgba(8,8,10,1)";
       ctx.beginPath();
-      ctx.ellipse(0, 0, dw / 2, dh / 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(-ox, -oy, p.rx, p.ry, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
     return;
   }
+
 
 
   const s = 1 + 0.1 * intensity; // 命中回弹
@@ -1138,13 +1166,17 @@ function drawStick(
   const color = STICK_COLORS[side];
 
   // 棒尖落点：偏航 → 横向，俯仰 → 纵向（抬头往上）
+  // 横向与鼓盘锚点同一坐标系（16:9 参考宽），保证吸附点与鼓面一致
+  const rw = refWidth(w, h);
+  const toX = (nx: number) => w / 2 + (nx - 0.5) * rw;
   const calibrated = calibratedPoint(pose, side);
-  const tipX = (calibrated?.x ?? 0.5 + yaw * STICK_X_SPREAD) * w;
+  const tipX = toX(calibrated?.x ?? 0.5 + yaw * STICK_X_SPREAD);
   const tipY = (calibrated?.y ?? STICK_Y_CENTER - pitch * STICK_Y_SPREAD) * h;
 
   // 棒身方向：由屏幕下方玩家手部指向棒尖，左右手各自外偏
-  const handX = (side === "l" ? 0.3 : 0.7) * w + yaw * 0.06 * w;
+  const handX = toX(side === "l" ? 0.3 : 0.7) + yaw * 0.06 * rw;
   const handY = h * 1.06 + pitch * 0.05 * h;
+
   const dx = tipX - handX;
   const dy = tipY - handY;
   const len = Math.hypot(dx, dy) || 1;
