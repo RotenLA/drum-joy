@@ -92,8 +92,9 @@ const STICK_Y_SPREAD = 0.26;
 /** 左右鼓棒颜色 */
 const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
 
-/** 鼓盘 cx 的分布半径（0.84-0.5），用于把车道起点映射进收束段 */
-const PAD_SPREAD = 0.34;
+/** 鼓盘 cx 的分布半径（最外侧鼓盘偏离中心的距离），用于把车道起点映射进收束段 */
+const PAD_SPREAD = 0.26;
+
 /** 音符从收束段飞到鼓盘的时间（1x 速度下，毫秒） */
 const LEAD_MS = 2400;
 /** 判定提示圈只在临近落点时出现，避免长时间抢占视线。 */
