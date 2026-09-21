@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { Crosshair, Gamepad2, ListMusic, Settings2, LogOut } from "lucide-react";
+import { Gamepad2, ListMusic, Settings2, LogOut } from "lucide-react";
 import { SongProvider, useSong } from "./songStore";
 import { FallScreen } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
 import { MappingScreen } from "./MappingScreen";
-import { PositionCaptureScreen } from "./PositionCaptureScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
 import { installDeviceBridge, deviceState, type DeviceSnapshot } from "./deviceState";
@@ -15,7 +14,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { debugLog } from "./debugLog";
 
 
-type ScreenKey = "play" | "chart" | "mapping" | "capture";
+type ScreenKey = "play" | "chart" | "mapping";
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
 const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.5, midiDeviceId: null };
@@ -23,7 +22,6 @@ const NAV = [
   { key: "play" as const, zh: "游玩", en: "Play", icon: Gamepad2 },
   { key: "chart" as const, zh: "谱面", en: "Chart", icon: ListMusic },
   { key: "mapping" as const, zh: "映射", en: "Mapping", icon: Settings2 },
-  { key: "capture" as const, zh: "位置捕捉", en: "Capture", icon: Crosshair },
 ];
 
 /** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等；300ms 内去重（开发环境可能双触发） */
@@ -124,12 +122,11 @@ function ShellInner() {
         ) : (
           <section className="flex h-full min-h-0 flex-col bg-[var(--taiko-paper)]">
             <header className="flex h-12 shrink-0 items-center border-b border-[var(--taiko-line)] px-5">
-              <div className="min-w-0"><h1 className="truncate text-sm font-medium">{screen === "chart" ? tr("谱面", "Chart") : screen === "mapping" ? tr("映射", "Mapping") : tr("位置捕捉", "Position Capture")}</h1><p className="truncate text-[10px] text-[var(--taiko-ink)]/45">{song.fileName || "PD2U AeroGame"}</p></div>
+              <div className="min-w-0"><h1 className="truncate text-sm font-medium">{screen === "chart" ? tr("谱面", "Chart") : tr("映射", "Mapping")}</h1><p className="truncate text-[10px] text-[var(--taiko-ink)]/45">{song.fileName || "PD2U AeroGame"}</p></div>
             </header>
             <div key={screen} className="taiko-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-4 md:p-6">
               {screen === "chart" && <ChartScreen speed={settings.speed} onSpeedChange={(speed) => updateSettings({ speed })} />}
               {screen === "mapping" && <MappingScreen deviceId={settings.midiDeviceId} onDeviceChange={(midiDeviceId) => updateSettings({ midiDeviceId })} />}
-              {screen === "capture" && <PositionCaptureScreen />}
             </div>
           </section>
         )}

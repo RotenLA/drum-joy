@@ -19,7 +19,7 @@ import {
   type PartId,
 } from "./laneLayouts";
 import { quality } from "./perf";
-import { calibratedPoint } from "./stickCalibration";
+import { stickPoint } from "./stickMapping";
 import {
   padSprite,
   padSpriteHit,
@@ -92,10 +92,6 @@ const TRAVEL_H = 0.44;
 /** 鼓棒角度→屏幕映射：偏航/俯仰各 ±45° 覆盖鼓阵横向/纵向范围 */
 const STICK_YAW_RANGE = 45;
 const STICK_PITCH_RANGE = 45;
-/** 鼓棒可达区域（归一化，与鼓阵摆位对应） */
-const STICK_X_SPREAD = 0.4;
-const STICK_Y_CENTER = 0.5;
-const STICK_Y_SPREAD = 0.26;
 /** 左右鼓棒颜色 */
 const STICK_COLORS = { l: "#7DE2FF", r: "#FFC46B" } as const;
 
@@ -375,6 +371,30 @@ export interface DepthItem {
 }
 
 /**
+ * 真实架子鼓的高度分层（用于遮挡）：
+ * - 地面层：两个踏板放在地板上，其在途音符全程贴地滑行，
+ *   因此必须从所有空中鼓件（上排 0.33~0.37、中排 0.57~0.61）的「下方/背后」穿过；
+ * - 空中层：手击鼓与镲片悬在支架上，音符按自身当前高度参与排序即符合透视。
+ *
+ * GROUND_* 区间整体小于所有手击鼓盘的 cy，保证地面音符永远被实心鼓面切齐；
+ * 只有临近判定点时（p ≥ ARRIVE_P）才平滑抬到踏板顶面之上，保证落点清晰可见。
+ */
+const GROUND_FAR = 0.02;
+const GROUND_NEAR = 0.26;
+const ARRIVE_P = 0.93;
+
+/** 音符/色带的绘制纵深：地面层（踏板）与空中层（手击鼓）分别计算 */
+function noteDepth(anchor: PadAnchor, yNorm: number, p: number): number {
+  if (anchor.row !== 2) return yNorm + 0.0015;
+  const ground = GROUND_FAR + (GROUND_NEAR - GROUND_FAR) * Math.max(0, Math.min(1, p));
+  if (p < ARRIVE_P) return ground;
+  const k = Math.min(1, (p - ARRIVE_P) / (1 - ARRIVE_P));
+  const smooth = k * k * (3 - 2 * k);
+  const arrived = anchor.cy + 0.0015;
+  return ground + (arrived - ground) * smooth;
+}
+
+/**
  * 飞行中的音符 → 纵深绘制项。
  * 音符按当前所在高度参与统一排序：飞过某个鼓盘所在深度之前会被该鼓面遮挡，
  * 越过之后才压在上层；到达自己鼓盘时（同深度 + 微小偏置）始终可见。
@@ -426,11 +446,11 @@ function noteItems(
     // 长音符色带沿同一朝向取宽度方向，才和踏板/音符块看起来是一体的。
     const pedalTh = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
 
-    // 长音色带固定置于所有手击鼓面之后；头部仍按自身飞行纵深排序。
-    // 避免一条跨越多个纵深的色带整体盖在高通等前景鼓面上。
+    // 长音色带按所属层的纵深排序：踏板色带在地面层，被所有空中鼓面实心遮挡；
+    // 手击鼓的色带按自身高度参与排序。取头部纵深再退让 ε，保证头部压在色带上。
     if (hold) {
       items.push({
-        depth: 0.3,
+        depth: noteDepth(anchor, y / h, p) - 0.0005,
         draw: () => {
         ctx.save();
         ctx.globalAlpha = alpha;
@@ -467,8 +487,8 @@ function noteItems(
     }
 
     items.push({
-      // 同深度时头部压在鼓盘上层（+ε），保证判定点处可见
-      depth: y / h + 0.0015,
+      // 空中层：按自身高度 +ε 压在同深度鼓盘上层；地面层（踏板）：贴地穿过鼓件下方
+      depth: noteDepth(anchor, y / h, p),
       draw: () => {
         ctx.save();
         ctx.globalAlpha = alpha;
@@ -1028,7 +1048,8 @@ function chordItems(
     group.sort((a, b) => a.x - b.x);
     const alpha = (0.05 + 0.13 * progress) * Math.min(1, progress * 6);
     const pts = group;
-    const depth = pts.reduce((m, pt) => Math.max(m, pt.y), 0) / h - 0.0005;
+    // 连线只是辅助提示，取「最远端」的纵深：跨越踏板等远层时不会整体浮在前景鼓面上
+    const depth = pts.reduce((m, pt) => Math.min(m, pt.y), Infinity) / h - 0.002;
     items.push({
       depth,
       draw: () => {
@@ -1179,13 +1200,13 @@ function drawStick(
   const pitch = clamp(pose.p / STICK_PITCH_RANGE);
   const color = STICK_COLORS[side];
 
-  // 棒尖落点：偏航 → 横向，俯仰 → 纵向（抬头往上）
-  // 横向与鼓盘锚点同一坐标系（16:9 参考宽），保证吸附点与鼓面一致
+  // 棒尖落点：按宿主标定的真实鼓面角度分区映射（stickMapping），
+  // 横向与鼓盘锚点同一坐标系（16:9 参考宽），角度落在某分区即落在该鼓面上
   const rw = refWidth(w, h);
   const toX = (nx: number) => w / 2 + (nx - 0.5) * rw;
-  const calibrated = calibratedPoint(pose, side);
-  const tipX = toX(calibrated?.x ?? 0.5 + yaw * STICK_X_SPREAD);
-  const tipY = (calibrated?.y ?? STICK_Y_CENTER - pitch * STICK_Y_SPREAD) * h;
+  const point = stickPoint(pose);
+  const tipX = toX(point.x);
+  const tipY = point.y * h;
 
   // 棒身方向：由屏幕下方玩家手部指向棒尖，左右手各自外偏
   const handX = toX(side === "l" ? 0.3 : 0.7) + yaw * 0.06 * rw;
