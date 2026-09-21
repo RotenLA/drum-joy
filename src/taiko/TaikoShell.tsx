@@ -132,6 +132,7 @@ function ShellInner() {
           </section>
         )}
       </main>
+      <DeviceToast />
       <Toaster position="top-center" />
     </div>
   );
