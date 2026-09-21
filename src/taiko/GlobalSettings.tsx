@@ -146,7 +146,7 @@ export function GlobalSettings({
     const off = midiManager.onNote((note, vel, atMs) => {
       const run = runRef.current;
       const part = partOfNote(note);
-      if (kitOnRef.current && part) playDrum(part, vel);
+      if (kitOnRef.current && part) playDrum(part, vel, undefined, note);
       if (!run) return;
       run.taps.push(atMs);
       setTaps(run.taps.length);

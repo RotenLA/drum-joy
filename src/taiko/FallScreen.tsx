@@ -179,11 +179,11 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
 
   // 击打：鼓音色 + 闪光 + 命中判定（空击只出声闪光，不惩罚）
   const hitPart = useCallback(
-    (part: PartId, atMs?: number, velocity = 100) => {
+    (part: PartId, atMs?: number, velocity = 100, note?: number) => {
       const now = performance.now();
       const at = atMs !== undefined && Number.isFinite(atMs) ? atMs : now;
       flashesRef.current[part] = now + FLASH_MS;
-      if (kitOnRef.current) playDrum(part, velocity);
+      if (kitOnRef.current) playDrum(part, velocity, undefined, note);
 
       if (phaseRef.current !== "playing" || !playChart) return;
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
@@ -226,7 +226,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       const part = partOfNote(note);
       if (!part) return;
       if (part === "pedalHat") pedalHeldRef.current = true;
-      if (parts.includes(part)) hitPart(part, atMs, vel);
+      if (parts.includes(part)) hitPart(part, atMs, vel, note);
     });
 
     const offUp = midiManager.onNoteOff((note) => {

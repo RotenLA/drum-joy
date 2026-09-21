@@ -11,6 +11,41 @@ import { KIT_SAMPLES } from "./kitSamples";
 const KEY = "taiko.kit.v1";
 const KIT_ID_KEY = "taiko.kit.id.v1";
 
+/**
+ * 原始 MIDI 键位的响度修正（dB）。截图未列出的键位按 0 dB 处理；
+ * 此后所有鼓声还会统一衰减 3 dB。
+ */
+export const NOTE_ATTENUATION_DB: Readonly<Record<number, number>> = {
+  36: 0,
+  37: -9,
+  38: -3,
+  39: -3,
+  40: -3,
+  41: -6,
+  42: -12,
+  43: -6,
+  44: -12,
+  45: -6,
+  46: -9,
+  47: -6,
+  48: -6,
+  49: -9,
+  50: -6,
+  51: -9,
+  53: -3,
+  54: -9,
+  55: -3,
+  56: -6,
+};
+
+const ALL_DRUMS_ATTENUATION_DB = -3;
+const dbToGain = (db: number) => 10 ** (db / 20);
+
+export function drumGainForNote(note?: number): number {
+  const noteDb = note === undefined ? 0 : (NOTE_ATTENUATION_DB[note] ?? 0);
+  return dbToGain(noteDb + ALL_DRUMS_ATTENUATION_DB);
+}
+
 /** 9 套鼓组（来自 PD2U 音色库 preset 0~8） */
 export const KIT_NAMES: { id: number; zh: string; en: string }[] = [
   { id: 0, zh: "Pop 流行", en: "Pop" },
@@ -211,11 +246,12 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * 触发一次鼓音色。
  * @param part 鼓件
  * @param velocity MIDI 力度 1~127（键盘触发默认 100）
+ * @param note 原始 MIDI 键位，用于逐键位响度衰减
  */
-export function playDrum(part: PartId, velocity = 100, kitId?: number): void {
+export function playDrum(part: PartId, velocity = 100, kitId?: number, note?: number): void {
   const ctx = getAudioContext();
   const t = ctx.currentTime + 0.001;
-  const v = Math.max(0.25, Math.min(1, velocity / 110));
+  const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
 
   if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
 
