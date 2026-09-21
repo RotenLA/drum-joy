@@ -50,7 +50,6 @@ export function ChartScreen({
       for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
       setPlaying(false);
       setPosMs(0);
-      setMetroOn(false);
       song.setSong({
         stems: loaded.stems,
         midi: loaded.midi,
