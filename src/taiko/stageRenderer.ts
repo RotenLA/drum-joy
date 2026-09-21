@@ -491,8 +491,8 @@ function noteItems(
     }
 
     items.push({
-      // 同深度时头部压在鼓盘上层（+ε），保证判定点处可见
-      depth: y / h + 0.0015,
+      // 空中层：按自身高度 +ε 压在同深度鼓盘上层；地面层（踏板）：贴地穿过鼓件下方
+      depth: noteDepth(anchor, y / h, p),
       draw: () => {
         ctx.save();
         ctx.globalAlpha = alpha;
