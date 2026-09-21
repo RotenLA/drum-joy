@@ -1052,7 +1052,8 @@ function chordItems(
     group.sort((a, b) => a.x - b.x);
     const alpha = (0.05 + 0.13 * progress) * Math.min(1, progress * 6);
     const pts = group;
-    const depth = pts.reduce((m, pt) => Math.max(m, pt.y), 0) / h - 0.0005;
+    // 连线只是辅助提示，取「最远端」的纵深：跨越踏板等远层时不会整体浮在前景鼓面上
+    const depth = pts.reduce((m, pt) => Math.min(m, pt.y), Infinity) / h - 0.002;
     items.push({
       depth,
       draw: () => {
