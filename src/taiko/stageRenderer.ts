@@ -20,7 +20,14 @@ import {
 } from "./laneLayouts";
 import { quality } from "./perf";
 import { calibratedPoint } from "./stickCalibration";
-import { padSprite, pedalSprite, preloadPadSprites, stageBgSprite } from "./padSprites";
+import {
+  padSprite,
+  padSpriteHit,
+  padSpriteMeta,
+  pedalSprite,
+  preloadPadSprites,
+  stageBgSprite,
+} from "./padSprites";
 
 if (typeof document !== "undefined") preloadPadSprites();
 
