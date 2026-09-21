@@ -5,21 +5,16 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useSong } from "./songStore";
-import { analyzeMidi } from "./difficulty";
 import { clearChartCache, getPlayChart } from "./chartCache";
-import { DIFFICULTIES } from "./difficulty";
-import { countByPart } from "./midiChart";
 import { shiftChart } from "@/shared/taikoChart";
-import { DRUM_PARTS, PART_BY_ID, VISIBLE_PARTS, partLabel } from "./laneLayouts";
-import { layoutOf } from "./difficulty";
 import { PRESET_SONGS, loadPresetSong, type PresetSong } from "./presetSongs";
 import { songPlayer } from "./player";
-import { Metronome } from "./metronome";
-import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs, stemsLeadMs } from "./stems";
+import { STEM_KINDS, hasAnyStem, stemsDurationMs, stemsLeadMs } from "./stems";
 import { GlobalSettings } from "./GlobalSettings";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
 import { useLanguage } from "./i18n";
+
 
 export function ChartScreen({
   speed,
@@ -37,7 +32,6 @@ export function ChartScreen({
   const [warn, setWarn] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [posMs, setPosMs] = useState(0);
-  const [metroOn, setMetroOn] = useState(false);
 
   // ---- 选歌：下载 + 解码，只对外给一个百分比 ----
   const pickSong = async (preset: PresetSong) => {
@@ -122,13 +116,6 @@ export function ChartScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chart]);
 
-  const counts = useMemo(() => (chart ? countByPart(chart) : null), [chart]);
-
-  // ---- 拆解结果（小节数 / 相位 / 过门小节） ----
-  const analysis = useMemo(
-    () => (song.midi ? analyzeMidi(song.midi, song.phaseBeatOffset) : null),
-    [song.midi, song.phaseBeatOffset],
-  );
 
   // ---- 播放 ----
   useEffect(() => {
@@ -152,18 +139,6 @@ export function ChartScreen({
     }
   };
 
-  // ---- 节拍器 ----
-  useEffect(() => {
-    if (!metroOn) return;
-    const m = new Metronome();
-    m.start({
-      bpm: song.bpm,
-      beatsPerBar: song.timeSignature[0] * (4 / song.timeSignature[1]),
-      offsetMs: song.offsetMs,
-      getPositionMs: () => (songPlayer.playing ? songPlayer.timeMs() : null),
-    });
-    return () => m.stop();
-  }, [metroOn, song.bpm, song.timeSignature, song.offsetMs]);
 
   const fmtTime = (ms: number) => {
     const s = Math.max(0, Math.floor(ms / 1000));
@@ -192,12 +167,16 @@ export function ChartScreen({
               disabled={loadingId !== null}
               className={`relative overflow-hidden border px-3 py-2 text-left text-sm transition-colors disabled:opacity-60 ${
                 active
-                  ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)]/10"
-                  : "border-[var(--taiko-line)] hover:border-[var(--taiko-ink)]"
+                  ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)]/15 text-[var(--taiko-accent)]"
+                  : "border-[var(--taiko-line)] hover:border-[var(--taiko-accent)]"
               }`}
             >
               <span className="relative z-10 block truncate">{p.title}</span>
-              <span className="relative z-10 block text-xs tabular-nums text-[var(--taiko-ink)]/50">
+              <span
+                className={`relative z-10 block text-xs tabular-nums ${
+                  active ? "text-[var(--taiko-accent)]/80" : "text-[var(--taiko-ink)]/50"
+                }`}
+              >
                 {busyThis
                   ? `${percent}%`
                   : active
@@ -206,10 +185,11 @@ export function ChartScreen({
               </span>
               {busyThis && (
                 <span
-                  className="absolute inset-y-0 left-0 bg-[var(--taiko-ink)]/15 transition-[width] duration-200"
+                  className="absolute inset-y-0 left-0 bg-[var(--taiko-accent)]/25 transition-[width] duration-200"
                   style={{ width: `${percent}%` }}
                 />
               )}
+
             </button>
           );
         })}
@@ -220,7 +200,8 @@ export function ChartScreen({
   if (!song.midi && !hasAnyStem(song.stems)) {
     return (
       <div className="flex flex-col gap-6">
-        <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} />
+        <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} onRegenerate={regenerate} />
+
         {songList}
       </div>
     );
@@ -230,7 +211,7 @@ export function ChartScreen({
 
   return (
     <div className="flex flex-col gap-6">
-      <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} />
+      <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} onRegenerate={regenerate} />
       {songList}
 
       {/* 当前歌曲信息：时长 + 速度 + 拍号 */}
