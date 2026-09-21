@@ -7,6 +7,8 @@
  * 音符从顶部收束段沿车道滑向鼓盘，鼓盘即判定落点。
  */
 
+import { localize, type Language } from "./i18n";
+
 export type PartId =
   "pedalHat" | "kick" | "hihat" | "crash" | "snare" | "highTom" | "midTom" | "floorTom" | "ride";
 
@@ -34,7 +36,7 @@ export const DRUM_PARTS: readonly DrumPart[] = [
 
 /** 按当前语言取鼓件名 */
 export function partLabel(part: DrumPart, language: string): string {
-  return language === "en" ? part.labelEn : part.label;
+  return localize(language as Language, part.label, part.labelEn);
 }
 
 export const PART_BY_ID = Object.fromEntries(DRUM_PARTS.map((p) => [p.id, p])) as Record<

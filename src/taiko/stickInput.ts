@@ -23,8 +23,11 @@ export interface StickSnapshot {
   at: number;
 }
 
-/** 快照过期时间（毫秒）：宿主停止推送后鼓棒淡出消失 */
-export const STICK_STALE_MS = 300;
+/**
+ * 快照过期时间（毫秒）：宿主停止推送即视为停流，鼓棒消失。
+ * 源数据约 25Hz，接口约定「>1s 无调用 = 停流」，故取 1000。
+ */
+export const STICK_STALE_MS = 1000;
 
 const clampAngle = (v: unknown): number | null => {
   const n = typeof v === "number" ? v : Number(v);

@@ -1,3 +1,5 @@
+import { localize, type Language } from "./i18n";
+
 /** 各参数的中文说明（问号气泡内容），集中在这里方便调整文案 */
 export const HELP: Record<string, string> = {
   // 谱面屏
@@ -62,5 +64,7 @@ export const HELP_EN: Record<string, string> = {
 
 /** 按当前语言取说明文案 */
 export function helpText(key: string, language: string): string {
-  return (language === "en" ? HELP_EN[key] : HELP[key]) ?? HELP[key] ?? "";
+  const zh = HELP[key];
+  if (!zh) return "";
+  return localize(language as Language, zh, HELP_EN[key] ?? zh);
 }
