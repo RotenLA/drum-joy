@@ -1,5 +1,8 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
+import { debugLog } from "./debugLog";
+
+
 import { dict as dictZhTW } from "./locales/zh-TW";
 import { dict as dictJa } from "./locales/ja";
 import { dict as dictKo } from "./locales/ko";
@@ -72,14 +75,20 @@ const TITLES: Partial<Record<Language, string>> = {
 export function LanguageProvider({ children }: { children: ReactNode }) {
   // 语言由宿主通过 URL 决定，运行期不切换
   const language = useMemo(() => {
+    const raw =
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("lang");
     const lang = readLanguageFromUrl();
     activeLanguage = lang;
     if (typeof document !== "undefined") {
       document.documentElement.lang = lang;
       document.title = TITLES[lang] ?? "PD2U AeroGame — Air Drum Studio";
     }
+    debugLog.push("system", `语言 ?lang=${raw ?? "(未指定)"} → ${lang}`);
     return lang;
   }, []);
+
 
   const value = useMemo<LanguageValue>(
     () => ({ language, tr: (zh, en) => localize(language, zh, en) }),

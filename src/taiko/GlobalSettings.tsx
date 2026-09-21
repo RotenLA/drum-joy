@@ -30,6 +30,8 @@ import {
 import { midiManager } from "./midiInput";
 import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
+import { useSong } from "./songStore";
+import { DIFFICULTIES } from "./difficulty";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const CALIB_TARGET = 8;
@@ -37,11 +39,15 @@ const CALIB_TARGET = 8;
 export function GlobalSettings({
   speed,
   onSpeedChange,
+  onRegenerate,
 }: {
   speed: number;
   onSpeedChange: (s: number) => void;
+  onRegenerate?: () => void;
 }) {
   const { tr, language } = useLanguage();
+  const song = useSong();
+
 
   // ---- 画质 ----
   const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
@@ -249,6 +255,36 @@ export function GlobalSettings({
           </label>
         ))}
       </div>
+
+      {/* 难度（全局，紧跟偏移设置） */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 flex items-center gap-1 text-xs text-[var(--taiko-ink)]/70">
+          {tr("难度", "Difficulty")}
+          <HelpDot label={tr("难度", "Difficulty")} text={helpText("difficulty", language)} />
+        </span>
+        {DIFFICULTIES.map((d) => (
+          <button
+            key={d.id}
+            onClick={() => song.setSong({ difficulty: d.id })}
+            className={`-ml-px border px-3 py-1 text-xs transition-colors first:ml-0 ${
+              song.difficulty === d.id
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+            }`}
+          >
+            {tr(d.label, d.labelEn)}
+          </button>
+        ))}
+        {onRegenerate && (
+          <button
+            onClick={onRegenerate}
+            className="ml-2 border border-[var(--taiko-line)] px-3 py-1 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+          >
+            {tr("重新生成谱面", "Regenerate chart")}
+          </button>
+        )}
+      </div>
+
 
       <div className="flex flex-wrap items-center gap-3">
         <button

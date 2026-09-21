@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { deviceState, type DeviceEvent, type DeviceKey } from "./deviceState";
+import { debugLog } from "./debugLog";
+
 import { useLanguage } from "./i18n";
 
 /** 每条提示显示时长（毫秒） */
@@ -15,11 +17,13 @@ export function DeviceToast() {
 
   useEffect(() => {
     const off = deviceState.onEvent((e) => {
+      debugLog.push("system", `弹窗提示 ${e.d} ${e.c ? "已连接" : "已断开"}`);
       setItems((list) => [...list, e]);
       window.setTimeout(() => setItems((list) => list.filter((i) => i.at !== e.at)), SHOW_MS);
     });
     return off;
   }, []);
+
 
   const ZH: Record<DeviceKey, string> = {
     m: "适配器",
