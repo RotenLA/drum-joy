@@ -100,9 +100,62 @@ export function getActiveLanguage(): Language {
   return activeLanguage;
 }
 
+/**
+ * 带变量的文案（字典键里写成 ${xxx}）在运行期已经被插值成实际文字，
+ * 无法直接命中字典。这里把这类键编译成正则，按占位符名字回填。
+ */
+interface DynEntry {
+  re: RegExp;
+  names: string[];
+  out: string;
+}
+const DYN_CACHE = new Map<Language, DynEntry[]>();
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function dynEntries(language: Language): DynEntry[] {
+  const cached = DYN_CACHE.get(language);
+  if (cached) return cached;
+  const list: DynEntry[] = [];
+  const dict = DICTS[language] ?? {};
+  for (const [key, value] of Object.entries(dict)) {
+    if (!key.includes("${")) continue;
+    const names: string[] = [];
+    let pattern = "";
+    let last = 0;
+    for (const m of key.matchAll(/\$\{([^}]*)\}/g)) {
+      pattern += escapeRe(key.slice(last, m.index));
+      pattern += "(.+?)";
+      names.push(m[1]!);
+      last = m.index + m[0].length;
+    }
+    pattern += escapeRe(key.slice(last));
+    list.push({ re: new RegExp(`^${pattern}$`, "s"), names, out: value });
+  }
+  DYN_CACHE.set(language, list);
+  return list;
+}
+
+function localizeDynamic(language: Language, zh: string): string | null {
+  for (const entry of dynEntries(language)) {
+    const m = entry.re.exec(zh);
+    if (!m) continue;
+    let out = entry.out;
+    entry.names.forEach((name, i) => {
+      out = out.split(`\${${name}}`).join(m[i + 1] ?? "");
+    });
+    // 译文里占位符写法不一致时，按出现顺序兜底替换
+    let i = 0;
+    out = out.replace(/\$\{[^}]*\}/g, () => m[++i] ?? "");
+    return out;
+  }
+  return null;
+}
+
 /** 语言 + 中/英原文 → 目标语言文案 */
 export function localize(language: Language, zh: string, en: string): string {
   if (language === "zh-CN") return zh;
   if (language === "en") return en;
-  return DICTS[language]?.[zh] ?? en;
+  const dict = DICTS[language];
+  if (!dict) return en;
+  return dict[zh] ?? localizeDynamic(language, zh) ?? en;
 }
