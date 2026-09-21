@@ -279,14 +279,18 @@ function buildBackground(w: number, h: number, scale: number) {
 export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: number) {
   if (typeof document === "undefined") return;
 
-  // 实拍舞台背景：等比裁切铺满，再压暗一层保证鼓面/音符对比度
+  // 实拍舞台背景：等比裁切铺满，轻微虚化并压暗，保证鼓面/音符对比度
   const bg = stageBgSprite();
   if (bg) {
     const s = Math.max(w / bg.naturalWidth, h / bg.naturalHeight);
     const dw = bg.naturalWidth * s;
     const dh = bg.naturalHeight * s;
-    ctx.drawImage(bg, (w - dw) / 2, (h - dh) / 2, dw, dh);
-    ctx.fillStyle = "rgba(6,6,9,0.42)";
+    const bleed = 7;
+    ctx.save();
+    ctx.filter = "blur(4px)";
+    ctx.drawImage(bg, (w - dw) / 2 - bleed, (h - dh) / 2 - bleed, dw + bleed * 2, dh + bleed * 2);
+    ctx.restore();
+    ctx.fillStyle = "rgba(6,6,9,0.5)";
     ctx.fillRect(0, 0, w, h);
     return;
   }
@@ -422,45 +426,53 @@ function noteItems(
     // 长音符色带沿同一朝向取宽度方向，才和踏板/音符块看起来是一体的。
     const pedalTh = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
 
+    // 长音色带固定置于所有手击鼓面之后；头部仍按自身飞行纵深排序。
+    // 避免一条跨越多个纵深的色带整体盖在高通等前景鼓面上。
+    if (hold) {
+      items.push({
+        depth: 0.3,
+        draw: () => {
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.shadowColor = color;
+        let ux: number;
+        let uy: number;
+        if (anchor.square) {
+          ux = Math.cos(pedalTh);
+          uy = 0.42 * Math.sin(pedalTh);
+        } else {
+          ux = Math.cos(pad.rot);
+          uy = 0.42 * Math.sin(pad.rot);
+        }
+        const ul = Math.hypot(ux, uy) || 1;
+        ux /= ul;
+        uy /= ul;
+        const wh = head.rx * 0.9;
+        const wt = tail.rx * 0.9;
+        ctx.shadowBlur = GLOW ? 14 * scale : 0;
+        ctx.fillStyle = hexToRgba(color, 0.28);
+        ctx.strokeStyle = hexToRgba(color, 0.75);
+        ctx.lineWidth = Math.max(1, rx * 0.08);
+        ctx.beginPath();
+        ctx.moveTo(tail.x + ux * wt, tail.y + uy * wt);
+        ctx.lineTo(head.x + ux * wh, head.y + uy * wh);
+        ctx.lineTo(head.x - ux * wh, head.y - uy * wh);
+        ctx.lineTo(tail.x - ux * wt, tail.y - uy * wt);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        },
+      });
+    }
+
     items.push({
-      // 同深度时音符压在鼓盘上层（+ε），保证判定点处不被自己的鼓面吃掉
+      // 同深度时头部压在鼓盘上层（+ε），保证判定点处可见
       depth: y / h + 0.0015,
       draw: () => {
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.shadowColor = color;
-
-        // 长音符：先画一条从尾端连到头部的色带（左踏板「一直踩住」）
-        if (hold) {
-          // 宽度方向：局部 x 轴 (1,0) 经 rotate(th) → scale(1,0.42) 后的屏幕方向
-          let ux: number;
-          let uy: number;
-          if (anchor.square) {
-            ux = Math.cos(pedalTh);
-            uy = 0.42 * Math.sin(pedalTh);
-          } else {
-            ux = Math.cos(pad.rot);
-            uy = 0.42 * Math.sin(pad.rot);
-          }
-          const ul = Math.hypot(ux, uy) || 1;
-          ux /= ul;
-          uy /= ul;
-          const wh = head.rx * 0.9;
-          const wt = tail.rx * 0.9;
-          ctx.shadowBlur = GLOW ? 14 * scale : 0;
-          ctx.fillStyle = hexToRgba(color, 0.28);
-          ctx.strokeStyle = hexToRgba(color, 0.75);
-          ctx.lineWidth = Math.max(1, rx * 0.08);
-          ctx.beginPath();
-          ctx.moveTo(tail.x + ux * wt, tail.y + uy * wt);
-          ctx.lineTo(head.x + ux * wh, head.y + uy * wh);
-          ctx.lineTo(head.x - ux * wh, head.y - uy * wh);
-          ctx.lineTo(tail.x - ux * wt, tail.y - uy * wt);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
-        }
-
         if (headVisible) {
           ctx.translate(x, y);
           ctx.shadowBlur = GLOW ? 18 * scale : 0;
@@ -906,6 +918,7 @@ function drawCueOutline(
 
   const anchor = PAD_ANCHORS[partId];
   const pad = geomOf(partId, w, h);
+  const spriteMeta = padSpriteMeta(partId);
   const color = PART_BY_ID[partId].color;
   ctx.save();
   ctx.translate(pad.cx, pad.cy);
@@ -924,7 +937,8 @@ function drawCueOutline(
     ctx.roundRect(-r, -r, r * 2, r * 2, r * 0.24);
     ctx.restore();
   } else {
-    ctx.ellipse(0, 0, pad.rx * scale, pad.ry * scale, pad.rot, 0, Math.PI * 2);
+    const ringAngle = spriteMeta ? (spriteMeta.ringAngleDeg * Math.PI) / 180 : pad.rot;
+    ctx.ellipse(0, 0, pad.rx * scale, pad.ry * scale, ringAngle, 0, Math.PI * 2);
   }
   ctx.stroke();
   ctx.restore();

@@ -38,27 +38,31 @@ export interface PadSpriteMeta {
   /** 彩圈中心相对图片中心的偏移（以彩圈宽 / 高为单位） */
   offX: number;
   offY: number;
+  /** 素材内彩圈长轴相对水平线的实际角度（度），供判定缩圈精确贴合 */
+  ringAngleDeg: number;
 }
 
 const PAD_SPRITES: Partial<Record<PartId, PadSpriteMeta>> = {
-  crash: { url: crash.url, hitUrl: crashHit.url, ringFrac: 0.89, offX: 0.008, offY: -0.056 },
-  ride: { url: ride.url, hitUrl: rideHit.url, ringFrac: 0.835, offX: -0.002, offY: -0.035 },
-  hihat: { url: hihat.url, hitUrl: hihatHit.url, ringFrac: 0.828, offX: 0.008, offY: -0.054 },
-  snare: { url: snare.url, hitUrl: snareHit.url, ringFrac: 0.788, offX: -0.015, offY: -0.053 },
+  crash: { url: crash.url, hitUrl: crashHit.url, ringFrac: 0.89, offX: 0.008, offY: -0.056, ringAngleDeg: 9.7 },
+  ride: { url: ride.url, hitUrl: rideHit.url, ringFrac: 0.835, offX: -0.002, offY: -0.035, ringAngleDeg: -11.2 },
+  hihat: { url: hihat.url, hitUrl: hihatHit.url, ringFrac: 0.828, offX: 0.008, offY: -0.054, ringAngleDeg: 9.6 },
+  snare: { url: snare.url, hitUrl: snareHit.url, ringFrac: 0.788, offX: -0.015, offY: -0.053, ringAngleDeg: 0.2 },
   highTom: {
     url: highTom.url,
     hitUrl: highTomHit.url,
     ringFrac: 0.787,
     offX: -0.016,
     offY: -0.035,
+    ringAngleDeg: 0.3,
   },
-  midTom: { url: midTom.url, hitUrl: midTomHit.url, ringFrac: 0.787, offX: -0.011, offY: -0.035 },
+  midTom: { url: midTom.url, hitUrl: midTomHit.url, ringFrac: 0.787, offX: -0.011, offY: -0.035, ringAngleDeg: 0.4 },
   floorTom: {
     url: floorTom.url,
     hitUrl: floorTomHit.url,
     ringFrac: 0.824,
     offX: -0.002,
     offY: -0.043,
+    ringAngleDeg: -5.1,
   },
 };
 
