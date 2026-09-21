@@ -127,23 +127,63 @@ const angleDelta = (a: number, b: number) => {
 const poseDistance = (a: StickPose, b: StickPose) =>
   Math.hypot(a.p - b.p, angleDelta(a.y, b.y));
 
+const clamp01 = (v: number) => Math.max(0.03, Math.min(0.97, v));
+
+/** 与 stageRenderer 的默认映射保持一致的兜底（无拟合数据时使用） */
+const DEFAULT_YAW_RANGE = 30;
+const DEFAULT_PITCH_UP = 30;
+const DEFAULT_PITCH_DOWN = 20;
+const DEFAULT_X_SPREAD = 0.4;
+const DEFAULT_Y_CENTER = 0.5;
+const DEFAULT_Y_SPREAD = 0.26;
+
+function defaultPoint(pose: StickPose): { x: number; y: number } {
+  const yaw = Math.max(-1, Math.min(1, pose.y / DEFAULT_YAW_RANGE));
+  const pitch = Math.max(
+    -1,
+    Math.min(1, pose.p >= 0 ? pose.p / DEFAULT_PITCH_UP : pose.p / DEFAULT_PITCH_DOWN),
+  );
+  return { x: 0.5 + yaw * DEFAULT_X_SPREAD, y: DEFAULT_Y_CENTER - pitch * DEFAULT_Y_SPREAD };
+}
+
 /**
- * 用每个鼓面的实测姿态做最近邻柔和吸附。
+ * 双轴（yaw→X、pitch→Y）仿射基底：用玩家实测的所有鼓面姿态最小二乘拟合出
+ * 零点偏置与增益，使横向、纵向同时按个人坐姿/持棒高度归位。
+ * 拟合点不足或数值异常时退回默认线性映射，保证不会出现坐标跳变。
+ */
+function affineBase(
+  calibration: StickCalibrationFile,
+  side: StickSide,
+  pose: StickPose,
+): { x: number; y: number } {
+  const fit = calibration.fit[side] ?? fitSide(calibration.groups, side);
+  if (!fit) return defaultPoint(pose);
+  const row = [1, pose.y, pose.p];
+  const x = row.reduce((v, n, i) => v + n * (fit.x[i] ?? 0), 0);
+  const y = row.reduce((v, n, i) => v + n * (fit.y[i] ?? 0), 0);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return defaultPoint(pose);
+  // 拟合结果允许略微越出鼓阵，但不许飞到画面外
+  return { x: Math.max(-0.15, Math.min(1.15, x)), y: Math.max(-0.15, Math.min(1.15, y)) };
+}
+
+/**
+ * 校准后的棒尖落点：双轴仿射基底 + 最近鼓面柔和吸附。
  *
- * 与仿射拟合不同，这里不会让少量角度误差把棒尖推到鼓阵之外：接近某个
- * 已采鼓面时才逐渐靠向其中心，离所有鼓面较远时仍沿用默认连续映射。
- * 切换鼓面保留 2° 滞后，避免在两个相邻采集中心之间快速抖动。
+ * 基底本身已由实测数据拟合，因此离开吸附范围时只是权重归零，
+ * 不再切换到另一套写死公式，纵向不会出现跳变。
  */
 export function calibratedPoint(pose: StickPose, side: StickSide): { x: number; y: number } | null {
   const calibration = loadStickCalibration();
   if (!calibration) return null;
+
+  const base = affineBase(calibration, side, pose);
 
   const candidates = CAPTURE_PARTS.flatMap((part) => {
     const group = calibration.groups[part]?.[side];
     return group ? [{ part, distance: poseDistance(pose, group.median) }] : [];
   }).sort((a, b) => a.distance - b.distance);
   const nearest = candidates[0];
-  if (!nearest) return null;
+  if (!nearest) return { x: clamp01(base.x), y: clamp01(base.y) };
 
   const previousPart = stickyPart[side];
   const previous = previousPart
@@ -154,12 +194,8 @@ export function calibratedPoint(pose: StickPose, side: StickSide): { x: number; 
     : nearest;
   stickyPart[side] = selected.part;
 
-  if (selected.distance >= SNAP_OUTER_DEG) return null;
+  if (selected.distance >= SNAP_OUTER_DEG) return { x: clamp01(base.x), y: clamp01(base.y) };
 
-  // 接口约定的常规区间：yaw 左右对称约 ±30°，pitch 约 -20…+30（棒头抬为正）
-  const yaw = Math.max(-1, Math.min(1, pose.y / 30));
-  const pitch = Math.max(-1, Math.min(1, pose.p >= 0 ? pose.p / 30 : pose.p / 20));
-  const base = { x: 0.5 + yaw * 0.4, y: 0.6 - pitch * 0.26 };
   const anchor = calibration.anchors[selected.part] ?? PAD_ANCHORS[selected.part];
   const range = SNAP_OUTER_DEG - SNAP_FULL_DEG;
   const progress = Math.max(0, Math.min(1, (SNAP_OUTER_DEG - selected.distance) / range));
@@ -167,7 +203,8 @@ export function calibratedPoint(pose: StickPose, side: StickSide): { x: number; 
   const weight = SNAP_MAX_WEIGHT * smooth;
 
   return {
-    x: base.x + (anchor.cx - base.x) * weight,
-    y: base.y + (anchor.cy - base.y) * weight,
+    x: clamp01(base.x + (anchor.cx - base.x) * weight),
+    y: clamp01(base.y + (anchor.cy - base.y) * weight),
   };
 }
+

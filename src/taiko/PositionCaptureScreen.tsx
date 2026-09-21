@@ -239,20 +239,53 @@ export function PositionCaptureScreen() {
   const calibration = useMemo(() => makeCalibration(groups), [groups]);
   const save = () => {
     saveStickCalibration(calibration);
-    setStatus(tr("校准已保存，鼓棒会柔和吸附到最接近的鼓面", "Calibration saved — sticks will softly snap to the nearest pad"));
+    const left = ORDER.length - completed;
+    setStatus(
+      left > 0
+        ? tr(
+            `已保存并应用（还有 ${left} 组未采，未采部件沿用默认位置）`,
+            `Saved and applied (${left} group(s) not captured — those pads keep default positions)`,
+          )
+        : tr("校准已保存，鼓棒会柔和吸附到最接近的鼓面", "Calibration saved — sticks will softly snap to the nearest pad"),
+    );
   };
-  const download = () => {
+  const download = async () => {
     const file = makeCalibration(groups);
     saveStickCalibration(file);
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }),
+    const text = JSON.stringify(file, null, 2);
+    let copied = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+    } catch {
+      copied = false;
+    }
+    let downloaded = false;
+    try {
+      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pd2u-stick-calibration-${new Date().toISOString().slice(0, 10)}.json`;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+      downloaded = true;
+    } catch {
+      downloaded = false;
+    }
+    setStatus(
+      copied && downloaded
+        ? tr("已触发下载，同时校准内容已复制到剪贴板", "Download triggered and calibration copied to clipboard")
+        : copied
+          ? tr("内嵌环境无法下载，校准内容已复制到剪贴板", "Download unavailable here — calibration copied to clipboard")
+          : downloaded
+            ? tr("已触发下载（剪贴板不可用）", "Download triggered (clipboard unavailable)")
+            : tr("导出失败：当前环境不允许下载或复制", "Export failed: this environment blocks download and clipboard"),
     );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pd2u-stick-calibration-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
+
   const importFile = async (file?: File) => {
     if (!file) return;
     try {
@@ -387,14 +420,15 @@ export function PositionCaptureScreen() {
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={save}
-            disabled={!done}
+            disabled={completed === 0}
             className="border border-[var(--taiko-ink)] px-3 py-2 text-xs disabled:opacity-30"
           >
             {tr("保存并应用", "Save & apply")}
           </button>
           <button
-            onClick={download}
+            onClick={() => void download()}
             disabled={completed === 0}
+
             className="flex items-center justify-center gap-1 border border-[var(--taiko-line)] px-3 py-2 text-xs disabled:opacity-30"
           >
             <Download size={14} />
