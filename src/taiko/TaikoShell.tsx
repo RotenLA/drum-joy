@@ -48,13 +48,24 @@ export function TaikoShell() {
 function ShellInner() {
   const [screen, setScreen] = useState<ScreenKey>("chart");
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
+  const [devices, setDevices] = useState<DeviceSnapshot | null>(null);
+  const [canExit, setCanExit] = useState(false);
   const song = useSong();
-  const { tr, language, setLanguage } = useLanguage();
+  const { tr, language } = useLanguage();
 
   useEffect(() => {
     try { const raw = localStorage.getItem(SETTINGS_KEY); if (raw) setSettings((s) => ({ ...s, ...(JSON.parse(raw) as Partial<TaikoSettings>) })); } catch { /* 忽略损坏设置 */ }
   }, []);
-  useEffect(() => { installExternalBridge(); installStickBridge(); }, []);
+  useEffect(() => {
+    installExternalBridge();
+    installStickBridge();
+    installDeviceBridge();
+    // mount 后必查一次：初始状态的唯一来源
+    deviceState.query();
+    if (deviceState.available) setDevices(deviceState.state);
+    setCanExit(hostExitAvailable());
+    return deviceState.subscribe((s) => setDevices(s));
+  }, []);
   useEffect(() => { void midiManager.init().then(() => midiManager.select(settings.midiDeviceId)); }, [settings.midiDeviceId]);
   // 鼓声开启时后台预载当前鼓组样本，未就绪前由合成音兜底
   useEffect(() => { if (loadKitEnabled()) void ensureKitLoaded(loadKitId()); }, []);
