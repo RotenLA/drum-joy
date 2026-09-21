@@ -60,7 +60,16 @@ function ShellInner() {
       <nav className="relative flex min-h-0 flex-col border-r border-[var(--taiko-line)] bg-[var(--taiko-paper)]">
         <div className="border-y border-[var(--taiko-line)] px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-lg font-semibold text-[var(--taiko-accent)]">PD2U</div>
+            <button
+              type="button"
+              onClick={exitApp}
+              aria-label={tr("退出", "Exit")}
+              className="flex min-w-0 items-center gap-1.5 border border-[var(--taiko-line)] px-2 py-1 text-xs font-medium text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+            >
+              <LogOut size={13} />
+              <span className="truncate">{tr("退出", "Exit")}</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setLanguage(language === "en" ? "zh-CN" : "en")}
