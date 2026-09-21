@@ -189,10 +189,13 @@ export function GlobalSettings({
           </button>
         ))}
         <span className="text-[10px] text-[var(--taiko-ink)]/45">
-          {tr(
-            `当前实际：${TIER_LABEL[tier]}（卡顿时自动降档）`,
-            `Actual: ${TIER_LABEL_EN[tier]} (auto steps down if it stutters)`,
-          )}
+          {(() => {
+            const name = tr(TIER_LABEL[tier], TIER_LABEL_EN[tier]);
+            return tr(
+              `当前实际：${name}（卡顿时自动降档）`,
+              `Actual: ${name} (auto steps down if it stutters)`,
+            );
+          })()}
         </span>
 
         <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
