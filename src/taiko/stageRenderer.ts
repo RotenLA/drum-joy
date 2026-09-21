@@ -1179,13 +1179,13 @@ function drawStick(
   const pitch = clamp(pose.p / STICK_PITCH_RANGE);
   const color = STICK_COLORS[side];
 
-  // 棒尖落点：偏航 → 横向，俯仰 → 纵向（抬头往上）
-  // 横向与鼓盘锚点同一坐标系（16:9 参考宽），保证吸附点与鼓面一致
+  // 棒尖落点：按宿主标定的真实鼓面角度分区映射（stickMapping），
+  // 横向与鼓盘锚点同一坐标系（16:9 参考宽），角度落在某分区即落在该鼓面上
   const rw = refWidth(w, h);
   const toX = (nx: number) => w / 2 + (nx - 0.5) * rw;
-  const calibrated = calibratedPoint(pose, side);
-  const tipX = toX(calibrated?.x ?? 0.5 + yaw * STICK_X_SPREAD);
-  const tipY = (calibrated?.y ?? STICK_Y_CENTER - pitch * STICK_Y_SPREAD) * h;
+  const point = stickPoint(pose);
+  const tipX = toX(point.x);
+  const tipY = point.y * h;
 
   // 棒身方向：由屏幕下方玩家手部指向棒尖，左右手各自外偏
   const handX = toX(side === "l" ? 0.3 : 0.7) + yaw * 0.06 * rw;
