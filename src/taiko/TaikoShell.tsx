@@ -51,7 +51,7 @@ function ShellInner() {
   const [devices, setDevices] = useState<DeviceSnapshot | null>(null);
   const [canExit, setCanExit] = useState(false);
   const song = useSong();
-  const { tr, language } = useLanguage();
+  const { tr } = useLanguage();
 
   useEffect(() => {
     try { const raw = localStorage.getItem(SETTINGS_KEY); if (raw) setSettings((s) => ({ ...s, ...(JSON.parse(raw) as Partial<TaikoSettings>) })); } catch { /* 忽略损坏设置 */ }
