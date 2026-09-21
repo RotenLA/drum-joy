@@ -1,3 +1,5 @@
+import { localize, type Language } from "./i18n";
+
 /** 各参数的中文说明（问号气泡内容），集中在这里方便调整文案 */
 export const HELP: Record<string, string> = {
   // 谱面屏

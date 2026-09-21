@@ -7,6 +7,8 @@
  * 音符从顶部收束段沿车道滑向鼓盘，鼓盘即判定落点。
  */
 
+import { localize, type Language } from "./i18n";
+
 export type PartId =
   "pedalHat" | "kick" | "hihat" | "crash" | "snare" | "highTom" | "midTom" | "floorTom" | "ride";
 

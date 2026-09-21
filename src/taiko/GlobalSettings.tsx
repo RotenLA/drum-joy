@@ -281,7 +281,7 @@ export function GlobalSettings({
           >
             {KIT_NAMES.map((k) => (
               <option key={k.id} value={k.id}>
-                {language === "en" ? k.en : k.zh}
+                {tr(k.zh, k.en)}
               </option>
             ))}
           </select>
