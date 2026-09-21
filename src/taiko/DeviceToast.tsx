@@ -21,26 +21,24 @@ export function DeviceToast() {
     return off;
   }, []);
 
-  const name = (d: DeviceKey) =>
-    d === "m"
-      ? tr("适配器", "Adapter")
-      : d === "l"
-        ? tr("左鼓棒", "Left stick")
-        : d === "r"
-          ? tr("右鼓棒", "Right stick")
-          : tr("踏板", "Pedal");
-
-  const text = (e: DeviceEvent) => {
-    const zhName =
-      e.d === "m" ? "适配器" : e.d === "l" ? "左鼓棒" : e.d === "r" ? "右鼓棒" : "踏板";
-    const zh = `${zhName}${e.c ? "已连接" : "已断开"}`;
-    const en = `${e.d === "m" ? "Adapter" : e.d === "l" ? "Left stick" : e.d === "r" ? "Right stick" : "Pedal"} ${e.c ? "connected" : "disconnected"}`;
-    const translated = tr(zh, en);
-    // 字典缺词时回落成「名称 + 状态」的组合
-    return translated === zh || translated === en
-      ? translated
-      : `${name(e.d)} ${tr("已连接", "connected")}`;
+  const ZH: Record<DeviceKey, string> = {
+    m: "适配器",
+    l: "左鼓棒",
+    r: "右鼓棒",
+    f: "踏板",
   };
+  const EN: Record<DeviceKey, string> = {
+    m: "Adapter",
+    l: "Left stick",
+    r: "Right stick",
+    f: "Pedal",
+  };
+
+  const text = (e: DeviceEvent) =>
+    tr(
+      `${ZH[e.d]}${e.c ? "已连接" : "已断开"}`,
+      `${EN[e.d]} ${e.c ? "connected" : "disconnected"}`,
+    );
 
   if (items.length === 0) return null;
 

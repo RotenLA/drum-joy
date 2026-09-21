@@ -156,8 +156,9 @@ export function calibratedPoint(pose: StickPose, side: StickSide): { x: number; 
 
   if (selected.distance >= SNAP_OUTER_DEG) return null;
 
-  const yaw = Math.max(-1, Math.min(1, pose.y / 45));
-  const pitch = Math.max(-1, Math.min(1, pose.p / 45));
+  // 接口约定的常规区间：yaw 左右对称约 ±30°，pitch 约 -20…+30（棒头抬为正）
+  const yaw = Math.max(-1, Math.min(1, pose.y / 30));
+  const pitch = Math.max(-1, Math.min(1, pose.p >= 0 ? pose.p / 30 : pose.p / 20));
   const base = { x: 0.5 + yaw * 0.4, y: 0.6 - pitch * 0.26 };
   const anchor = calibration.anchors[selected.part] ?? PAD_ANCHORS[selected.part];
   const range = SNAP_OUTER_DEG - SNAP_FULL_DEG;

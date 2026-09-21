@@ -112,7 +112,8 @@ class MidiManager {
   injectNoteOn(note: number, velocity: number, hostTimeMs?: number): void {
     const n = Math.round(note);
     const v = Math.round(velocity);
-    if (n < 0 || n > 127 || v < 1 || v > 127) return;
+    // 接口约定：note 1-127，velocity 1-127（0 视为静音，忽略）
+    if (n < 1 || n > 127 || v < 1 || v > 127) return;
     const at = this.toLocalTime(hostTimeMs);
     debugLog.push("inject", `注入 note-on  ${n} vel ${v}${partTag(n)}`);
     for (const f of this.noteListeners) f(n, v, at);
@@ -140,7 +141,7 @@ class MidiManager {
   /** 宿主注入 note-off（长音符判定用） */
   injectNoteOff(note: number): void {
     const n = Math.round(note);
-    if (n < 0 || n > 127) return;
+    if (n < 1 || n > 127) return;
     debugLog.push("inject", `注入 note-off ${n}${partTag(n)}`);
     for (const f of this.noteOffListeners) f(n);
   }
