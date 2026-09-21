@@ -723,10 +723,10 @@ function drawPad(
   const p = geomOf(partId, w, h);
 
   if (anchor.square) {
-    // 踏板：实拍贴图（踩下=橙，松开=黑），未加载完退回代码画法
+    // 踏板：官方素材（踩下=橙，松开=黑），未加载完退回代码画法
     const sp = pedalSprite(partId, intensity > 0.02);
     if (sp) {
-      const dw = p.rx * 2.6 * (1 + 0.06 * intensity);
+      const dw = p.rx * 2 * (1 + 0.06 * intensity);
       const dh = (dw * sp.naturalHeight) / sp.naturalWidth;
       ctx.save();
       ctx.translate(p.cx, p.cy);
@@ -749,37 +749,47 @@ function drawPad(
     return;
   }
 
-  // 手击鼓面：实拍贴图（压扁比与车道视角一致），未加载完退回代码画法
+  // 手击鼓面 / 镲片：官方素材按原生比例绘制，彩圈对齐判定锚点；
+  // 命中时交叉淡入「敲击发光」素材，未加载完退回代码画法。
   const sprite = padSprite(partId);
-  if (sprite) {
-    const sc = 1 + 0.08 * intensity;
-    const dw = p.rx * 2.34 * sc;
-    const dh = ((dw * sprite.naturalHeight) / sprite.naturalWidth) * 0.68;
+  const meta = padSpriteMeta(partId);
+  if (sprite && meta) {
+    const sc = 1 + 0.05 * intensity;
+    const ringW = p.rx * 2 * sc;
+    const dw = ringW / meta.ringFrac;
+    const dh = (dw * sprite.naturalHeight) / sprite.naturalWidth;
+    const ox = -meta.offX * ringW;
+    const oy = -meta.offY * ringW * (anchor.ratio ?? 0.42);
     ctx.save();
-    ctx.translate(p.cx, p.cy);
-    ctx.rotate(p.rot);
-    if (GLOW) {
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 8 + 26 * intensity;
-    }
+    ctx.translate(p.cx + ox, p.cy + oy);
     ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
     if (intensity > 0) {
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 0.35 * intensity;
-      ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
+      const hit = padSpriteHit(partId);
+      ctx.globalAlpha = Math.min(1, intensity * 1.2);
+      if (hit) {
+        ctx.drawImage(hit, -dw / 2, -dh / 2, dw, dh);
+      } else {
+        if (GLOW) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 26 * intensity;
+        }
+        ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
+        ctx.shadowBlur = 0;
+      }
       ctx.globalAlpha = 1;
     }
     if (miss > 0) {
-      ctx.shadowBlur = 0;
       ctx.globalAlpha = 0.5 * miss;
       ctx.fillStyle = "rgba(8,8,10,1)";
       ctx.beginPath();
-      ctx.ellipse(0, 0, dw / 2, dh / 2, 0, 0, Math.PI * 2);
+      ctx.ellipse(-ox, -oy, p.rx, p.ry, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
     return;
   }
+
 
 
   const s = 1 + 0.1 * intensity; // 命中回弹
