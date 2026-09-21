@@ -35,8 +35,13 @@ function hostExitAvailable(): boolean {
 /** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等 */
 function exitApp(): void {
   try {
+    const fn = (window as unknown as { __pd2uExit?: () => void }).__pd2uExit;
+    if (typeof fn !== "function") {
+      debugLog.push("system", "__pd2uExit 尚未注入，本次点击忽略");
+      return;
+    }
     debugLog.push("system", "调用 window.__pd2uExit()");
-    (window as unknown as { __pd2uExit?: () => void }).__pd2uExit?.();
+    fn();
   } catch {
     // 宿主未就绪时忽略
   }
