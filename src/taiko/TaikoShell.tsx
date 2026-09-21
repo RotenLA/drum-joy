@@ -71,7 +71,7 @@ function ShellInner() {
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
-              onClick={exitApp}
+              onClick={() => exitApp(() => toast(tr("已通知主程序退出；若仍停留在此页，请用 App 内的返回键。", "Exit signal sent to the host app. If this page stays open, use the app's back button.")))}
               aria-label={tr("退出", "Exit")}
               className="flex min-w-0 items-center gap-1.5 border border-[var(--taiko-line)] px-2 py-1 text-xs font-medium text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
             >
