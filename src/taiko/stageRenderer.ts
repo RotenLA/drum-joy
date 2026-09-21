@@ -20,6 +20,9 @@ import {
 } from "./laneLayouts";
 import { quality } from "./perf";
 import { calibratedPoint } from "./stickCalibration";
+import { padSprite, pedalSprite, preloadPadSprites, stageBgSprite } from "./padSprites";
+
+if (typeof document !== "undefined") preloadPadSprites();
 
 /**
  * 当前帧的画质开关（每帧进入 renderStage / renderPadArray 时刷新）。
