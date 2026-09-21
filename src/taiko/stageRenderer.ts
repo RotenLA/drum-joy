@@ -159,11 +159,19 @@ export function hexToRgba(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+/**
+ * 参考宽：摆位按官方 16:9 参考图标定，画布更宽时只在两侧留白，
+ * 鼓阵本体不被拉宽（角度与间距与参考图一致）。
+ */
+export function refWidth(w: number, h: number) {
+  return Math.min((h * 16) / 9, w);
+}
+
 /** 鼓盘锚点 → 像素几何 */
 function padPixels(a: PadAnchor, w: number, h: number) {
-  const rx = a.r * w;
-  // 同一地板视角：鼓面与平放的踏板共享压扁比 0.42
-  return { cx: a.cx * w, cy: a.cy * h, rx, ry: rx * 0.42 };
+  const rw = refWidth(w, h);
+  const rx = a.r * rw;
+  return { cx: w / 2 + (a.cx - 0.5) * rw, cy: a.cy * h, rx, ry: rx * (a.ratio ?? 0.42) };
 }
 
 /**
@@ -172,9 +180,11 @@ function padPixels(a: PadAnchor, w: number, h: number) {
  */
 function gatePoint(anchor: PadAnchor, w: number, h: number) {
   const g = ROW_GATES[anchor.row]!;
-  const x = (0.5 + (anchor.cx - 0.5) * (g.halfW / PAD_SPREAD)) * w;
+  const rw = refWidth(w, h);
+  const x = w / 2 + (anchor.cx - 0.5) * (g.halfW / PAD_SPREAD) * rw;
   return { x, y: (anchor.cy - TRAVEL_H) * h };
 }
+
 
 /*
  * 鼓盘随车道旋转角在 geomOf() 里按尺寸缓存（长轴垂直于车道，面向消失点）。
