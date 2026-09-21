@@ -11,10 +11,10 @@ export interface Calibration {
   judgeMs: number;
 }
 
-const KEY = "taiko.calib.v4";
+const KEY = "taiko.calib.v5";
 export const CALIB_RANGE = 200;
-/** 实机上最贴手感的一组默认值：视觉 0ms、判定 -35ms */
-export const DEFAULT_CALIBRATION: Calibration = { visualMs: 0, judgeMs: -35 };
+/** 空气鼓输入延迟约 80~100ms，网页端发声链路约 20ms */
+export const DEFAULT_CALIBRATION: Calibration = { visualMs: 90, judgeMs: 20 };
 
 const clamp = (v: number) => Math.max(-CALIB_RANGE, Math.min(CALIB_RANGE, Math.round(v || 0)));
 

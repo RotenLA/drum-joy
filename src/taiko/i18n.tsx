@@ -11,7 +11,7 @@ import { dict as dictDe } from "./locales/de";
 import { dict as dictIt } from "./locales/it";
 import { dict as dictEs } from "./locales/es";
 
-/** 宿主支持的语言码；未识别的码回落 en */
+/** 宿主支持的语言码；未识别的码回落简体中文 */
 export type Language = "zh-CN" | "zh-TW" | "ja" | "fr" | "ko" | "de" | "it" | "es" | "en";
 
 /** URL ?lang= 的取值 → 内部语言码 */
@@ -45,17 +45,17 @@ const DICTS: Partial<Record<Language, Record<string, string>>> = {
 
 /** 宿主用 URL 参数指定语言：?lang=zh / zh-TW / ja / fr / ko / de / it / es / en */
 export function readLanguageFromUrl(): Language {
-  if (typeof window === "undefined") return "en";
+  if (typeof window === "undefined") return "zh-CN";
   try {
     const raw = new URLSearchParams(window.location.search).get("lang");
-    if (!raw) return "en";
-    return ALIASES[raw.trim().toLowerCase()] ?? "en";
+    if (!raw) return "zh-CN";
+    return ALIASES[raw.trim().toLowerCase()] ?? "zh-CN";
   } catch {
-    return "en";
+    return "zh-CN";
   }
 }
 
-let activeLanguage: Language = "en";
+let activeLanguage: Language = "zh-CN";
 
 interface LanguageValue {
   language: Language;

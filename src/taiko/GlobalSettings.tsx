@@ -39,11 +39,9 @@ const CALIB_TARGET = 8;
 export function GlobalSettings({
   speed,
   onSpeedChange,
-  onRegenerate,
 }: {
   speed: number;
   onSpeedChange: (s: number) => void;
-  onRegenerate?: () => void;
 }) {
   const { tr, language } = useLanguage();
   const song = useSong();
@@ -187,7 +185,7 @@ export function GlobalSettings({
             onClick={() => quality.setMode(m)}
             className={`-ml-px border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors first:ml-0 ${
               qualityMode === m
-                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                 : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
             }`}
           >
@@ -215,7 +213,7 @@ export function GlobalSettings({
             onClick={() => onSpeedChange(s)}
             className={`-ml-px border border-[var(--taiko-line)] px-3 py-1 text-xs tabular-nums transition-colors first:ml-0 ${
               speed === s
-                ? "bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                 : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
             }`}
           >
@@ -275,21 +273,17 @@ export function GlobalSettings({
             {tr(d.label, d.labelEn)}
           </button>
         ))}
-        {onRegenerate && (
-          <button
-            onClick={onRegenerate}
-            className="ml-2 border border-[var(--taiko-line)] px-3 py-1 text-xs text-[var(--taiko-ink)]/60 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
-          >
-            {tr("重新生成谱面", "Regenerate chart")}
-          </button>
-        )}
       </div>
 
 
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={calibrating ? finish : startCalibration}
-          className="border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/80 transition-colors hover:border-[var(--taiko-ink)] hover:text-[var(--taiko-ink)]"
+          className={`border px-3 py-1.5 text-xs transition-colors ${
+            calibrating
+              ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+              : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/80 hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+          }`}
         >
           {calibrating
             ? tr(`停止校准（${taps}/${CALIB_TARGET}）`, `Stop calibrating (${taps}/${CALIB_TARGET})`)
@@ -302,7 +296,7 @@ export function GlobalSettings({
           onClick={toggleKit}
           className={`border px-3 py-1.5 text-xs transition-colors ${
             kitOn
-              ? "border-[var(--taiko-ink)] bg-[var(--taiko-ink)] text-[var(--taiko-paper)]"
+              ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
               : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
           }`}
         >
@@ -316,10 +310,14 @@ export function GlobalSettings({
           <select
             value={kitId}
             onChange={(e) => handleKitChange(Number(e.target.value))}
-            className="border border-[var(--taiko-line)] bg-transparent px-2 py-1 text-xs text-[var(--taiko-ink)]"
+            className="border border-[var(--taiko-accent)] bg-[var(--taiko-surface)] px-2 py-1 text-xs text-[var(--taiko-ink)]"
           >
             {KIT_NAMES.map((k) => (
-              <option key={k.id} value={k.id}>
+              <option
+                key={k.id}
+                value={k.id}
+                className="bg-[var(--taiko-surface)] text-[var(--taiko-ink)]"
+              >
                 {tr(k.zh, k.en)}
               </option>
             ))}

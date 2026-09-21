@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useSong } from "./songStore";
-import { clearChartCache, getPlayChart } from "./chartCache";
+import { getPlayChart } from "./chartCache";
 import { shiftChart } from "@/shared/taikoChart";
 import { PRESET_SONGS, loadPresetSong, type PresetSong } from "./presetSongs";
 import { songPlayer } from "./player";
@@ -30,8 +30,6 @@ export function ChartScreen({
   const [percent, setPercent] = useState(0);
   const [ready, setReady] = useState(false);
   const [warn, setWarn] = useState<string | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [posMs, setPosMs] = useState(0);
 
   // ---- 选歌：下载 + 解码，只对外给一个百分比 ----
   const pickSong = async (preset: PresetSong) => {
@@ -48,8 +46,6 @@ export function ChartScreen({
       songPlayer.setLeadMs(leadMs);
       songPlayer.load(loaded.stems);
       for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
-      setPlaying(false);
-      setPosMs(0);
       song.setSong({
         stems: loaded.stems,
         midi: loaded.midi,
@@ -73,10 +69,7 @@ export function ChartScreen({
 
   const audioDurationMs = Math.max(0, stemsDurationMs(song.stems) - song.audioLeadMs);
   const durationMs = audioDurationMs || (song.midi?.durationMs ?? 0);
-  const anyStem = hasAnyStem(song.stems);
-
   // ---- 谱面预览（按当前难度，与游玩共用同一份固化谱面） ----
-  const [chartNonce, setChartNonce] = useState(0);
   const chart = useMemo(() => {
     if (!song.midi) return null;
     return shiftChart(
@@ -91,8 +84,6 @@ export function ChartScreen({
       ),
       song.audioLeadMs,
     );
-    // chartNonce 变化 = 手动「重新生成谱面」
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     song.midi,
     song.fileName,
@@ -100,44 +91,13 @@ export function ChartScreen({
     song.phaseBeatOffset,
     song.difficulty,
     song.audioLeadMs,
-    chartNonce,
   ]);
-
-  const regenerate = () => {
-    if (!song.midi) return;
-    clearChartCache(song.fileName, song.midi);
-    setChartNonce((n) => n + 1);
-  };
 
   useEffect(() => {
     song.setSong({ chart });
     // chart 只随输入变化重建
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chart]);
-
-
-  // ---- 播放 ----
-  useEffect(() => {
-    songPlayer.setOnEnded(() => setPlaying(false));
-    return () => songPlayer.setOnEnded(null);
-  }, []);
-
-  useEffect(() => {
-    if (!playing) return;
-    const t = window.setInterval(() => setPosMs(songPlayer.timeMs()), 250);
-    return () => window.clearInterval(t);
-  }, [playing]);
-
-  const togglePlay = () => {
-    if (songPlayer.playing) {
-      songPlayer.pause();
-      setPlaying(false);
-    } else {
-      songPlayer.play();
-      setPlaying(true);
-    }
-  };
-
 
   const fmtTime = (ms: number) => {
     const s = Math.max(0, Math.floor(ms / 1000));
@@ -170,7 +130,14 @@ export function ChartScreen({
                   : "border-[var(--taiko-line)] hover:border-[var(--taiko-accent)]"
               }`}
             >
-              <span className="relative z-10 block truncate">{p.title}</span>
+              <span className="relative z-10 flex min-w-0 items-baseline justify-between gap-3">
+                <span className="truncate">{p.title}</span>
+                {active && !busyThis && (
+                  <span className="shrink-0 text-xs tabular-nums text-[var(--taiko-accent)]/80">
+                    {fmtTime(durationMs)} · BPM {song.bpm} · {song.timeSignature[0]}/{song.timeSignature[1]}
+                  </span>
+                )}
+              </span>
               <span
                 className={`relative z-10 block text-xs tabular-nums ${
                   active ? "text-[var(--taiko-accent)]/80" : "text-[var(--taiko-ink)]/50"
@@ -199,51 +166,17 @@ export function ChartScreen({
   if (!song.midi && !hasAnyStem(song.stems)) {
     return (
       <div className="flex flex-col gap-6">
-        <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} onRegenerate={regenerate} />
+        <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} />
 
         {songList}
       </div>
     );
   }
 
-  const tempoChanges = song.midi ? Math.max(0, song.midi.tempos.length - 1) : 0;
-
   return (
     <div className="flex flex-col gap-6">
-      <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} onRegenerate={regenerate} />
+      <GlobalSettings speed={speed} onSpeedChange={onSpeedChange} />
       {songList}
-
-      {/* 当前歌曲信息：时长 + 速度 + 拍号 */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border border-[var(--taiko-line)] px-4 py-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">
-            {song.fileName || tr("未命名", "Untitled")}
-          </div>
-          <div className="text-xs tabular-nums text-[var(--taiko-ink)]/50">
-            {fmtTime(durationMs)} · BPM {song.bpm} · {song.timeSignature[0]}/
-            {song.timeSignature[1]}
-            {tempoChanges > 0
-              ? tr(` · ${tempoChanges} 处变速`, ` · ${tempoChanges} tempo changes`)
-              : ""}
-            {anyStem ? "" : tr(" · 无音频（静音试玩）", " · No audio (silent practice)")}
-          </div>
-        </div>
-        <div className="ml-auto flex items-center gap-3">
-          <button
-            onClick={togglePlay}
-            disabled={!anyStem}
-            className="border border-[var(--taiko-accent)] px-4 py-1.5 text-xs text-[var(--taiko-accent)] transition-colors hover:bg-[var(--taiko-accent)] hover:text-[var(--taiko-paper)] disabled:opacity-30"
-          >
-            {playing ? tr("暂停", "Pause") : tr("播放", "Play")}
-          </button>
-          <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
-            {fmtTime(playing ? posMs : songPlayer.timeMs())} / {fmtTime(durationMs)}
-          </span>
-          <span className="text-xs tabular-nums text-[var(--taiko-ink)]/55">
-            {chart ? tr(`${chart.notes.length} 音符`, `${chart.notes.length} notes`) : ""}
-          </span>
-        </div>
-      </div>
     </div>
   );
 }
