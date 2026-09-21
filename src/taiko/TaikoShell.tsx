@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Crosshair, Gamepad2, ListMusic, Settings2, Languages } from "lucide-react";
+import { Crosshair, Gamepad2, ListMusic, Settings2, Languages, LogOut } from "lucide-react";
 import { SongProvider, useSong } from "./songStore";
 import { FallScreen } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
