@@ -180,4 +180,8 @@ export const dict: Record<string, string> = {
   "右鼓棒已断开": "Baguette droite déconnectée",
   "踏板已连接": "Pédale connectée",
   "踏板已断开": "Pédale déconnectée",
+  "适配器": "Adaptateur",
+  "左鼓棒": "Baguette gauche",
+  "右鼓棒": "Baguette droite",
+  "踏板": "Pédale",
 };
