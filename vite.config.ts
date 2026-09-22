@@ -31,7 +31,14 @@ function legacyCssDowngrade(): Plugin {
             // Chrome 90 / Safari 14：覆盖安卓 13 上常见的旧 WebView 内核
             targets: { chrome: 90 << 16, safari: (14 << 16) | (0 << 8), android: 90 << 16 },
           });
-          asset.source = out.code.toString();
+          // color-mix() 同样要 Chrome 111+，给它补一条不带透明度的兜底声明，
+          // 旧内核会丢掉 color-mix 那行、用上前面的纯色，不会变成完全透明。
+          asset.source = out.code
+            .toString()
+            .replace(
+              /([-a-z]+):color-mix\(in oklab,\s*(var\(--[-\w]+\))[^;}]*?\)/g,
+              (m, prop: string, base: string) => `${prop}:${base};${m}`,
+            );
         } catch {
           // 降级失败就保留原样，不影响构建
         }
