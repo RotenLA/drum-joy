@@ -136,7 +136,8 @@ function CrashOverlay() {
     const benign = (text: string) =>
       /Minified React error #(418|421|422|423|425)/.test(text) ||
       /hydrat/i.test(text) ||
-      /did not match/i.test(text);
+      /did not match/i.test(text) ||
+      /ResizeObserver loop (?:limit exceeded|completed with undelivered notifications)/i.test(text);
 
     const report = (text: string) => {
       try {
