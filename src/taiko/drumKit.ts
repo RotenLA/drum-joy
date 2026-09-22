@@ -195,13 +195,50 @@ const voices: Voice[] = [];
 function choke(ctx: AudioContext, v: Voice): void {
   const t = ctx.currentTime;
   try {
+    // 单段快速收尾：不再做多段曲线排程，密集段少给音频线程添活
     v.gain.gain.cancelScheduledValues(t);
-    v.gain.gain.setValueAtTime(Math.max(0.0001, v.gain.gain.value), t);
     v.gain.gain.linearRampToValueAtTime(0.0001, t + CHOKE_SEC);
     v.src.stop(t + CHOKE_SEC + 0.01);
   } catch {
     // 已停止
   }
+}
+
+/**
+ * 音量节点池：每敲一下都 createGain + connect + 回收，在密集段是可观的
+ * 临时对象开销。这里复用固定一批节点，只改增益值。
+ */
+const gainPool: GainNode[] = [];
+
+function takeGain(ctx: AudioContext, value: number): GainNode {
+  const node = gainPool.pop() ?? ctx.createGain();
+  try {
+    node.gain.cancelScheduledValues(ctx.currentTime);
+  } catch {
+    // 忽略
+  }
+  node.gain.value = value;
+  if (node.context !== ctx) {
+    const fresh = ctx.createGain();
+    fresh.gain.value = value;
+    return fresh;
+  }
+  node.connect(bus(ctx));
+  return node;
+}
+
+function recycleGain(node: GainNode): void {
+  try {
+    node.disconnect();
+  } catch {
+    // 忽略
+  }
+  if (gainPool.length < 32) gainPool.push(node);
+}
+
+/** 预建一批音量节点，开演前热起来 */
+function primeGainPool(ctx: AudioContext): void {
+  while (gainPool.length < 16) gainPool.push(ctx.createGain());
 }
 
 function dropVoice(v: Voice): void {
