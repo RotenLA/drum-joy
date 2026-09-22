@@ -75,6 +75,12 @@ export function FpsBadge() {
           <div className="mt-0.5 text-[rgba(255,255,255,0.65)]" title="鼓声：当前同时发声数 / 当前发声提前量">
             AU {jitter.voices} / {jitter.lookahead}ms
           </div>
+          <div
+            className="mt-0.5 text-[rgba(255,255,255,0.65)]"
+            title="发声抖动：音频时钟漂移最大值 / 输出链路延迟"
+          >
+            AUD {jitter.audJitter}ms / {jitter.outLatency}ms
+          </div>
         </>
       ) : null}
     </div>
