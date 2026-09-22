@@ -5,6 +5,7 @@
  * visualMs：音符视觉偏移（正数 = 音符看起来更早到）
  * judgeMs ：判定偏移（正数 = 认为玩家敲得偏晚，把判定窗往后挪）
  */
+import { isAndroid } from "./platform";
 
 export interface Calibration {
   visualMs: number;
@@ -13,23 +14,31 @@ export interface Calibration {
 
 const KEY = "taiko.calib.v5";
 export const CALIB_RANGE = 200;
-/** 空气鼓输入延迟约 80~100ms，网页端发声链路约 20ms */
+/** 桌面 / iOS：空气鼓输入延迟约 80~100ms，网页端发声链路约 20ms */
 export const DEFAULT_CALIBRATION: Calibration = { visualMs: 90, judgeMs: 20 };
+/** 安卓音频管线比 iOS 多 40~50ms 缓冲，开机默认就把这段补上 */
+export const ANDROID_CALIBRATION: Calibration = { visualMs: 110, judgeMs: 65 };
+
+/** 当前平台的默认偏移 */
+export function platformDefaultCalibration(): Calibration {
+  return isAndroid() ? { ...ANDROID_CALIBRATION } : { ...DEFAULT_CALIBRATION };
+}
 
 const clamp = (v: number) => Math.max(-CALIB_RANGE, Math.min(CALIB_RANGE, Math.round(v || 0)));
 
 export function loadCalibration(): Calibration {
-  if (typeof localStorage === "undefined") return { ...DEFAULT_CALIBRATION };
+  const base = platformDefaultCalibration();
+  if (typeof localStorage === "undefined") return base;
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULT_CALIBRATION };
+    if (!raw) return base;
     const p = JSON.parse(raw) as Partial<Calibration>;
     return {
-      visualMs: clamp(p.visualMs ?? DEFAULT_CALIBRATION.visualMs),
-      judgeMs: clamp(p.judgeMs ?? DEFAULT_CALIBRATION.judgeMs),
+      visualMs: clamp(p.visualMs ?? base.visualMs),
+      judgeMs: clamp(p.judgeMs ?? base.judgeMs),
     };
   } catch {
-    return { ...DEFAULT_CALIBRATION };
+    return base;
   }
 }
 

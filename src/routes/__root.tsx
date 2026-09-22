@@ -7,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -106,15 +106,69 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="dark" style={{ colorScheme: "dark" }}>
+    <html
+      lang="en"
+      className="dark"
+      // 内联兜底配色：样式表若在旧版 WebView 里解析失败，页面也不会是一片白
+      style={{ colorScheme: "dark", backgroundColor: "#100c0a", color: "#f4f1ed" }}
+    >
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body style={{ backgroundColor: "#100c0a", color: "#f4f1ed", margin: 0 }}>
         {children}
         <Scripts />
       </body>
     </html>
+  );
+}
+
+/**
+ * 内嵌 WebView 没有开发者工具：任何未捕获异常都在页面上直接显示出来，
+ * 白屏时也能看到具体原因（并同步送到宿主日志通道）。
+ */
+function CrashOverlay() {
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const report = (text: string) => {
+      setMsg((prev) => prev ?? text);
+      try {
+        const host = window as unknown as { __pd2uLog?: (s: string) => void };
+        host.__pd2uLog?.(text);
+      } catch {
+        // 宿主未注入日志通道
+      }
+    };
+    const onErr = (e: ErrorEvent) => report(`${e.message} @ ${e.filename}:${e.lineno}`);
+    const onRej = (e: PromiseRejectionEvent) => report(String(e.reason));
+    window.addEventListener("error", onErr);
+    window.addEventListener("unhandledrejection", onRej);
+    return () => {
+      window.removeEventListener("error", onErr);
+      window.removeEventListener("unhandledrejection", onRej);
+    };
+  }, []);
+
+  if (!msg) return null;
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 99999,
+        padding: "8px 12px",
+        background: "#2b1410",
+        color: "#ffd9c7",
+        font: "12px/1.5 monospace",
+        maxHeight: "40%",
+        overflow: "auto",
+      }}
+    >
+      {msg}
+    </div>
   );
 }
 
@@ -125,6 +179,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
+      <CrashOverlay />
     </QueryClientProvider>
   );
 }
