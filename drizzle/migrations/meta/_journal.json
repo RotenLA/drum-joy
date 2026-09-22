@@ -8,6 +8,13 @@
       "when": 1790059733586,
       "tag": "0000_song_library",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790067634964,
+      "tag": "0001_secure_songs_storage_bucket",
+      "breakpoints": true
     }
   ]
 }
