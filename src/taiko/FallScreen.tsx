@@ -118,6 +118,21 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
     setPhase(p);
   }, []);
 
+  // 谱面变化时重建判定索引（按鼓件分组，沿用谱面本身的时间升序）
+  useEffect(() => {
+    const map: Partial<Record<PartId, number[]>> = {};
+    const notes = playChart?.notes ?? [];
+    for (let i = 0; i < notes.length; i++) {
+      const n = notes[i]!;
+      if (n.note === undefined) continue;
+      const p = partOfNote(n.note);
+      if (!p) continue;
+      (map[p] ??= []).push(i);
+    }
+    noteIndexRef.current = map;
+  }, [playChart]);
+
+
   const resetRun = useCallback(() => {
     judgedRef.current = new Uint8Array(playChart?.notes.length ?? 0);
     holdStateRef.current = new Uint8Array(playChart?.notes.length ?? 0);
