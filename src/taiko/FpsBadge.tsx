@@ -23,7 +23,19 @@ export function FpsBadge() {
     lastLong: number;
     voices: number;
     lookahead: number;
-  }>({ on: false, input: 0, inputMax: 0, longFrames: 0, lastLong: 0, voices: 0, lookahead: 0 });
+    audJitter: number;
+    outLatency: number;
+  }>({
+    on: false,
+    input: 0,
+    inputMax: 0,
+    longFrames: 0,
+    lastLong: 0,
+    voices: 0,
+    lookahead: 0,
+    audJitter: 0,
+    outLatency: 0,
+  });
 
   useEffect(() => {
     const id = window.setInterval(() => {
