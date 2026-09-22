@@ -183,6 +183,8 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
     (part: PartId, atMs?: number, velocity = 100, note?: number) => {
       const now = performance.now();
       const at = atMs !== undefined && Number.isFinite(atMs) ? atMs : now;
+      // 抖动量表：真实敲击时刻 → 网页实际处理时刻
+      if (atMs !== undefined && Number.isFinite(atMs)) latencyMeter.recordInput(now - atMs);
       flashesRef.current[part] = now + FLASH_MS;
       if (kitOnRef.current) playDrum(part, velocity, undefined, note);
 
@@ -190,16 +192,29 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
       const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
       const notes = playChart.notes;
+      // 只在该鼓件的时间窗附近查找（二分定位），不再遍历整首曲子
+      const idx = noteIndexRef.current[part];
       let best = -1;
       let bestDiff = Infinity;
-      for (let i = 0; i < notes.length; i++) {
-        if (judgedRef.current[i]) continue;
-        const n = notes[i]!;
-        if (n.note === undefined || partOfNote(n.note) !== part) continue;
-        const diff = Math.abs(n.timeMs - t);
-        if (diff <= GOOD_MS && diff < bestDiff) {
-          best = i;
-          bestDiff = diff;
+      if (idx && idx.length) {
+        const lo = t - GOOD_MS;
+        let a = 0;
+        let b = idx.length;
+        while (a < b) {
+          const m = (a + b) >> 1;
+          if (notes[idx[m]!]!.timeMs < lo) a = m + 1;
+          else b = m;
+        }
+        for (let k = a; k < idx.length; k++) {
+          const i = idx[k]!;
+          const n = notes[i]!;
+          if (n.timeMs > t + GOOD_MS) break;
+          if (judgedRef.current[i]) continue;
+          const diff = Math.abs(n.timeMs - t);
+          if (diff < bestDiff) {
+            best = i;
+            bestDiff = diff;
+          }
         }
       }
       if (best < 0) return;
