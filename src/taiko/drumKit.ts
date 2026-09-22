@@ -129,7 +129,10 @@ export async function ensureKitLoaded(kitId: number): Promise<void> {
   if (typeof window === "undefined") return;
   const kit = KIT_SAMPLES[kitId];
   if (!kit || loading.has(kitId)) return;
-  if (buffers.has(`${kitId}:kick`)) return;
+  if (buffers.has(`${kitId}:kick`)) {
+    releaseOtherKits(kitId);
+    return;
+  }
   loading.add(kitId);
   const ctx = getAudioContext();
   await Promise.all(
