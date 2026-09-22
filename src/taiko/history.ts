@@ -16,6 +16,10 @@ export interface HistoryEntry {
   accuracy?: number;
   maxCombo?: number;
   notes?: number;
+  /** 是否完整打完；缺省视为完成（兼容旧记录） */
+  completed?: boolean;
+  /** 未完成时的进度 0~100 */
+  progress?: number;
   playedAt: number;
 }
 

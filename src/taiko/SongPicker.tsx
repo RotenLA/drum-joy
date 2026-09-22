@@ -1,12 +1,13 @@
 /**
  * 游玩屏内的音游式选歌层：舞台在背后虚化，顶部横排「选择歌曲 / 历史演奏 / 搜索」，
  * 下方为斜切卡片横向排列：未选中淡色收窄，选中亮起变宽并出现「开始」。
+ * 卡片可鼠标拖拽 / 触摸 / 滚轮左右滑动，两端留白让最外侧歌曲也能滑到画面中间。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
 import { fetchLibrarySongs, loadLibrarySong, type LibrarySong } from "./songLibrary";
 import { songPlayer } from "./player";
-import { STEM_KINDS, stemsLeadMs } from "./stems";
+import { STEM_KINDS, hasAnyStem, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
 import { clearHistory, readHistory, type HistoryEntry } from "./history";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
@@ -25,6 +26,57 @@ const CARD_GRADIENTS = [
   "linear-gradient(150deg, #4c3a28 0%, #7a5a33 55%, #322618 100%)",
   "linear-gradient(150deg, #33305c 0%, #4d4a86 55%, #211f3c 100%)",
 ];
+
+/** 竖排歌名：过长则在卡片高度内循环滚动 */
+function VerticalTitle({ title }: { title: string }) {
+  const boxRef = useRef<HTMLSpanElement | null>(null);
+  const textRef = useRef<HTMLSpanElement | null>(null);
+  const [shift, setShift] = useState(0);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    const text = textRef.current;
+    if (!box || !text) return;
+    const measure = () => {
+      // 旋转 -90° 后，文本宽度对应卡片高度
+      const over = text.scrollWidth - (box.clientHeight - 24);
+      setShift(over > 8 ? over : 0);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [title]);
+
+  return (
+    <span ref={boxRef} className="relative block h-full w-full overflow-hidden">
+      {/* 贴右侧的竖排条：文字绕自身中心逆时针 90° */}
+      <span className="absolute inset-y-0 right-0 block w-14 overflow-hidden">
+        <span
+          className="absolute left-1/2 top-1/2 block whitespace-nowrap"
+          style={{ transform: "translate(-50%, -50%) skewX(9deg) rotate(-90deg)" }}
+        >
+          <span
+            ref={textRef}
+            className={`block whitespace-nowrap text-[22px] font-semibold tracking-wide text-[rgba(255,255,255,0.9)] ${
+              shift ? "taiko-marquee-run" : ""
+            }`}
+            style={
+              shift
+                ? ({
+                    "--taiko-marquee-shift": `${-shift}px`,
+                    "--taiko-marquee-dur": `${Math.max(7, shift / 22)}s`,
+                  } as React.CSSProperties)
+                : undefined
+            }
+          >
+            {title}
+          </span>
+        </span>
+      </span>
+    </span>
+  );
+}
 
 export function SongPicker({
   speed,
@@ -50,8 +102,13 @@ export function SongPicker({
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [percent, setPercent] = useState(0);
-  const [ready, setReady] = useState(false);
   const [warn, setWarn] = useState<string | null>(null);
+
+  /** 就绪 = 当前全局歌曲确实加载完成（不依赖本层临时状态，中途退出回来依然有效） */
+  const loadedSongId = song.songId && song.midi && hasAnyStem(song.stems) ? song.songId : null;
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef({ down: false, startX: 0, startScroll: 0, moved: 0 });
 
   useEffect(() => {
     void (async () => {
@@ -71,7 +128,6 @@ export function SongPicker({
     async (item: LibrarySong, diff?: Difficulty, spd?: number) => {
       if (loadingId) return;
       setWarn(null);
-      setReady(false);
       setPercent(0);
       setLoadingId(item.id);
       songPlayer.stop();
@@ -96,7 +152,6 @@ export function SongPicker({
           ...(diff ? { difficulty: diff } : {}),
         });
         if (spd) onSpeedChange?.(spd);
-        setReady(true);
         setTab("songs");
       } catch (err) {
         console.error(err);
@@ -116,6 +171,45 @@ export function SongPicker({
       (s) => s.title.toLowerCase().includes(q) || (s.artist ?? "").toLowerCase().includes(q),
     );
   }, [library, query]);
+
+  // 选中的卡片自动滚入视野
+  useEffect(() => {
+    const box = scrollRef.current;
+    if (!box || tab !== "songs") return;
+    const el = box.querySelector<HTMLElement>('[data-active="1"]');
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [loadedSongId, tab, filtered.length]);
+
+  // 鼠标拖拽横向滑动（拖动超过阈值则吞掉后续 click）
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (e.pointerType === "touch") return;
+    const box = scrollRef.current;
+    if (!box) return;
+    dragRef.current = { down: true, startX: e.clientX, startScroll: box.scrollLeft, moved: 0 };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    const box = scrollRef.current;
+    if (!d.down || !box) return;
+    const dx = e.clientX - d.startX;
+    if (Math.abs(dx) > d.moved) d.moved = Math.abs(dx);
+    box.scrollLeft = d.startScroll - dx;
+  };
+  const endDrag = () => {
+    dragRef.current.down = false;
+    window.setTimeout(() => (dragRef.current.moved = 0), 0);
+  };
+  const onWheel = (e: React.WheelEvent) => {
+    const box = scrollRef.current;
+    if (!box) return;
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (!delta) return;
+    box.scrollLeft += delta;
+  };
+  const guardClick = (fn: () => void) => () => {
+    if (dragRef.current.moved > 8) return;
+    fn();
+  };
 
   const diffLabel = (d: Difficulty) => {
     const item = DIFFICULTIES.find((x) => x.id === d);
@@ -173,7 +267,17 @@ export function SongPicker({
       )}
 
       {tab === "songs" ? (
-        <div className="taiko-scroll flex min-h-0 flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden px-4 pb-5 pt-1">
+        <div
+          ref={scrollRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerLeave={endDrag}
+          onWheel={onWheel}
+          className="taiko-hscroll flex min-h-0 flex-1 cursor-grab items-center gap-3 overflow-x-auto overflow-y-hidden pb-5 pt-1 active:cursor-grabbing"
+          // 右侧留白足够多：可一直右滑到只剩最后一首露出一部分在界面内
+          style={{ paddingLeft: "1rem", paddingRight: "max(1rem, calc(100vw - 160px))" }}
+        >
           {listing && (
             <p className="m-auto text-xs text-[rgba(255,255,255,0.55)]">
               {tr("正在读取曲库…", "Loading library…")}
@@ -187,12 +291,14 @@ export function SongPicker({
             </p>
           )}
           {filtered.map((item, i) => {
-            const active = song.songId === item.id;
+            const active = loadedSongId === item.id;
             const busyThis = loadingId === item.id;
             const wide = active || busyThis;
+            const ready = active && !loadingId;
             return (
               <div
                 key={item.id}
+                data-active={wide ? "1" : "0"}
                 className="relative shrink-0 rounded-lg transition-all duration-300"
                 style={{
                   height: "min(86%, 360px)",
@@ -203,7 +309,7 @@ export function SongPicker({
               >
                 <button
                   type="button"
-                  onClick={() => void pickSong(item)}
+                  onClick={guardClick(() => void pickSong(item))}
                   disabled={loadingId !== null}
                   className={`relative block h-full w-full overflow-hidden rounded-lg border text-left shadow-xl backdrop-blur-[18px] transition-all duration-300 ${
                     wide
@@ -233,7 +339,7 @@ export function SongPicker({
                       className="relative z-10 flex h-full flex-col justify-end gap-1 p-5"
                       style={{ transform: "skewX(9deg)" }}
                     >
-                      <span className="truncate text-xl font-semibold text-[rgba(255,255,255,0.96)]">
+                      <span className="truncate text-2xl font-semibold text-[rgba(255,255,255,0.96)]">
                         {item.title}
                       </span>
                       <span className="truncate text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
@@ -248,23 +354,16 @@ export function SongPicker({
                       </span>
                     </span>
                   ) : (
-                    <span
-                      className="relative z-10 flex h-full items-center justify-center overflow-hidden"
-                    >
-                      <span
-                        className="block max-w-[280px] shrink-0 truncate whitespace-nowrap text-sm tracking-wide text-[rgba(255,255,255,0.85)]"
-                        style={{ transform: "skewX(9deg) rotate(-90deg)" }}
-                      >
-                        {item.title}
-                      </span>
+                    <span className="relative z-10 block h-full w-full">
+                      <VerticalTitle title={item.title} />
                     </span>
                   )}
                 </button>
 
-                {active && ready && !loadingId && (
+                {ready && (
                   <button
                     type="button"
-                    onClick={onOpenSettings}
+                    onClick={guardClick(onOpenSettings)}
                     aria-label={tr("全局设置", "Global settings")}
                     className="absolute right-4 top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-[var(--taiko-glass-line-strong)] bg-[var(--taiko-glass-strong)] text-[var(--taiko-ink)]/80 backdrop-blur-[18px] transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
                   >
@@ -272,10 +371,10 @@ export function SongPicker({
                   </button>
                 )}
 
-                {active && ready && !loadingId && (
+                {ready && (
                   <button
                     type="button"
-                    onClick={onStart}
+                    onClick={guardClick(onStart)}
                     className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-md bg-[var(--taiko-accent)] px-5 py-2.5 text-sm font-semibold tracking-[0.2em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04]"
                   >
                     <Play size={16} />
@@ -302,6 +401,7 @@ export function SongPicker({
           <div className="flex flex-col divide-y divide-[rgba(255,255,255,0.1)]">
             {history.map((h, i) => {
               const item = library.find((s) => s.id === h.songId);
+              const unfinished = h.completed === false;
               return (
                 <button
                   key={`${h.playedAt}-${i}`}
@@ -313,6 +413,9 @@ export function SongPicker({
                 >
                   <span className="min-w-0 truncate">{h.title}</span>
                   <span className="shrink-0 text-xs tabular-nums text-[rgba(255,255,255,0.55)]">
+                    {unfinished
+                      ? `${tr("未完成", "Unfinished")} ${h.progress ?? 0}% · `
+                      : ""}
                     {diffLabel(h.difficulty)} · {h.speed}x · {tr("准确率", "Acc")}{" "}
                     {(h.accuracy ?? 0).toFixed(1)}% · {tr("连击", "Combo")} {h.maxCombo ?? 0} ·{" "}
                     {new Date(h.playedAt).toLocaleString()}

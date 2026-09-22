@@ -82,6 +82,8 @@ export function FallScreen({
   const beatMsRef = useRef(500);
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
+  /** 本局是否真正开始演奏过（用于中途退出也记历史） */
+  const playedRef = useRef(false);
 
   // 画质档位（在谱面页设置；tier 变化时重设画布分辨率）
   const [tier, setTier] = useState<QualityTier>("high");
@@ -295,6 +297,7 @@ export function FallScreen({
     timersRef.current.forEach((t) => window.clearTimeout(t));
     timersRef.current = [];
     resetRun();
+    playedRef.current = true;
     latencyMeter.reset();
     // 倒计时那 4 拍里把鼓组样本与音频节点热起来，避免首次敲某个鼓时才解码
     if (kitOnRef.current) void warmUpDrums();
@@ -499,24 +502,49 @@ export function FallScreen({
   const totalJudged = judged.perfect + judged.good + judged.miss;
   const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
 
-  // 一曲结束 → 记一条本机历史演奏
+  /** 写一条本机历史演奏（同一局只写一次） */
+  const recordRun = useCallback(
+    (completed: boolean) => {
+      if (!playedRef.current || !song.fileName) return;
+      playedRef.current = false;
+      const s = statsRef.current;
+      const total = s.perfect + s.good + s.miss;
+      const dur = durationMs;
+      const progress = completed
+        ? 100
+        : dur > 0
+          ? Math.max(0, Math.min(100, (timeRef.current / dur) * 100))
+          : 0;
+      addHistory({
+        songId: song.songId,
+        title: song.fileName,
+        difficulty: song.difficulty,
+        speed,
+        accuracy: total > 0 ? ((s.perfect + s.good * 0.5) / total) * 100 : 0,
+        maxCombo: maxComboRef.current,
+        notes: total,
+        completed,
+        progress: Math.round(progress),
+        playedAt: Date.now(),
+      });
+    },
+    [song.songId, song.fileName, song.difficulty, speed, durationMs],
+  );
+
+  // 一曲结束 → 记一条完整记录
   useEffect(() => {
-    if (phase !== "ended" || !song.fileName) return;
-    const s = statsRef.current;
-    const total = s.perfect + s.good + s.miss;
-    addHistory({
-      songId: song.songId,
-      title: song.fileName,
-      difficulty: song.difficulty,
-      speed,
-      accuracy: total > 0 ? ((s.perfect + s.good * 0.5) / total) * 100 : 0,
-      maxCombo: maxComboRef.current,
-      notes: total,
-      playedAt: Date.now(),
-    });
+    if (phase !== "ended") return;
+    recordRun(true);
     // 只在结束的那一刻记录
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
+
+  /** 中途返回选歌：先记一条未完成记录 */
+  const backToPicker = useCallback(() => {
+    recordRun(false);
+    songPlayer.stop();
+    setPhaseBoth("idle");
+  }, [recordRun, setPhaseBoth]);
 
   return (
     // 演奏区吃满整个窗口；调音台收进左下角抽屉
@@ -667,7 +695,7 @@ export function FallScreen({
                 {tr("重新开始", "Restart")}
               </button>
               <button
-                onClick={() => setPhaseBoth("idle")}
+                onClick={backToPicker}
                 className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
               >
                 {tr("选择歌曲", "Songs")}
@@ -696,7 +724,7 @@ export function FallScreen({
                 {tr("再来一次", "Retry")}
               </button>
               <button
-                onClick={() => setPhaseBoth("idle")}
+                onClick={backToPicker}
                 className="border border-white/30 px-8 py-2 text-sm tracking-[0.2em] text-white/70 transition-colors hover:border-white/70 hover:text-white"
               >
                 {tr("选择歌曲", "Songs")}
