@@ -7,7 +7,7 @@ import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { DebugLogPanel } from "./DebugLogPanel";
-import { click as metronomeClick, getAudioContext } from "./metronome";
+import { click as metronomeClick, getAudioContext, unlockAudio } from "./metronome";
 import { loadKitEnabled, playDrum, warmUpDrums } from "./drumKit";
 import { latencyMeter } from "./latencyMeter";
 import { debugLog } from "./debugLog";
