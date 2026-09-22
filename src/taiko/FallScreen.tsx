@@ -604,7 +604,8 @@ export function FallScreen({
             <SlidersHorizontal size={13} />
             {tr("调音台", "Mixer")}
           </button>
-        </div>
+        </div>}
+
 
         {/* 选歌层：未开始时覆盖在虚化的舞台上 */}
         {phase === "idle" && (
