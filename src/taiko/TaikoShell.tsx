@@ -14,15 +14,15 @@ import { Toaster } from "@/components/ui/sonner";
 import { debugLog } from "./debugLog";
 
 
-type ScreenKey = "play" | "chart" | "mapping";
+type ScreenKey = "play" | "chart";
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
 const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.5, midiDeviceId: null };
 const NAV = [
   { key: "play" as const, zh: "游玩", en: "Play", icon: Gamepad2 },
-  { key: "chart" as const, zh: "谱面", en: "Chart", icon: ListMusic },
-  { key: "mapping" as const, zh: "映射", en: "Mapping", icon: Settings2 },
+  { key: "chart" as const, zh: "谱面设置", en: "Chart settings", icon: ListMusic },
 ];
+
 
 /** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等；300ms 内去重（开发环境可能双触发） */
 let lastExitAt = 0;
