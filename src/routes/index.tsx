@@ -58,8 +58,8 @@ const UPGRADE_COPY: Record<string, { title: string; body: string; exit: string }
 };
 
 function UnsupportedBrowser({ engine }: { engine: number }) {
-  const raw = new URLSearchParams(window.location.search).get("lang")?.toLowerCase() ?? "zh-CN";
-  const key = raw === "zh" ? "zh-CN" : raw.startsWith("zh-tw") || raw.startsWith("zh-hant") ? "zh-TW" : raw.split("-")[0] ?? "zh-CN";
+  const raw = new URLSearchParams(window.location.search).get("lang")?.toLowerCase() ?? "zh-cn";
+  const key = raw === "zh" || raw.startsWith("zh-cn") || raw.startsWith("zh-hans") ? "zh-CN" : raw.startsWith("zh-tw") || raw.startsWith("zh-hant") || raw.startsWith("zh-hk") ? "zh-TW" : raw.split("-")[0] ?? "zh-CN";
   const copy = UPGRADE_COPY[key] ?? UPGRADE_COPY["en"] ?? {
     title: "System browser component is too old",
     body: "Please update your system browser component and try again.",

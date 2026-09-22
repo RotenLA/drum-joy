@@ -65,18 +65,19 @@ export function tutorialStepCopy(language: Language, index: number, step: Tutori
   return STEP_COPY[language]?.[index] ?? { title: step.titleEn, body: step.bodyEn };
 }
 
-const OTHER: Partial<Record<Language, { tutorial: string; leave: string; next: string; retry: string; skip: string; finish: string }>> = {
-  "zh-TW": { tutorial: "教學", leave: "離開教學", next: "下一步", retry: "再練一次", skip: "跳過本節", finish: "開始選歌" },
-  ja: { tutorial: "チュートリアル", leave: "終了", next: "次へ", retry: "もう一度", skip: "スキップ", finish: "曲を選ぶ" },
-  ko: { tutorial: "튜토리얼", leave: "나가기", next: "다음", retry: "다시 연습", skip: "건너뛰기", finish: "곡 선택" },
-  fr: { tutorial: "Tutoriel", leave: "Quitter", next: "Suivant", retry: "Réessayer", skip: "Passer", finish: "Choisir un titre" },
-  de: { tutorial: "Tutorial", leave: "Verlassen", next: "Weiter", retry: "Nochmal", skip: "Überspringen", finish: "Song wählen" },
-  it: { tutorial: "Tutorial", leave: "Esci", next: "Avanti", retry: "Riprova", skip: "Salta", finish: "Scegli brano" },
-  es: { tutorial: "Tutorial", leave: "Salir", next: "Siguiente", retry: "Repetir", skip: "Saltar", finish: "Elegir canción" },
+export interface TutorialLabels { tutorial: string; leave: string; next: string; retry: string; skip: string; finish: string; complete: string; progress: string; holding: string; stick: string; pedal: string; adapter: string }
+const OTHER: Partial<Record<Language, TutorialLabels>> = {
+  "zh-TW": { tutorial: "教學", leave: "離開教學", next: "下一步", retry: "再練一次", skip: "跳過本節", finish: "開始選歌", complete: "完成！", progress: "練習進度", holding: "保持踩住", stick: "鼓棒輸入", pedal: "踏板輸入", adapter: "適配器" },
+  ja: { tutorial: "チュートリアル", leave: "終了", next: "次へ", retry: "もう一度", skip: "スキップ", finish: "曲を選ぶ", complete: "完了！", progress: "進捗", holding: "踏み続ける", stick: "スティック入力", pedal: "ペダル入力", adapter: "アダプター" },
+  ko: { tutorial: "튜토리얼", leave: "나가기", next: "다음", retry: "다시 연습", skip: "건너뛰기", finish: "곡 선택", complete: "완료!", progress: "진행", holding: "계속 누르기", stick: "스틱 입력", pedal: "페달 입력", adapter: "어댑터" },
+  fr: { tutorial: "Tutoriel", leave: "Quitter", next: "Suivant", retry: "Réessayer", skip: "Passer", finish: "Choisir un titre", complete: "Terminé !", progress: "Progression", holding: "Maintenir", stick: "Entrée baguette", pedal: "Entrée pédale", adapter: "Adaptateur" },
+  de: { tutorial: "Tutorial", leave: "Verlassen", next: "Weiter", retry: "Nochmal", skip: "Überspringen", finish: "Song wählen", complete: "Geschafft!", progress: "Fortschritt", holding: "Gedrückt halten", stick: "Stick-Eingabe", pedal: "Pedal-Eingabe", adapter: "Adapter" },
+  it: { tutorial: "Tutorial", leave: "Esci", next: "Avanti", retry: "Riprova", skip: "Salta", finish: "Scegli brano", complete: "Completato!", progress: "Progresso", holding: "Tieni premuto", stick: "Ingresso bacchetta", pedal: "Ingresso pedale", adapter: "Adattatore" },
+  es: { tutorial: "Tutorial", leave: "Salir", next: "Siguiente", retry: "Repetir", skip: "Saltar", finish: "Elegir canción", complete: "¡Completado!", progress: "Progreso", holding: "Mantén pulsado", stick: "Entrada de baqueta", pedal: "Entrada de pedal", adapter: "Adaptador" },
 };
 
 export function tutorialLabels(language: Language) {
-  if (language === "zh-CN") return { tutorial: "教学", leave: "离开教学", next: "下一步", retry: "再练一次", skip: "跳过本节", finish: "开始选歌" };
-  if (language === "en") return { tutorial: "Tutorial", leave: "Leave tutorial", next: "Next", retry: "Try again", skip: "Skip lesson", finish: "Choose a song" };
-  return OTHER[language] ?? OTHER.en ?? { tutorial: "Tutorial", leave: "Leave", next: "Next", retry: "Retry", skip: "Skip", finish: "Choose a song" };
+  if (language === "zh-CN") return { tutorial: "教学", leave: "离开教学", next: "下一步", retry: "再练一次", skip: "跳过本节", finish: "开始选歌", complete: "完成！", progress: "练习进度", holding: "保持踩住", stick: "鼓槌输入", pedal: "踏板输入", adapter: "适配器" };
+  if (language === "en") return { tutorial: "Tutorial", leave: "Leave tutorial", next: "Next", retry: "Try again", skip: "Skip lesson", finish: "Choose a song", complete: "Complete!", progress: "Progress", holding: "Keep holding", stick: "Stick input", pedal: "Pedal input", adapter: "Adapter" };
+  return OTHER[language] ?? tutorialLabels("en");
 }

@@ -26,7 +26,9 @@ export const isIOS = (): boolean =>
 
 /** WebView 内核大版本号（Chrome / Safari），取不到返回 0 */
 export function engineVersion(): number {
-  const m = /(?:chrome|crios|version)\/(\d+)/i.exec(ua());
+  const text = ua();
+  // Android WebView 常同时含 Version/4.0 与 Chrome/xx，必须优先读 Chrome。
+  const m = /(?:chrome|crios)\/(\d+)/i.exec(text) ?? /version\/(\d+)/i.exec(text);
   return m ? Number(m[1]) : 0;
 }
 

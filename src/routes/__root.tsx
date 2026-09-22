@@ -115,7 +115,7 @@ function RootShell({ children }: { children: ReactNode }) {
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var u=navigator.userAgent||'';if(!/android/i.test(u))return;var m=/(?:chrome|crios|version)\\/(\\d+)/i.exec(u);var v=m?parseInt(m[1],10):0;var c=document.createElement('canvas');var a=window.AudioContext||window.webkitAudioContext;var bad=(v>0&&v<90)||!c.getContext||!a;if(bad)document.documentElement.setAttribute('data-pd2u-unsupported',String(v||0));}catch(e){}})();`,
+            __html: `(function(){try{var u=navigator.userAgent||'';if(!/android/i.test(u))return;var m=/(?:chrome|crios)\\/(\\d+)/i.exec(u)||/version\\/(\\d+)/i.exec(u);var v=m?parseInt(m[1],10):0;var c=document.createElement('canvas');var a=window.AudioContext||window.webkitAudioContext;var bad=(v>0&&v<90)||!c.getContext||!a;if(bad)document.documentElement.setAttribute('data-pd2u-unsupported',String(v||0));}catch(e){}})();`,
           }}
         />
         <HeadContent />

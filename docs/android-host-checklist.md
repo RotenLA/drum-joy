@@ -25,7 +25,7 @@ s.setMediaPlaybackRequiresUserGesture(false);
 webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 ```
 
-- Android System WebView / Chrome 版本要求 ≥ 111。
+- Android System WebView / Chrome 最低要求 ≥ 90，并建议保持为应用商店最新版。
 - 开启硬件加速（Application 与 Activity 都不要设 `hardwareAccelerated=false`）。
 - 允许自动播放媒体，否则倒计时与歌曲首次播放会被拦。
 

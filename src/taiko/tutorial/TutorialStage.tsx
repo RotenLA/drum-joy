@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { PartId } from "../laneLayouts";
 import { PART_BY_ID } from "../laneLayouts";
 import { useLanguage } from "../i18n";
+import { tutorialLabels } from "./steps";
 
 import crash from "@/assets/pads/crash.png.asset.json";
 import hihat from "@/assets/pads/hihat.png.asset.json";
@@ -20,6 +21,7 @@ const POS: Record<PartId, { left: string; top: string; width: string }> = {
 
 export function TutorialStage({ targets = [], hitPart, progress, needed, hold }: { targets?: readonly PartId[]; hitPart: PartId | null; progress: number; needed: number; hold: boolean }) {
   const { language } = useLanguage();
+  const labels = tutorialLabels(language);
   const [pulse, setPulse] = useState(0);
   useEffect(() => { const timer = window.setInterval(() => setPulse((v) => v + 1), 900); return () => window.clearInterval(timer); }, []);
   const active = useMemo(() => targets.length ? targets[pulse % targets.length] : null, [targets, pulse]);
@@ -27,6 +29,6 @@ export function TutorialStage({ targets = [], hitPart, progress, needed, hold }:
     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,rgba(252,136,0,0.14),rgba(8,7,9,0.08)_44%,rgba(8,7,9,0.72)_100%)]" />
     {Object.keys(POS).map((key) => { const id = key as PartId; const highlighted = hitPart === id || active === id; return <div key={id} className="absolute transition-all duration-150" style={{ ...POS[id], transform: highlighted ? "scale(1.08)" : "scale(1)", filter: highlighted ? "brightness(1.45) drop-shadow(0 0 12px rgba(252,136,0,.9))" : "brightness(.72)", opacity: targets.length && !targets.includes(id) ? .42 : .94 }}><img src={SPRITES[id]} alt={language === "zh-CN" ? PART_BY_ID[id].label : PART_BY_ID[id].labelEn} className="block h-auto w-full" /></div>; })}
     {targets.length > 0 && <div key={`${pulse}-${active}`} className="taiko-tutorial-note absolute left-1/2 top-[8%] h-7 w-7 rounded-full border-2 border-[var(--taiko-accent)] bg-[rgba(252,136,0,0.72)] shadow-[0_0_18px_rgba(252,136,0,0.85)]" />}
-    <div className="absolute bottom-3 left-3 rounded-md border border-[var(--taiko-glass-line)] bg-[rgba(8,7,9,0.72)] px-3 py-1.5 text-xs text-[rgba(255,255,255,0.84)]">{hold ? (language === "zh-CN" ? "保持踩住" : "Keep holding") : `${progress} / ${needed}`}</div>
+    <div className="absolute bottom-3 left-3 rounded-md border border-[var(--taiko-glass-line)] bg-[rgba(8,7,9,0.72)] px-3 py-1.5 text-xs text-[rgba(255,255,255,0.84)]">{hold ? labels.holding : `${progress} / ${needed}`}</div>
   </div>;
 }
