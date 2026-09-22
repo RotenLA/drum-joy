@@ -76,8 +76,8 @@ const OTHER: Partial<Record<Language, TutorialLabels>> = {
   es: { tutorial: "Tutorial", leave: "Salir", next: "Siguiente", retry: "Repetir", skip: "Saltar", finish: "Elegir canción", complete: "¡Completado!", progress: "Progreso", holding: "Mantén pulsado", stick: "Entrada de baqueta", pedal: "Entrada de pedal", adapter: "Adaptador" },
 };
 
-export function tutorialLabels(language: Language) {
+export function tutorialLabels(language: Language): TutorialLabels {
   if (language === "zh-CN") return { tutorial: "教学", leave: "离开教学", next: "下一步", retry: "再练一次", skip: "跳过本节", finish: "开始选歌", complete: "完成！", progress: "练习进度", holding: "保持踩住", stick: "鼓槌输入", pedal: "踏板输入", adapter: "适配器" };
   if (language === "en") return { tutorial: "Tutorial", leave: "Leave tutorial", next: "Next", retry: "Try again", skip: "Skip lesson", finish: "Choose a song", complete: "Complete!", progress: "Progress", holding: "Keep holding", stick: "Stick input", pedal: "Pedal input", adapter: "Adapter" };
-  return OTHER[language] ?? tutorialLabels("en");
+  return OTHER[language] ?? { tutorial: "Tutorial", leave: "Leave tutorial", next: "Next", retry: "Try again", skip: "Skip lesson", finish: "Choose a song", complete: "Complete!", progress: "Progress", holding: "Keep holding", stick: "Stick input", pedal: "Pedal input", adapter: "Adapter" };
 }
