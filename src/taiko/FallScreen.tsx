@@ -375,6 +375,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       if (dt && dt < minFrame) return;
       last = now;
       quality.sample(dt, now);
+      latencyMeter.recordFrame(dt);
 
       let ph = phaseRef.current;
       const t = readTimeMs(now);
