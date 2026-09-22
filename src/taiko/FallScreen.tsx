@@ -42,7 +42,7 @@ export function FallScreen({
 }: {
   speed: number;
   suspended?: boolean;
-  onSpeedChange?: (s: number) => void;
+  onSpeedChange?: ((s: number) => void) | undefined;
 }) {
   const { tr, language } = useLanguage();
   const song = useSong();

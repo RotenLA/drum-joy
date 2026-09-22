@@ -32,7 +32,7 @@ export function SongPicker({
   onStart,
 }: {
   speed: number;
-  onSpeedChange?: (s: number) => void;
+  onSpeedChange?: ((s: number) => void) | undefined;
   onStart: () => void;
 }) {
   const song = useSong();
