@@ -145,6 +145,70 @@ export async function ensureKitLoaded(kitId: number): Promise<void> {
     }),
   );
   loading.delete(kitId);
+  releaseOtherKits(kitId);
+}
+
+/**
+ * 只保留当前鼓组的采样在内存里。中低端安卓上 9 套鼓全留着会明显吃内存，
+ * 内存紧张时整个 WebView 容易被系统回收。
+ */
+export function releaseOtherKits(keepKitId: number): void {
+  const prefix = `${keepKitId}:`;
+  for (const key of [...buffers.keys()]) {
+    if (!key.startsWith(prefix)) buffers.delete(key);
+  }
+}
+
+// ---------------- 发声数量控制 ----------------
+
+/** 单个鼓件最多同时发声数（连打时掐掉最早那一声的尾巴） */
+const MAX_VOICES_PER_PART = 3;
+/** 全局最多同时发声数（密集段防止音频线程被压满） */
+const MAX_VOICES_TOTAL = 14;
+/** 掐音淡出时长（秒），足够短听不出断口 */
+const CHOKE_SEC = 0.035;
+
+interface Voice {
+  part: PartId;
+  src: AudioBufferSourceNode;
+  gain: GainNode;
+  /** 排程时刻（ctx 秒），用于挑最早那一声 */
+  at: number;
+}
+
+const voices: Voice[] = [];
+
+function choke(ctx: AudioContext, v: Voice): void {
+  const t = ctx.currentTime;
+  try {
+    v.gain.gain.cancelScheduledValues(t);
+    v.gain.gain.setValueAtTime(Math.max(0.0001, v.gain.gain.value), t);
+    v.gain.gain.linearRampToValueAtTime(0.0001, t + CHOKE_SEC);
+    v.src.stop(t + CHOKE_SEC + 0.01);
+  } catch {
+    // 已停止
+  }
+}
+
+function dropVoice(v: Voice): void {
+  const i = voices.indexOf(v);
+  if (i >= 0) voices.splice(i, 1);
+}
+
+/** 新的一声排程前，按「每鼓件上限 + 全局上限」掐掉最早的旧声 */
+function makeRoom(ctx: AudioContext, part: PartId): void {
+  let same = voices.filter((v) => v.part === part);
+  while (same.length >= MAX_VOICES_PER_PART) {
+    const oldest = same.reduce((a, b) => (a.at <= b.at ? a : b));
+    choke(ctx, oldest);
+    dropVoice(oldest);
+    same = same.filter((v) => v !== oldest);
+  }
+  while (voices.length >= MAX_VOICES_TOTAL) {
+    const oldest = voices.reduce((a, b) => (a.at <= b.at ? a : b));
+    choke(ctx, oldest);
+    dropVoice(oldest);
+  }
 }
 
 function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v: number): boolean {
@@ -153,6 +217,7 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
     void ensureKitLoaded(kitId);
     return false;
   }
+  makeRoom(ctx, part);
   const src = ctx.createBufferSource();
   src.buffer = buf;
   const g = ctx.createGain();
@@ -160,7 +225,23 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
   src.connect(g);
   g.connect(bus(ctx));
   src.start(t);
+  const voice: Voice = { part, src, gain: g, at: t };
+  voices.push(voice);
+  src.onended = () => {
+    dropVoice(voice);
+    try {
+      src.disconnect();
+      g.disconnect();
+    } catch {
+      // 已断开
+    }
+  };
   return true;
+}
+
+/** 当前同时发声数（调试面板用） */
+export function activeVoiceCount(): number {
+  return voices.length;
 }
 
 
