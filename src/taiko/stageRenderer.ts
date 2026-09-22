@@ -371,27 +371,22 @@ export interface DepthItem {
 }
 
 /**
- * 真实架子鼓的高度分层（用于遮挡）：
- * - 地面层：两个踏板放在地板上，其在途音符全程贴地滑行，
- *   因此必须从所有空中鼓件（上排 0.33~0.37、中排 0.57~0.61）的「下方/背后」穿过；
- * - 空中层：手击鼓与镲片悬在支架上，音符按自身当前高度参与排序即符合透视。
- *
- * GROUND_* 区间整体小于所有手击鼓盘的 cy，保证地面音符永远被实心鼓面切齐；
- * 只有临近判定点时（p ≥ ARRIVE_P）才平滑抬到踏板顶面之上，保证落点清晰可见。
+ * 固定绘制层：在途音符永远处于全部实体鼓面后方，避免经过任意鼓面边缘时
+ * 因纵坐标跨过排序阈值而整颗突然跳层。只有进入自身判定面后，才在到达层
+ * 平滑补画一份；缩圈仍位于最上层。
  */
-const GROUND_FAR = 0.02;
-const GROUND_NEAR = 0.26;
-const ARRIVE_P = 0.93;
+const TRANSIT_BAND_DEPTH = -2;
+const TRANSIT_NOTE_DEPTH = -1;
+const ARRIVAL_DEPTH = 2;
+const CUE_DEPTH = 3;
 
-/** 音符/色带的绘制纵深：地面层（踏板）与空中层（手击鼓）分别计算 */
-function noteDepth(anchor: PadAnchor, yNorm: number, p: number): number {
-  if (anchor.row !== 2) return yNorm + 0.0015;
-  const ground = GROUND_FAR + (GROUND_NEAR - GROUND_FAR) * Math.max(0, Math.min(1, p));
-  if (p < ARRIVE_P) return ground;
-  const k = Math.min(1, (p - ARRIVE_P) / (1 - ARRIVE_P));
-  const smooth = k * k * (3 - 2 * k);
-  const arrived = anchor.cy + 0.0015;
-  return ground + (arrived - ground) * smooth;
+/** 音符进入自身鼓面的程度（0~1），用于平滑显现到达层。 */
+function arrivalBlend(pad: PadGeom, x: number, y: number): number {
+  const dx = (x - pad.cx) / Math.max(1, pad.rx);
+  const dy = (y - pad.cy) / Math.max(1, pad.ry);
+  const distance = Math.hypot(dx, dy);
+  const raw = Math.max(0, Math.min(1, (1.35 - distance) / 0.7));
+  return raw * raw * (3 - 2 * raw);
 }
 
 /** 音符、色带与缩圈共用素材中实测的鼓面角度。 */
@@ -453,81 +448,80 @@ function noteItems(
     const pedalTh = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
     const faceAngle = anchor.square ? pedalTh : noteAngle(part, pad);
 
-    // 长音色带按所属层的纵深排序：踏板色带在地面层，被所有空中鼓面实心遮挡；
-    // 手击鼓的色带按自身高度参与排序。取头部纵深再退让 ε，保证头部压在色带上。
-    if (hold) {
-      // 一条长色带可能同时跨过多排鼓件，不能用头部的单一 depth 绘制整条。
-      // 沿路径切段后，每段按自己的位置进入纵深队列，鼓面便能只遮住实际相交的部分。
-      const segmentCount = Math.max(1, Math.min(24, Math.ceil(Math.hypot(head.x - tail.x, head.y - tail.y) / 42)));
-      for (let segment = 0; segment < segmentCount; segment++) {
-        const a = segment / segmentCount;
-        const b = (segment + 1) / segmentCount;
-        const ax = tail.x + (head.x - tail.x) * a;
-        const ay = tail.y + (head.y - tail.y) * a;
-        const bx = tail.x + (head.x - tail.x) * b;
-        const by = tail.y + (head.y - tail.y) * b;
-        const ar = tail.rx + (head.rx - tail.rx) * a;
-        const br = tail.rx + (head.rx - tail.rx) * b;
-        const segmentP = tail.p + (head.p - tail.p) * ((a + b) / 2);
-        items.push({
-          depth: noteDepth(anchor, (ay + by) / (2 * h), segmentP) - 0.0005,
-          draw: () => {
+    const drawHead = (opacity: number) => {
+      if (!headVisible || opacity <= 0.001) return;
+      ctx.save();
+      ctx.globalAlpha = alpha * opacity;
+      ctx.shadowColor = color;
+      ctx.translate(x, y);
+      ctx.shadowBlur = GLOW ? 18 * scale : 0;
+      ctx.lineWidth = Math.max(1.4, rx * 0.16);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = hexToRgba(color, 0.34);
+      ctx.beginPath();
+      if (anchor.square) {
         ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.shadowColor = color;
+        ctx.scale(1, 0.42);
+        ctx.rotate(pedalTh);
+        ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
+        ctx.restore();
+      } else {
+        ctx.ellipse(0, 0, rx, rx * (pad.ry / pad.rx), faceAngle, 0, Math.PI * 2);
+      }
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    // 长音符一次绘制成完整色带，不再逐段填充/描边，彻底消除内部接缝。
+    if (hold) {
+      items.push({
+        depth: TRANSIT_BAND_DEPTH,
+        draw: () => {
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.shadowColor = color;
           const ux = Math.cos(faceAngle);
           const uy = Math.sin(faceAngle);
-          const aw = ar * 0.9;
-          const bw = br * 0.9;
+          const tailW = tail.rx * 0.9;
+          const headW = head.rx * 0.9;
           ctx.shadowBlur = GLOW ? 14 * scale : 0;
-          ctx.fillStyle = hexToRgba(color, 0.28);
+          const flow = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
+          const phase = (f.now % 900) / 900;
+          const glowAt = 0.18 + phase * 0.64;
+          flow.addColorStop(0, hexToRgba(color, 0.2));
+          flow.addColorStop(Math.max(0.02, glowAt - 0.12), hexToRgba(color, 0.27));
+          flow.addColorStop(glowAt, hexToRgba(color, 0.48));
+          flow.addColorStop(Math.min(0.98, glowAt + 0.12), hexToRgba(color, 0.27));
+          flow.addColorStop(1, hexToRgba(color, 0.34));
+          ctx.fillStyle = flow;
           ctx.strokeStyle = hexToRgba(color, 0.75);
           ctx.lineWidth = Math.max(1, rx * 0.08);
           ctx.beginPath();
-          ctx.moveTo(ax + ux * aw, ay + uy * aw);
-          ctx.lineTo(bx + ux * bw, by + uy * bw);
-          ctx.lineTo(bx - ux * bw, by - uy * bw);
-          ctx.lineTo(ax - ux * aw, ay - uy * aw);
+          ctx.moveTo(tail.x + ux * tailW, tail.y + uy * tailW);
+          ctx.lineTo(head.x + ux * headW, head.y + uy * headW);
+          ctx.lineTo(head.x - ux * headW, head.y - uy * headW);
+          ctx.lineTo(tail.x - ux * tailW, tail.y - uy * tailW);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
           ctx.restore();
-          },
-        });
-      }
+        },
+      });
     }
 
     items.push({
-      // 空中层：按自身高度 +ε 压在同深度鼓盘上层；地面层（踏板）：贴地穿过鼓件下方
-      depth: noteDepth(anchor, y / h, p),
-      draw: () => {
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.shadowColor = color;
-        if (headVisible) {
-          ctx.translate(x, y);
-          ctx.shadowBlur = GLOW ? 18 * scale : 0;
-          ctx.lineWidth = Math.max(1.4, rx * 0.16);
-          ctx.strokeStyle = color;
-          ctx.fillStyle = hexToRgba(color, 0.34);
-
-          ctx.beginPath();
-          if (anchor.square) {
-            // 踏板：与踏板顶面同构——正方形先按外八角旋转，再统一压扁 0.42
-            ctx.save();
-            ctx.scale(1, 0.42);
-            ctx.rotate(pedalTh);
-            ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
-            ctx.restore();
-          } else {
-            ctx.ellipse(0, 0, rx, rx * (pad.ry / pad.rx), faceAngle, 0, Math.PI * 2);
-          }
-          ctx.fill();
-          ctx.stroke();
-        }
-        ctx.restore();
-      },
+      depth: TRANSIT_NOTE_DEPTH,
+      draw: () => drawHead(1),
     });
+
+    const arriving = arrivalBlend(pad, x, y);
+    if (arriving > 0) {
+      items.push({
+        depth: ARRIVAL_DEPTH,
+        draw: () => drawHead(arriving),
+      });
+    }
   };
 
   // 长音符（如「整曲踩住」的左踏板）时长远超可见时间窗，单独取一份小列表，
