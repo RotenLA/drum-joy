@@ -104,7 +104,7 @@ class StickManager {
           : null;
     if (!layer) return;
 
-    const side = this.closestSide(part, layer);
+    const side = this.hittingSide(part, layer);
     if (!side) return;
     const previous = this.layers[side];
     if (previous === layer) return;
