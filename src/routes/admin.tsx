@@ -279,7 +279,7 @@ function AdminPage() {
               value={user}
               onChange={(e) => setUser(e.target.value)}
               autoComplete="username"
-              className="mt-1 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-sm text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+              className="mt-1 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
             />
           </label>
           <label className="mb-5 block text-xs text-[var(--taiko-ink)]/60">
@@ -289,13 +289,13 @@ function AdminPage() {
               value={pass}
               onChange={(e) => setPass(e.target.value)}
               autoComplete="current-password"
-              className="mt-1 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-sm text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+              className="mt-1 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
             />
           </label>
           {loginErr && <p className="mb-3 text-xs text-red-400">账号或密码不正确</p>}
           <button
             type="submit"
-            className="w-full border border-[var(--taiko-accent)] bg-[var(--taiko-accent)]/15 px-3 py-2 text-sm text-[var(--taiko-accent)]"
+            className="w-full border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-3 py-2 text-sm text-[var(--taiko-accent)]"
           >
             进入
           </button>
@@ -331,7 +331,7 @@ function AdminPage() {
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="mt-1 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-sm text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+                className="mt-1 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
               />
             </label>
             <label className="text-xs text-[var(--taiko-ink)]/60">
@@ -339,7 +339,7 @@ function AdminPage() {
               <input
                 value={artist}
                 onChange={(e) => setArtist(e.target.value)}
-                className="mt-1 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-sm text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+                className="mt-1 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
               />
             </label>
           </div>
@@ -376,7 +376,7 @@ function AdminPage() {
             <button
               type="submit"
               disabled={busy !== null}
-              className="border border-[var(--taiko-accent)] bg-[var(--taiko-accent)]/15 px-4 py-2 text-sm text-[var(--taiko-accent)] disabled:opacity-50"
+              className="border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-4 py-2 text-sm text-[var(--taiko-accent)] disabled:opacity-50"
             >
               上传并生成四档谱面
             </button>
@@ -394,7 +394,7 @@ function AdminPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索标题或艺人"
-            className="w-56 border border-[var(--taiko-line)] bg-transparent px-3 py-1.5 text-xs text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+            className="w-56 border border-[var(--taiko-line)] bg-transparent px-3 py-1.5 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
           />
         </div>
         <div className="flex flex-col divide-y divide-[var(--taiko-line)]">
@@ -406,7 +406,7 @@ function AdminPage() {
                   const v = e.target.value.trim();
                   if (v && v !== s.title) void update({ data: { id: s.id, title: v } }).then(refresh);
                 }}
-                className="min-w-40 flex-1 border border-transparent bg-transparent px-1 py-0.5 hover:border-[var(--taiko-line)] focus:border-[var(--taiko-accent)] focus:outline-none"
+                className="min-w-40 flex-1 border border-transparent bg-transparent px-1 py-0.5 text-base hover:border-[var(--taiko-line)] focus:border-[var(--taiko-accent)] focus:outline-none"
               />
               <span className="text-xs tabular-nums text-[var(--taiko-ink)]/50">
                 {fmtTime(s.duration_ms)} · BPM {Number(s.bpm)} · {s.ts_num}/{s.ts_den}
