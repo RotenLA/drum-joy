@@ -285,6 +285,7 @@ export function FallScreen({
   // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
   useEffect(() => {
     void midiManager.init();
+    unlockAudio(); // iOS/WKWebView：首次手势里接通音频输出，避免第一批敲击抖动
     const offNote = midiManager.onNote((note, vel, atMs) => {
       const part = partOfNote(note);
       if (!part) return;
