@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { quality } from "./perf";
 import { debugLog } from "./debugLog";
 import { latencyMeter } from "./latencyMeter";
+import { activeVoiceCount, currentLookaheadMs } from "./drumKit";
 
 /**
  * 游玩演奏区左上角帧数徽章。
@@ -19,7 +20,9 @@ export function FpsBadge() {
     inputMax: number;
     longFrames: number;
     lastLong: number;
-  }>({ on: false, input: 0, inputMax: 0, longFrames: 0, lastLong: 0 });
+    voices: number;
+    lookahead: number;
+  }>({ on: false, input: 0, inputMax: 0, longFrames: 0, lastLong: 0, voices: 0, lookahead: 0 });
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -30,6 +33,8 @@ export function FpsBadge() {
         inputMax: latencyMeter.inputMaxMs,
         longFrames: latencyMeter.longFrameCount,
         lastLong: latencyMeter.lastLongFrame,
+        voices: activeVoiceCount(),
+        lookahead: Math.round(currentLookaheadMs()),
       });
     }, 500);
     return () => window.clearInterval(id);
@@ -51,6 +56,9 @@ export function FpsBadge() {
           </div>
           <div className="mt-0.5 text-[rgba(255,255,255,0.65)]" title="长帧：累计次数 / 最近一次耗时（>30ms视为长帧）">
             LF {jitter.longFrames} ({jitter.lastLong}ms)
+          </div>
+          <div className="mt-0.5 text-[rgba(255,255,255,0.65)]" title="鼓声：当前同时发声数 / 当前发声提前量">
+            AU {jitter.voices} / {jitter.lookahead}ms
           </div>
         </>
       ) : null}
