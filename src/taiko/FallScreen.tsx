@@ -82,6 +82,8 @@ export function FallScreen({
   const beatMsRef = useRef(500);
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
+  /** 本局是否真正开始演奏过（用于中途退出也记历史） */
+  const playedRef = useRef(false);
 
   // 画质档位（在谱面页设置；tier 变化时重设画布分辨率）
   const [tier, setTier] = useState<QualityTier>("high");
@@ -295,6 +297,7 @@ export function FallScreen({
     timersRef.current.forEach((t) => window.clearTimeout(t));
     timersRef.current = [];
     resetRun();
+    playedRef.current = true;
     latencyMeter.reset();
     // 倒计时那 4 拍里把鼓组样本与音频节点热起来，避免首次敲某个鼓时才解码
     if (kitOnRef.current) void warmUpDrums();
@@ -692,7 +695,7 @@ export function FallScreen({
                 {tr("重新开始", "Restart")}
               </button>
               <button
-                onClick={() => setPhaseBoth("idle")}
+                onClick={backToPicker}
                 className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
               >
                 {tr("选择歌曲", "Songs")}
@@ -721,7 +724,7 @@ export function FallScreen({
                 {tr("再来一次", "Retry")}
               </button>
               <button
-                onClick={() => setPhaseBoth("idle")}
+                onClick={backToPicker}
                 className="border border-white/30 px-8 py-2 text-sm tracking-[0.2em] text-white/70 transition-colors hover:border-white/70 hover:text-white"
               >
                 {tr("选择歌曲", "Songs")}
