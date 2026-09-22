@@ -32,7 +32,15 @@ const COUNT_IN_BEATS = 4;
 
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
-export function FallScreen({ speed, suspended = false }: { speed: number; suspended?: boolean }) {
+export function FallScreen({
+  speed,
+  suspended = false,
+  onSpeedChange,
+}: {
+  speed: number;
+  suspended?: boolean;
+  onSpeedChange?: (s: number) => void;
+}) {
   const { tr, language } = useLanguage();
   const song = useSong();
   const { stems } = song;
@@ -40,6 +48,8 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
+  const [mixerOpen, setMixerOpen] = useState(false);
+
 
   const phaseRef = useRef<Phase>("idle");
   const timeRef = useRef(0);
