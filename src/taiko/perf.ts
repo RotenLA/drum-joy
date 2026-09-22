@@ -118,7 +118,11 @@ class QualityController {
   }
 
   get params(): QualityParams {
-    return QUALITY[this.tier];
+    const p = QUALITY[this.tier];
+    // iOS 屏幕多为 3 倍像素密度，按原上限绘制的像素量约为安卓的两倍，
+    // 密集段容易出现突发掉帧；这里只压绘制精度，观感基本无差。
+    if (isIOS() && p.maxDpr > IOS_MAX_DPR) return { ...p, maxDpr: IOS_MAX_DPR };
+    return p;
   }
 
   /** 游玩屏实测帧率（只在真实渲染帧时更新，30 帧上限会如实体现） */

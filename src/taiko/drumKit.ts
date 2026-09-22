@@ -5,6 +5,7 @@
  * 默认开启，可在谱面页全局参数里关闭；开关与鼓组选择都存 localStorage。
  */
 import { getAudioContext } from "./metronome";
+import { isAndroid, isIOS } from "./platform";
 import type { PartId } from "./laneLayouts";
 import { KIT_SAMPLES } from "./kitSamples";
 
