@@ -278,6 +278,9 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
     timersRef.current.forEach((t) => window.clearTimeout(t));
     timersRef.current = [];
     resetRun();
+    latencyMeter.reset();
+    // 倒计时那 4 拍里把鼓组样本与音频节点热起来，避免首次敲某个鼓时才解码
+    if (kitOnRef.current) void warmUpDrums();
     const beatMs = 60000 / playChart.bpm;
     beatMsRef.current = beatMs;
     const countdownMs = COUNT_IN_BEATS * beatMs;
