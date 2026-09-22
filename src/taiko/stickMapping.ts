@@ -100,6 +100,19 @@ const smoothstep = (t: number) => {
   return c * c * (3 - 2 * c);
 };
 
+/** 分水岭附近的滞回带（度）：避免手停在边界时资格反复翻转 */
+export const PITCH_HYSTERESIS = 4;
+
+/**
+ * 单根鼓棒按自己的俯仰角判定所属层；落在滞回带内时保持当前层。
+ */
+export function layerOfPitch(pitch: number, current: StickLayer): StickLayer {
+  const p = Number.isFinite(pitch) ? pitch : 0;
+  if (p > PITCH_BORDER + PITCH_HYSTERESIS) return "upper";
+  if (p < PITCH_BORDER - PITCH_HYSTERESIS) return "lower";
+  return current;
+}
+
 /** 按开发标定判定当前角度指向哪个鼓面（用于调试展示） */
 export function partOfPose(pose: StickPose): PartId {
   const zones = pose.p > PITCH_BORDER ? UPPER_ZONES : LOWER_ZONES;
