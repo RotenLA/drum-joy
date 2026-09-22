@@ -3,7 +3,7 @@ import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { midiManager } from "../midiInput";
 import { partOfNote } from "../laneLayouts";
-import { loadKitEnabled, playDrum } from "../drumKit";
+import { loadKitEnabled, playDrum, saveKitEnabled, subscribeKitEnabled } from "../drumKit";
 import { useLanguage } from "../i18n";
 import { TutorialStage } from "./TutorialStage";
 import { TUTORIAL_STEPS, tutorialLabels, tutorialStepCopy } from "./steps";
@@ -19,6 +19,12 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const [held, setHeld] = useState(false);
   const [passed, setPassed] = useState(false);
   const [restartKey, setRestartKey] = useState(0);
+  /** 鼓音色开关（与全局设置同一份，双向同步） */
+  const [kitOn, setKitOn] = useState(true);
+  useEffect(() => {
+    setKitOn(loadKitEnabled());
+    return subscribeKitEnabled((on) => setKitOn(on));
+  }, []);
   /** 命中闪光：partId -> 到期时间戳（performance.now 基准），交给正式渲染器 */
   const flashes = useRef<Record<string, number>>({});
   const step = TUTORIAL_STEPS[index] ?? TUTORIAL_STEPS[0];
