@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { midiManager } from "../midiInput";
 import { partOfNote } from "../laneLayouts";
@@ -61,7 +61,14 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   return <div className="taiko-tutorial-layout absolute inset-0 z-50 flex min-h-0 bg-[var(--taiko-paper)]">
     <section className="relative min-h-0 min-w-0 flex-[2.1]"><TutorialStage step={step} index={index} flashes={flashes} progress={progress} needed={needed} hold={held} restartKey={restartKey} />{passed && <div className="absolute inset-0 flex items-center justify-center bg-[rgba(8,7,9,0.34)]"><div className="rounded-lg border border-[var(--taiko-accent)] bg-[var(--taiko-glass-strong)] px-8 py-5 text-center text-xl text-[var(--taiko-accent)]">{labels.complete}</div></div>}</section>
     <aside className="taiko-scroll relative min-h-0 min-w-[260px] flex-1 overflow-y-auto border-l border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] px-5 pb-5 pt-16 backdrop-blur-[18px]">
-      <Button variant="outline" size="sm" onClick={() => { markTutorialSeen(); onLeave(); }} className="absolute right-3 top-3 border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[var(--taiko-ink)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"><X size={15} />{labels.leave}</Button>
+      <div className="absolute right-3 top-3 flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => setKitOn(saveKitEnabled(!kitOn))} className={kitOn
+          ? "border-[var(--taiko-accent)] bg-[var(--taiko-glass)] text-[var(--taiko-accent)]"
+          : "border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[rgba(255,255,255,0.6)]"}>
+          {kitOn ? <Volume2 size={15} /> : <VolumeX size={15} />}{kitOn ? (labels.kitOn ?? "Drum sound on") : (labels.kitOff ?? "Drum sound off")}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => { markTutorialSeen(); onLeave(); }} className="border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[var(--taiko-ink)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"><X size={15} />{labels.leave}</Button>
+      </div>
       <p className="text-xs tabular-nums text-[var(--taiko-accent)]">{labels.tutorial} {index + 1} / {TUTORIAL_STEPS.length}</p>
       <h2 className="mt-2 text-2xl font-semibold text-[var(--taiko-ink)]">{copy.title}</h2>
       <p className="mt-3 text-sm leading-7 text-[rgba(255,255,255,0.72)]">{copy.body}</p>
