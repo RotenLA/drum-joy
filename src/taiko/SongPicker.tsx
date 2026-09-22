@@ -275,7 +275,8 @@ export function SongPicker({
           onPointerLeave={endDrag}
           onWheel={onWheel}
           className="taiko-hscroll flex min-h-0 flex-1 cursor-grab items-center gap-3 overflow-x-auto overflow-y-hidden pb-5 pt-1 active:cursor-grabbing"
-          style={{ paddingLeft: "calc(50vw - 62px)", paddingRight: "calc(50vw - 62px)" }}
+          // 右侧留白足够多：可一直右滑到只剩最后一首露出一部分在界面内
+          style={{ paddingLeft: "1rem", paddingRight: "max(1rem, calc(100vw - 160px))" }}
         >
           {listing && (
             <p className="m-auto text-xs text-[rgba(255,255,255,0.55)]">
