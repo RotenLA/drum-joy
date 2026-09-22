@@ -159,7 +159,7 @@ export function SongPicker({
       )}
 
       {tab === "songs" ? (
-        <div className="taiko-scroll flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden px-4 pb-5 pt-1">
+        <div className="taiko-scroll flex min-h-0 flex-1 items-center gap-3 overflow-x-auto overflow-y-hidden px-4 pb-5 pt-1">
           {listing && (
             <p className="m-auto text-xs text-[rgba(255,255,255,0.55)]">
               {tr("正在读取曲库…", "Loading library…")}
@@ -181,6 +181,7 @@ export function SongPicker({
                 key={item.id}
                 className="relative shrink-0 transition-all duration-300"
                 style={{
+                  height: "min(86%, 360px)",
                   width: wide ? "min(72vw, 420px)" : "clamp(84px, 13vw, 124px)",
                   transform: "skewX(-9deg)",
                   opacity: wide ? 1 : 0.72,
