@@ -163,7 +163,7 @@ export function GlobalSettings({
   );
 
   return (
-    <section className="flex flex-col gap-3 border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-4 py-3">
+    <section className="flex flex-col gap-3 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-4 py-3 backdrop-blur-[18px]">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">
           {tr("全局参数", "Global settings")}
@@ -183,7 +183,7 @@ export function GlobalSettings({
           <button
             key={m}
             onClick={() => quality.setMode(m)}
-            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors first:ml-0 ${
+            className={`-ml-px rounded-sm border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors first:ml-0 ${
               qualityMode === m
                 ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                 : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
@@ -211,7 +211,7 @@ export function GlobalSettings({
           <button
             key={s}
             onClick={() => onSpeedChange(s)}
-            className={`-ml-px border border-[var(--taiko-line)] px-3 py-1 text-xs tabular-nums transition-colors first:ml-0 ${
+            className={`-ml-px rounded-sm border border-[var(--taiko-line)] px-3 py-1 text-xs tabular-nums transition-colors first:ml-0 ${
               speed === s
                 ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                 : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
@@ -264,7 +264,7 @@ export function GlobalSettings({
           <button
             key={d.id}
             onClick={() => song.setSong({ difficulty: d.id })}
-            className={`-ml-px border px-3 py-1 text-xs transition-colors first:ml-0 ${
+            className={`-ml-px rounded-sm border px-3 py-1 text-xs transition-colors first:ml-0 ${
               song.difficulty === d.id
                 ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                 : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
@@ -279,7 +279,7 @@ export function GlobalSettings({
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={calibrating ? finish : startCalibration}
-          className={`border px-3 py-1.5 text-xs transition-colors ${
+          className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
             calibrating
               ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
               : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/80 hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
@@ -294,7 +294,7 @@ export function GlobalSettings({
         <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
         <button
           onClick={toggleKit}
-          className={`border px-3 py-1.5 text-xs transition-colors ${
+          className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
             kitOn
               ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
               : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
@@ -310,7 +310,7 @@ export function GlobalSettings({
           <select
             value={kitId}
             onChange={(e) => handleKitChange(Number(e.target.value))}
-            className="border border-[var(--taiko-accent)] bg-[var(--taiko-surface)] px-2 py-1 text-xs text-[var(--taiko-ink)]"
+            className="rounded-md border border-[var(--taiko-accent)] bg-[var(--taiko-surface)] px-2 py-1 text-xs text-[var(--taiko-ink)]"
           >
             {KIT_NAMES.map((k) => (
               <option

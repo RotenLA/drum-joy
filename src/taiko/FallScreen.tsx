@@ -14,7 +14,8 @@ import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
 import { useLanguage } from "./i18n";
 import { SongPicker } from "./SongPicker";
-import { SlidersHorizontal } from "lucide-react";
+import { LogOut, SlidersHorizontal, X } from "lucide-react";
+import { GlobalSettings } from "./GlobalSettings";
 
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
@@ -39,10 +40,12 @@ export function FallScreen({
   speed,
   suspended = false,
   onSpeedChange,
+  onExit,
 }: {
   speed: number;
   suspended?: boolean;
   onSpeedChange?: ((s: number) => void) | undefined;
+  onExit?: (() => void) | undefined;
 }) {
   const { tr, language } = useLanguage();
   const song = useSong();
@@ -52,6 +55,7 @@ export function FallScreen({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
   const [mixerOpen, setMixerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
 
   const phaseRef = useRef<Phase>("idle");
@@ -609,7 +613,46 @@ export function FallScreen({
 
         {/* 选歌层：未开始时覆盖在虚化的舞台上 */}
         {phase === "idle" && (
-          <SongPicker speed={speed} onSpeedChange={onSpeedChange} onStart={start} />
+          <SongPicker
+            speed={speed}
+            onSpeedChange={onSpeedChange}
+            onStart={start}
+            onOpenSettings={() => setSettingsOpen(true)}
+          />
+        )}
+
+        {phase === "idle" && settingsOpen && (
+          <div
+            className="absolute inset-0 z-50 flex items-center justify-center bg-[var(--taiko-modal-scrim)] p-4 backdrop-blur-[18px]"
+            role="dialog"
+            aria-modal="true"
+            aria-label={tr("全局设置", "Global settings")}
+            onMouseDown={(event) => {
+              if (event.currentTarget === event.target) setSettingsOpen(false);
+            }}
+          >
+            <div className="taiko-scroll max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] p-3 shadow-2xl backdrop-blur-[24px]">
+              <div className="mb-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={onExit}
+                  className="flex items-center gap-1.5 rounded-md border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/75 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+                >
+                  <LogOut size={14} />
+                  {tr("退出", "Exit")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(false)}
+                  aria-label={tr("关闭设置", "Close settings")}
+                  className="grid h-8 w-8 place-items-center rounded-md border border-[var(--taiko-line)] text-[var(--taiko-ink)]/75 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <GlobalSettings speed={speed} onSpeedChange={(next) => onSpeedChange?.(next)} />
+            </div>
+          </div>
         )}
 
         {phase === "paused" && (
