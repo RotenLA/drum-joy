@@ -3,7 +3,7 @@
  * 节拍器两种模式：自由运行（getPositionMs 返回 null）或跟随外部时钟
  * （如歌曲播放器），按 beat 网格用 30ms 轮询 + 150ms 前瞻调度滴答声。
  */
-import { isAndroid } from "./platform";
+import { isAndroid, isIOS } from "./platform";
 
 let sharedCtx: AudioContext | null = null;
 
@@ -13,8 +13,9 @@ function createCtx(): AudioContext {
   const w = globalThis as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
   const Ctx = w.AudioContext ?? w.webkitAudioContext;
   if (!Ctx) throw new Error("当前环境不支持 Web Audio");
-  // 安卓硬件原生采样率基本都是 48kHz：显式锁定可跳过系统重采样，省下 20~30ms 延迟
-  const opts: AudioContextOptions = isAndroid()
+  // 安卓硬件原生采样率基本都是 48kHz：显式锁定可跳过系统重采样，省下 20~30ms 延迟。
+  // iOS/iPadOS 必须跟随系统原生采样率（强制 48k 会触发 WKWebView 内部重采样并加大缓冲）。
+  const opts: AudioContextOptions = isAndroid() && !isIOS()
     ? { latencyHint: "interactive", sampleRate: 48000 }
     : { latencyHint: "interactive" };
   try {
