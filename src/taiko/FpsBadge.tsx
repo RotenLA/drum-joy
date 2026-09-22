@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { quality } from "./perf";
 import { debugLog } from "./debugLog";
 import { latencyMeter } from "./latencyMeter";
-import { activeVoiceCount, currentLookaheadMs } from "./drumKit";
+import { activeVoiceCount, audioJitterMs, currentLookaheadMs } from "./drumKit";
+import { outputLatencyMs } from "./metronome";
 
 /**
  * 游玩演奏区左上角帧数徽章。
@@ -22,7 +23,19 @@ export function FpsBadge() {
     lastLong: number;
     voices: number;
     lookahead: number;
-  }>({ on: false, input: 0, inputMax: 0, longFrames: 0, lastLong: 0, voices: 0, lookahead: 0 });
+    audJitter: number;
+    outLatency: number;
+  }>({
+    on: false,
+    input: 0,
+    inputMax: 0,
+    longFrames: 0,
+    lastLong: 0,
+    voices: 0,
+    lookahead: 0,
+    audJitter: 0,
+    outLatency: 0,
+  });
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -35,6 +48,8 @@ export function FpsBadge() {
         lastLong: latencyMeter.lastLongFrame,
         voices: activeVoiceCount(),
         lookahead: Math.round(currentLookaheadMs()),
+        audJitter: audioJitterMs(),
+        outLatency: outputLatencyMs(),
       });
     }, 500);
     return () => window.clearInterval(id);
@@ -59,6 +74,12 @@ export function FpsBadge() {
           </div>
           <div className="mt-0.5 text-[rgba(255,255,255,0.65)]" title="鼓声：当前同时发声数 / 当前发声提前量">
             AU {jitter.voices} / {jitter.lookahead}ms
+          </div>
+          <div
+            className="mt-0.5 text-[rgba(255,255,255,0.65)]"
+            title="发声抖动：音频时钟漂移最大值 / 输出链路延迟"
+          >
+            AUD {jitter.audJitter}ms / {jitter.outLatency}ms
           </div>
         </>
       ) : null}

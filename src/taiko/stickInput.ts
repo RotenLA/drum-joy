@@ -8,7 +8,7 @@
  */
 import { debugLog } from "./debugLog";
 import { PAD_ANCHORS, type PartId } from "./laneLayouts";
-import { stickPoint, type StickLayer } from "./stickMapping";
+import { layerOfPitch, stickPoint, type StickLayer } from "./stickMapping";
 
 export type StickSide = "l" | "r";
 
@@ -104,7 +104,7 @@ class StickManager {
           : null;
     if (!layer) return;
 
-    const side = this.closestSide(part, layer);
+    const side = this.hittingSide(part, layer);
     if (!side) return;
     const previous = this.layers[side];
     if (previous === layer) return;
@@ -115,21 +115,32 @@ class StickManager {
     debugLog.push("stick", `${side.toUpperCase()} ${previous} → ${layer} (${part})`);
   }
 
-  private closestSide(part: PartId, targetLayer: StickLayer): StickSide | null {
+  /**
+   * 判断这次击打是哪根棒：
+   * 1) 先按每根棒**自己的俯仰角**筛出「抬起 / 放平」和目标层一致的棒；
+   * 2) 有资格的棒里再比横向指向，取离该鼓面更近的一根；
+   * 3) 都没资格就不切层（绝不会因为另一根棒的击打把这根带上去）。
+   */
+  private hittingSide(part: PartId, targetLayer: StickLayer): StickSide | null {
     const snapshot = this.latest();
-    const poseL = snapshot?.l;
-    const poseR = snapshot?.r;
-    if (!poseL && !poseR) return null;
-    if (!poseL) return "r";
-    if (!poseR) return "l";
+    const poses: Record<StickSide, StickPose | null> = {
+      l: snapshot?.l ?? null,
+      r: snapshot?.r ?? null,
+    };
+    const eligible = (["l", "r"] as StickSide[]).filter((side) => {
+      const pose = poses[side];
+      if (!pose) return false;
+      return layerOfPitch(pose.p, this.layers[side]) === targetLayer;
+    });
+    if (eligible.length === 0) return null;
+    if (eligible.length === 1) return eligible[0]!;
+
     const target = PAD_ANCHORS[part];
-    // 两根棒都投影到目标鼓面所在层，再比较真实指向与鼓面中心的距离。
-    // 这样 l/r 身份始终来自硬件，只决定哪根棒执行这次上下层切换。
-    const left = stickPoint(poseL, targetLayer);
-    const right = stickPoint(poseR, targetLayer);
-    const distance = (point: { x: number; y: number }) =>
-      Math.hypot(point.x - target.cx, point.y - target.cy);
-    return distance(left) <= distance(right) ? "l" : "r";
+    const distance = (side: StickSide) => {
+      const point = stickPoint(poses[side]!, targetLayer);
+      return Math.hypot(point.x - target.cx, point.y - target.cy);
+    };
+    return distance("l") <= distance("r") ? "l" : "r";
   }
 }
 

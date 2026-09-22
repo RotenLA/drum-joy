@@ -195,13 +195,50 @@ const voices: Voice[] = [];
 function choke(ctx: AudioContext, v: Voice): void {
   const t = ctx.currentTime;
   try {
+    // 单段快速收尾：不再做多段曲线排程，密集段少给音频线程添活
     v.gain.gain.cancelScheduledValues(t);
-    v.gain.gain.setValueAtTime(Math.max(0.0001, v.gain.gain.value), t);
     v.gain.gain.linearRampToValueAtTime(0.0001, t + CHOKE_SEC);
     v.src.stop(t + CHOKE_SEC + 0.01);
   } catch {
     // 已停止
   }
+}
+
+/**
+ * 音量节点池：每敲一下都 createGain + connect + 回收，在密集段是可观的
+ * 临时对象开销。这里复用固定一批节点，只改增益值。
+ */
+const gainPool: GainNode[] = [];
+
+function takeGain(ctx: AudioContext, value: number): GainNode {
+  const node = gainPool.pop() ?? ctx.createGain();
+  try {
+    node.gain.cancelScheduledValues(ctx.currentTime);
+  } catch {
+    // 忽略
+  }
+  node.gain.value = value;
+  if (node.context !== ctx) {
+    const fresh = ctx.createGain();
+    fresh.gain.value = value;
+    return fresh;
+  }
+  node.connect(bus(ctx));
+  return node;
+}
+
+function recycleGain(node: GainNode): void {
+  try {
+    node.disconnect();
+  } catch {
+    // 忽略
+  }
+  if (gainPool.length < 32) gainPool.push(node);
+}
+
+/** 预建一批音量节点，开演前热起来 */
+function primeGainPool(ctx: AudioContext): void {
+  while (gainPool.length < 16) gainPool.push(ctx.createGain());
 }
 
 function dropVoice(v: Voice): void {
@@ -234,10 +271,8 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
   makeRoom(ctx, part);
   const src = ctx.createBufferSource();
   src.buffer = buf;
-  const g = ctx.createGain();
-  g.gain.value = v;
+  const g = takeGain(ctx, v);
   src.connect(g);
-  g.connect(bus(ctx));
   src.start(t);
   const voice: Voice = { part, src, gain: g, at: t };
   voices.push(voice);
@@ -245,10 +280,10 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
     dropVoice(voice);
     try {
       src.disconnect();
-      g.disconnect();
     } catch {
       // 已断开
     }
+    recycleGain(g);
   };
   return true;
 }
@@ -344,53 +379,78 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * @param note 原始 MIDI 键位，用于逐键位响度衰减
  */
 /**
- * 敲击发声的固定前瞻（秒）。
- * 原来是「立刻播」（+1ms），音频线程忙的时候这一声会被推到下一个音频块，
- * 表现为偶发的延迟尖峰。统一提前 10ms 排程后总延迟恒定、不再随忙闲抖动；
- * 这 10ms 已包含在 calibration.ts 的默认 judge/visual 偏移里，手感不变。
+ * 敲击发声的提前量（秒）。
+ * 过去会随密集程度在 10ms / 18ms 之间自己跳，密集段声音整体后移、
+ * 松下来又弹回，听上去就是「偶尔突然不跟手」。现在改成**全程固定**，
+ * 开演时按实际音频块长度（baseLatency）算一次即可。
  */
 export const HIT_LOOKAHEAD_SEC = 0.01;
-/** 密集段的提前量上限（秒）：音频线程忙时多留一点，避免这一声掉到下个音频块 */
-const HIT_LOOKAHEAD_BUSY_SEC = 0.018;
-/** 判定「密集」的窗口与击打数 */
-const BUSY_WINDOW_MS = 300;
-const BUSY_HITS = 6;
+const HIT_LOOKAHEAD_MIN = 0.008;
+const HIT_LOOKAHEAD_MAX = 0.02;
 
-const recentHits: number[] = [];
+let hitLookaheadSec = HIT_LOOKAHEAD_SEC;
 
-/**
- * 自适应提前量：平时保持最小 10ms（手感最直接），
- * 最近 300ms 内击打数超过阈值时临时加到 18ms，压住突发延迟尖峰。
- */
-function lookaheadSec(): number {
-  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  while (recentHits.length && now - recentHits[0]! > BUSY_WINDOW_MS) recentHits.shift();
-  recentHits.push(now);
-  return recentHits.length >= BUSY_HITS ? HIT_LOOKAHEAD_BUSY_SEC : HIT_LOOKAHEAD_SEC;
+/** 开演时按输出缓冲长度定一次提前量（只算一次，之后恒定） */
+export function initHitLookahead(ctx: AudioContext): void {
+  const base = Number(ctx.baseLatency ?? 0);
+  const want = Number.isFinite(base) && base > 0 ? base + 0.004 : HIT_LOOKAHEAD_SEC;
+  hitLookaheadSec = Math.max(HIT_LOOKAHEAD_MIN, Math.min(HIT_LOOKAHEAD_MAX, want));
 }
 
-/** 当前提前量（毫秒，调试面板用，不推进统计窗口） */
+/** 当前提前量（毫秒，调试面板用） */
 export function currentLookaheadMs(): number {
-  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  const n = recentHits.filter((t) => now - t <= BUSY_WINDOW_MS).length;
-  return (n >= BUSY_HITS ? HIT_LOOKAHEAD_BUSY_SEC : HIT_LOOKAHEAD_SEC) * 1000;
+  return Math.round(hitLookaheadSec * 1000);
+}
+
+// ---------------- 音频时钟抖动量表 ----------------
+
+let clockBaseMs: number | null = null;
+let clockSkewMaxMs = 0;
+
+const perfNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+/**
+ * 每次发声记一下「主线程时钟 − 音频时钟」的漂移。
+ * 音频线程被卡住时这个差值会突然变大，正对应听到的发声抖动。
+ */
+function recordClockSkew(ctx: AudioContext): void {
+  const delta = perfNow() - ctx.currentTime * 1000;
+  if (clockBaseMs === null) {
+    clockBaseMs = delta;
+    return;
+  }
+  const skew = Math.abs(delta - clockBaseMs);
+  if (skew > clockSkewMaxMs) clockSkewMaxMs = Math.round(skew);
+}
+
+/** 发声排程抖动最大值（毫秒，调试面板用） */
+export function audioJitterMs(): number {
+  return clockSkewMaxMs;
+}
+
+export function resetAudioJitter(): void {
+  clockBaseMs = null;
+  clockSkewMaxMs = 0;
 }
 
 /** 开演前预热：加载当前鼓组样本，并静音跑一次建立音频节点图 */
 export async function warmUpDrums(kitId?: number): Promise<void> {
   const id = kitId ?? loadKitId();
   const ctx = getAudioContext();
+  initHitLookahead(ctx);
+  primeGainPool(ctx);
+  resetAudioJitter();
   await ensureKitLoaded(id);
   // 静音触发一次，让节点图与解码路径提前热起来
   for (const part of ["kick", "snare", "hihat"] as PartId[]) {
-    playSample(ctx, id, part, ctx.currentTime + HIT_LOOKAHEAD_SEC, 0.0001);
+    playSample(ctx, id, part, ctx.currentTime + hitLookaheadSec, 0.0001);
   }
-  recentHits.length = 0;
 }
 
 export function playDrum(part: PartId, velocity = 100, kitId?: number, note?: number): void {
   const ctx = getAudioContext();
-  const t = ctx.currentTime + lookaheadSec();
+  recordClockSkew(ctx);
+  const t = ctx.currentTime + hitLookaheadSec;
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
 
   if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
