@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { midiManager } from "../midiInput";
-import { partOfNote, type PartId } from "../laneLayouts";
+import { partOfNote } from "../laneLayouts";
 import { loadKitEnabled, playDrum } from "../drumKit";
 import { useLanguage } from "../i18n";
 import { TutorialStage } from "./TutorialStage";
