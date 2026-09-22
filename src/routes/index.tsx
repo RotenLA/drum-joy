@@ -24,9 +24,16 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
+  // 语言与本地设置只有在浏览器里才知道，预渲染阶段先留空，
+  // 挂载后再一次性渲染真实界面，避免首屏文字与预渲染内容不一致的警告。
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <div style={{ minHeight: "100vh", background: "#100c0a" }} />;
+
   return (
     <LanguageProvider>
       <TaikoShell />
     </LanguageProvider>
   );
 }
+
