@@ -31,6 +31,8 @@ const FLASH_MS = 200;
 /** 判定窗口：Perfect ±100ms / Good ±200ms，超时未击为 Miss（调手感改这里） */
 const PERFECT_MS = 100;
 const GOOD_MS = 200;
+/** 击打迟到超过这个毫秒数就只出声不参与判定 */
+const LATE_INPUT_LIMIT_MS = 400;
 /** 倒计时拍数（四分音符，无视拍号） */
 const COUNT_IN_BEATS = 4;
 
