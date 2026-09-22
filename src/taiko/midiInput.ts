@@ -20,6 +20,8 @@ export interface MidiInputInfo {
 
 interface MidiMessageLike {
   data: Uint8Array | null;
+  /** 浏览器给出的这条消息的真实到达时刻（同 performance.now() 时基） */
+  timeStamp?: number;
 }
 
 interface MidiInputLike {
@@ -97,7 +99,11 @@ class MidiManager {
     // note-on：0x90 且力度 > 0（力度 0 视为 note-off）
     if (status === 0x90 && d[2]! > 0) {
       debugLog.push("midi", `硬件 note-on  ${d[1]} vel ${d[2]}${partTag(d[1]!)}`);
-      const at = performance.now();
+      // 优先用消息自带的到达时刻：同一批多条消息会被一起回调，
+      // 若统一取 now() 会把它们压成同一时刻，表现为突发延迟/判定偏移。
+      const now = performance.now();
+      const ts = typeof e.timeStamp === "number" && e.timeStamp > 0 ? e.timeStamp : now;
+      const at = ts > now + 50 || ts < now - 1000 ? now : ts;
       for (const f of this.noteListeners) f(d[1]!, d[2]!, at);
     } else if (status === 0x80 || (status === 0x90 && d[2]! === 0)) {
       debugLog.push("midi", `硬件 note-off ${d[1]}${partTag(d[1]!)}`);

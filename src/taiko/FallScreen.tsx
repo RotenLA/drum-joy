@@ -10,6 +10,7 @@ import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick, getAudioContext } from "./metronome";
 import { loadKitEnabled, playDrum, warmUpDrums } from "./drumKit";
 import { latencyMeter } from "./latencyMeter";
+import { debugLog } from "./debugLog";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
 import { useLanguage } from "./i18n";
@@ -31,6 +32,8 @@ const FLASH_MS = 200;
 /** 判定窗口：Perfect ±100ms / Good ±200ms，超时未击为 Miss（调手感改这里） */
 const PERFECT_MS = 100;
 const GOOD_MS = 200;
+/** 击打迟到超过这个毫秒数就只出声不参与判定 */
+const LATE_INPUT_LIMIT_MS = 400;
 /** 倒计时拍数（四分音符，无视拍号） */
 const COUNT_IN_BEATS = 4;
 
@@ -226,6 +229,12 @@ export function FallScreen({
       if (kitOnRef.current) playDrum(part, velocity, undefined, note);
 
       if (phaseRef.current !== "playing" || !playChart) return;
+      // 宿主偶发卡顿会把一批击打迟送过来；明显超窗的只出声不判定，
+      // 避免用一个错误时刻去命中/顶掉附近的音符。
+      if (now - at > LATE_INPUT_LIMIT_MS) {
+        debugLog.push("midi", `击打迟到 ${Math.round(now - at)}ms，只出声不判定`);
+        return;
+      }
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
       const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
       const notes = playChart.notes;
@@ -344,6 +353,34 @@ export function FallScreen({
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [togglePause]);
+
+  // 演奏中申请屏幕常亮：安卓息屏后系统更容易回收整个 WebView
+  useEffect(() => {
+    if (phase !== "playing" && phase !== "countdown") return;
+    type WakeLockSentinel = { release: () => Promise<void> };
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinel> };
+    };
+    if (!nav.wakeLock) return;
+    let sentinel: WakeLockSentinel | null = null;
+    let cancelled = false;
+    nav.wakeLock
+      .request("screen")
+      .then((s) => {
+        if (cancelled) void s.release().catch(() => {});
+        else {
+          sentinel = s;
+          debugLog.push("system", "已申请屏幕常亮");
+        }
+      })
+      .catch(() => {
+        // 宿主未授权则忽略，交给安卓外壳设置 FLAG_KEEP_SCREEN_ON
+      });
+    return () => {
+      cancelled = true;
+      void sentinel?.release().catch(() => {});
+    };
+  }, [phase]);
 
   // 空格暂停/继续，回车开始
   useEffect(() => {
