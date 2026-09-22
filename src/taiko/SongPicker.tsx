@@ -11,7 +11,8 @@ import { STEM_KINDS, hasAnyStem, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
 import { clearHistory, readHistory, type HistoryEntry } from "./history";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
-import { LogOut, Play, Search, Settings } from "lucide-react";
+import { BookOpen, LogOut, Play, Search, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const fmtTime = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -43,6 +44,10 @@ function VerticalTitle({ title }: { title: string }) {
       setShift(over > 8 ? over : 0);
     };
     measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     return () => ro.disconnect();
@@ -84,12 +89,14 @@ export function SongPicker({
   onStart,
   onOpenSettings,
   onExit,
+  onStartTutorial,
 }: {
   speed: number;
   onSpeedChange?: ((s: number) => void) | undefined;
   onStart: () => void;
   onOpenSettings: () => void;
   onExit?: (() => void) | undefined;
+  onStartTutorial: () => void;
 }) {
   const song = useSong();
   const { tr } = useLanguage();
@@ -231,6 +238,18 @@ export function SongPicker({
         </button>
 
         <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onStartTutorial}
+            aria-label={tr("进入教学", "Open tutorial")}
+            title={tr("进入教学", "Open tutorial")}
+            className="h-9 shrink-0 gap-1.5 rounded-md border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-2.5 text-[rgba(255,255,255,0.76)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+          >
+            <BookOpen size={15} />
+            <span className="hidden sm:inline">{tr("教学", "Tutorial")}</span>
+          </Button>
           {(
             [
               ["songs", tr("选择歌曲", "Songs")],
