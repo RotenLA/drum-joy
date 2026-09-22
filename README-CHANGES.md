@@ -1,15 +1,13 @@
-# 本次改动：敲击偶发延迟
+# 本次变更（UI 改造：选歌层 + 抽屉调音台）
 
-1. 新增 `src/taiko/latencyMeter.ts`：输入抖动量表（输入延迟、长帧统计），仅统计不影响手感。
-2. `src/taiko/FpsBadge.tsx`：调试面板开启时，帧率下方多两行 `IN 最近/最大ms`、`LF 长帧数(最近耗时)`。
-   - IN 接近 0 而 LF 在涨 → 网页卡顿；IN 自己在跳 → 事件在宿主侧就晚了（请在调用 `__pd2uNoteOn` 时带上第三个参数：宿主毫秒时间戳）。
-3. `src/taiko/drumKit.ts`：敲击发声由「立刻」改为固定 10ms 前瞻（`HIT_LOOKAHEAD_SEC`），消除随音频线程忙闲抖动；新增 `warmUpDrums()` 预热。
-4. `src/taiko/FallScreen.tsx`：命中判定改为按鼓件索引 + 二分时间窗查找（不再遍历整曲）；开始时重置量表并预热鼓组样本。
+1. 侧边栏只保留「游玩」「谱面设置」，默认进入游玩。
+2. 游玩界面新增音游式选歌层（舞台虚化背景）：顶部横排「选择歌曲 / 历史演奏 / 搜索」，
+   斜切卡片横向排列，未选中淡色收窄，选中亮起变宽并显示「开始」，点击进入倒计时。
+3. 底部常驻调音台移除，改为游玩界面左下角抽屉（点开展开 4 轨滑块，再点收拢），选歌时隐藏。
+4. 暂停 / 结算遮罩新增「选择歌曲」按钮，可直接回到选歌层。
 
-文件清单：
-- src/taiko/latencyMeter.ts（新增）
-- src/taiko/FpsBadge.tsx
-- src/taiko/drumKit.ts
+## 变更文件
+- src/taiko/SongPicker.tsx（新增）
 - src/taiko/FallScreen.tsx
-- roadmap.md
-- README-CHANGES.md
+- src/taiko/ChartScreen.tsx（精简为谱面设置）
+- src/taiko/TaikoShell.tsx
