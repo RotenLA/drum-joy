@@ -201,7 +201,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .taiko-tutorial-note, .taiko-marquee-run { animation: none; }
+  .taiko-marquee-run { animation: none; }
 }
 
 /* iOS 会在聚焦小于 16px 的表单控件时自动放大页面。仅触屏设备统一抬到 16px。 */
