@@ -5,6 +5,8 @@
  * 默认 auto：按实测帧时间自动降档（只降不升，带冷却，避免来回抖动）。
  */
 
+import { isIOS } from "./platform";
+
 export type QualityTier = "high" | "medium" | "low";
 export type QualityMode = "auto" | QualityTier;
 

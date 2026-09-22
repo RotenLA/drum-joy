@@ -61,7 +61,7 @@ export function tutorialStepCopy(language: Language, index: number, step: Tutori
   return STEP_COPY[language]?.[index] ?? { title: step.titleEn, body: step.bodyEn };
 }
 
-export interface TutorialLabels { tutorial: string; leave: string; next: string; retry: string; skip: string; finish: string; complete: string; progress: string; holding: string; stick: string; pedal: string; adapter: string }
+export interface TutorialLabels { tutorial: string; leave: string; next: string; retry: string; skip: string; finish: string; complete: string; progress: string; holding: string; stick: string; pedal: string; adapter: string; kitOn?: string; kitOff?: string }
 const OTHER: Partial<Record<Language, TutorialLabels>> = {
   "zh-TW": { tutorial: "教學", leave: "離開教學", next: "下一步", retry: "再練一次", skip: "跳過本節", finish: "開始選歌", complete: "完成！", progress: "練習進度", holding: "保持踩住", stick: "鼓棒輸入", pedal: "踏板輸入", adapter: "適配器" },
   ja: { tutorial: "チュートリアル", leave: "終了", next: "次へ", retry: "もう一度", skip: "スキップ", finish: "曲を選ぶ", complete: "完了！", progress: "進捗", holding: "踏み続ける", stick: "スティック入力", pedal: "ペダル入力", adapter: "アダプター" },
