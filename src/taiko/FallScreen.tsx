@@ -57,6 +57,8 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   const maxComboRef = useRef(0);
   const scoreRef = useRef(0);
   const missCursorRef = useRef(0);
+  /** 鼓件 → 该鼓件音符下标（按时间升序），判定时只在时间窗附近二分查找 */
+  const noteIndexRef = useRef<Partial<Record<PartId, number[]>>>({});
   const timersRef = useRef<number[]>([]);
   const countdownStartRef = useRef(0);
   const countdownMsRef = useRef(0);
