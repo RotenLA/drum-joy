@@ -31,6 +31,8 @@ export function FpsBadge() {
     lookahead: number;
     audJitter: number;
     outLatency: number;
+    hitDelay: number;
+    hitPeak: number;
   }>({
     on: false,
     input: 0,
@@ -41,6 +43,8 @@ export function FpsBadge() {
     lookahead: 0,
     audJitter: 0,
     outLatency: 0,
+    hitDelay: 0,
+    hitPeak: 0,
   });
 
   useEffect(() => {
@@ -56,6 +60,8 @@ export function FpsBadge() {
         lookahead: Math.round(currentLookaheadMs()),
         audJitter: audioJitterMs(),
         outLatency: outputLatencyMs(),
+        hitDelay: hitDelayMs(),
+        hitPeak: hitDelayPeak(),
       });
     }, 500);
     return () => window.clearInterval(id);
