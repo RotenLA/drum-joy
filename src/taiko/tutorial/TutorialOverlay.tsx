@@ -32,7 +32,7 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
     const off = midiManager.onNote((note, velocity) => {
       const part = partOfNote(note);
       if (!part) return;
-      setHitPart(part); window.setTimeout(() => setHitPart((old) => old === part ? null : old), 180);
+      flashes.current[part] = performance.now() + 200;
       if (loadKitEnabled()) playDrum(part, velocity, undefined, note);
       if (step.kind === "hold" && part === "pedalHat") { setHeld(true); return; }
       if (!step.targets?.includes(part) || passed) return;
