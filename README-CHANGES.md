@@ -1,21 +1,42 @@
-# 本次变更（选歌滑动 / 歌名样式 / 中途退出修复）
+# 本次变更：长时间运行稳定性 + 密集音符突发延迟优化
 
-1. 选歌卡片可左右滑动
-   - 支持鼠标拖拽、滚轮、触摸横向滑动；拖动超过 8px 不会误触发选歌。
-   - 右侧留出大片空白，可一直右滑到只剩最后一首露在界面内；选中的歌自动滚入视野。
-2. 未选中卡片的歌名
-   - 字号放大到 22px，贴卡片右侧、随卡片斜切逆时针 90° 竖排。
-   - 歌名过长时在卡片高度内循环滚动（marquee），不再截断。
-3. Bug 修复
-   - 中途暂停后点「选择歌曲」也会写入一条历史演奏，标记为未完成并记录进度百分比。
-   - 回到选歌界面时「开始」「设置」不再消失：就绪状态改由全局歌曲是否已加载判断。
+## 1. 声音链路减负（src/taiko/drumKit.ts）
 
-## 改动文件
-- src/taiko/SongPicker.tsx
+- 新增发声数量控制：单鼓件最多 3 声同时响，全局最多 14 声；超出时对最早那一声
+  做 35ms 淡出掐音，密集连打不再把音频线程压满。
+- 发声节点播完自动断开回收，不再堆积无用节点。
+- 自适应发声提前量：平时 10ms（手感最直接），最近 300ms 内击打数 ≥6 时临时提到
+  18ms，压住密集段的延迟尖峰。新增 `currentLookaheadMs()`、`activeVoiceCount()`。
+- 只保留当前鼓组的采样在内存里（`releaseOtherKits()`），切换鼓组时释放旧采样，
+  降低中低端安卓被系统回收的概率。
+
+## 2. 击打传输平滑（src/taiko/midiInput.ts、src/taiko/FallScreen.tsx）
+
+- 硬件 MIDI 消息改用消息自带的 `timeStamp` 作为击打时刻。一批消息一起回调时，
+  原来统一取 `performance.now()` 会把它们压成同一时刻，表现为突发延迟/判定偏移。
+- 击打迟到超过 400ms 的只出声不判定（写入调试日志），避免用错误时刻顶掉附近音符。
+
+## 3. 长时间运行（src/taiko/FallScreen.tsx）
+
+- 演奏与倒计时期间申请屏幕常亮（Screen Wake Lock），离开演奏自动释放；
+  宿主未授权时静默跳过，交给安卓外壳的 KEEP_SCREEN_ON。
+- 切后台/息屏自动暂停的行为保持不变（回前台不自动续播）。
+
+## 4. 调试面板（src/taiko/FpsBadge.tsx）
+
+调试日志开启时，左上角新增一行 `AU n / x ms`：当前同时发声数 / 当前发声提前量，
+与已有的 `IN`（输入延迟）、`LF`（长帧）一起用于定位延迟到底出在哪一段。
+
+## 5. 新增文档
+
+`docs/android-host-checklist.md`：安卓外壳侧必改清单（前台服务、onTrimMemory
+不销毁 WebView、硬件加速、WebView ≥111、击打逐条带时间戳、自检读数说明）。
+
+## 文件清单
+
+- src/taiko/drumKit.ts
+- src/taiko/midiInput.ts
 - src/taiko/FallScreen.tsx
-- src/taiko/history.ts
-- src/styles.css
+- src/taiko/FpsBadge.tsx
+- docs/android-host-checklist.md
 - README-CHANGES.md
-
-## 竖排歌名随卡片斜切倾斜（本轮）
-- src/taiko/SongPicker.tsx：去掉竖排歌名内部反向 skewX(9deg)，仅保留 rotate(-90deg)，文字继承卡片斜切，沿斜边倾斜显示（对照 Phigros 选歌页）；字号、贴右、过长滚动逻辑不变。
