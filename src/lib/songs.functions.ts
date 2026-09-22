@@ -62,6 +62,8 @@ export const getSongAssets = createServerFn({ method: "POST" })
 
     const sign = async (path: string | null) => {
       if (!path) return null;
+      // 早期歌曲直接存的是 CDN 绝对地址，无需签名
+      if (/^https?:\/\//i.test(path)) return path;
       const { data: signed } = await supabaseAdmin.storage
         .from(BUCKET)
         .createSignedUrl(path, URL_TTL);

@@ -145,8 +145,7 @@ export function ChartScreen({
   const diffLabel = (d: Difficulty) => {
     const item = DIFFICULTIES.find((x) => x.id === d);
     if (!item) return d;
-    const raw = item as unknown as Record<string, string>;
-    return raw["labelEn"] && language !== "zh" ? raw["labelEn"]! : (raw["label"] ?? d);
+    return tr(item.label, item.labelEn);
   };
 
   const songCards = (

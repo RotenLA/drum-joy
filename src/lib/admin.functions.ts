@@ -225,6 +225,7 @@ export const getSongMidiUrl = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .single();
     if (error || !song) throw new Error("歌曲不存在");
+    if (/^https?:\/\//i.test(song.midi_path)) return { url: song.midi_path };
     const { data: signed, error: sErr } = await supabaseAdmin.storage
       .from(BUCKET)
       .createSignedUrl(song.midi_path, 3600);
