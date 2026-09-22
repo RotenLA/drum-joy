@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { quality } from "./perf";
 import { debugLog } from "./debugLog";
 import { latencyMeter } from "./latencyMeter";
-import { activeVoiceCount, audioJitterMs, currentLookaheadMs } from "./drumKit";
+import {
+  activeVoiceCount,
+  audioJitterMs,
+  currentLookaheadMs,
+  hitDelayMs,
+  hitDelayPeak,
+} from "./drumKit";
 import { outputLatencyMs } from "./metronome";
 
 /**
