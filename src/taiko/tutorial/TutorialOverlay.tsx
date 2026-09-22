@@ -9,7 +9,6 @@ import { TutorialStage } from "./TutorialStage";
 import { TUTORIAL_STEPS, tutorialLabels, tutorialStepCopy } from "./steps";
 
 export const TUTORIAL_SEEN_KEY = "taiko.tutorial.v3";
-export const tutorialSeen = () => { try { return localStorage.getItem(TUTORIAL_SEEN_KEY) === "1"; } catch { return false; } };
 export const markTutorialSeen = () => { try { localStorage.setItem(TUTORIAL_SEEN_KEY, "1"); } catch { /* memory-only environment */ } };
 
 export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
