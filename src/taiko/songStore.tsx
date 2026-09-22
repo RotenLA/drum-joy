@@ -34,6 +34,8 @@ export interface SongState {
   stems: StemMap;
   /** 配对用的主文件名（不含扩展名与 stem 后缀） */
   fileName: string;
+  /** 云端曲库里的歌曲 id（历史演奏用） */
+  songId: string;
   midiFileName: string;
   midi: ParsedMidi | null;
   /** MIDI 与音频对齐的整体偏移（毫秒，可手动微调） */
@@ -73,6 +75,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SongState>({
     stems: emptyStems(),
     fileName: "",
+    songId: "",
     midiFileName: "",
     midi: null,
     offsetMs: 0,

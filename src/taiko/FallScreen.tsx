@@ -20,6 +20,7 @@ import { shiftChart } from "@/shared/taikoChart";
 import { quality, type QualityTier } from "./perf";
 import { FpsBadge } from "./FpsBadge";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
+import { addHistory } from "./history";
 
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±100ms / Good ±200ms，超时未击为 Miss（调手感改这里） */
@@ -443,6 +444,25 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
   const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
+
+  // 一曲结束 → 记一条本机历史演奏
+  useEffect(() => {
+    if (phase !== "ended" || !song.fileName) return;
+    const s = statsRef.current;
+    const total = s.perfect + s.good + s.miss;
+    addHistory({
+      songId: song.songId,
+      title: song.fileName,
+      difficulty: song.difficulty,
+      speed,
+      accuracy: total > 0 ? ((s.perfect + s.good * 0.5) / total) * 100 : 0,
+      maxCombo: maxComboRef.current,
+      notes: total,
+      playedAt: Date.now(),
+    });
+    // 只在结束的那一刻记录
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   return (
     // 演奏区吃掉全部剩余高度，底部控制栏按内容高度自适应（窄高窗口自动压扁）

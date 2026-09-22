@@ -73,6 +73,21 @@ function songKey(fileName: string, midi: ParsedMidi): string {
   return `${fileName}#${midiFingerprint(midi)}`;
 }
 
+/**
+ * 云端固化谱面（后台上传时预生成）：命中时客户端不再自己生成，
+ * 保证所有用户、所有设备打同一首歌拿到完全一致的谱面。
+ */
+const cloudCharts = new Map<string, Partial<Record<string, TaikoChart>>>();
+
+export function registerCloudCharts(
+  fileName: string,
+  midi: ParsedMidi,
+  charts: Partial<Record<string, TaikoChart>>,
+): void {
+  if (!Object.keys(charts).length) return;
+  cloudCharts.set(songKey(fileName, midi), charts);
+}
+
 function variantKey(diff: Difficulty, opts: PlayChartOptions): string {
   return `${diff}|${opts.phaseBeatOffset ?? 0}|${opts.offsetMs ?? 0}`;
 }
@@ -88,6 +103,13 @@ export function getPlayChart(
 ): TaikoChart {
   const sk = songKey(opts.title, midi);
   const vk = variantKey(diff, opts);
+
+  // 未手动微调偏移时优先用云端固化谱面
+  if (!opts.offsetMs && !opts.phaseBeatOffset) {
+    const cloud = cloudCharts.get(sk)?.[diff];
+    if (cloud) return cloud;
+  }
+
   const file = readCache();
   const hit = file[sk]?.charts[vk];
   if (hit) {
