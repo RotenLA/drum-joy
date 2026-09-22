@@ -1,34 +1,110 @@
-import { useEffect, useMemo, useState } from "react";
-import type { PartId } from "../laneLayouts";
-import { PART_BY_ID } from "../laneLayouts";
+/**
+ * 教学舞台：直接复用正式游戏的画布渲染器（renderStage），
+ * 鼓盘摆位/大小/角度、辐射车道、音符下落与缩圈提示全部与游玩屏一致。
+ */
+import { useEffect, useMemo, useRef } from "react";
+import { VISIBLE_PARTS, type PartId } from "../laneLayouts";
+import { quality } from "../perf";
+import { renderStage } from "../stageRenderer";
 import { useLanguage } from "../i18n";
-import { tutorialLabels } from "./steps";
+import { tutorialLabels, tutorialStepCopy, type TutorialStep } from "./steps";
+import { buildPracticeChart } from "./practiceChart";
 
-import crash from "@/assets/pads/crash.png.asset.json";
-import hihat from "@/assets/pads/hihat.png.asset.json";
-import snare from "@/assets/pads/snare.png.asset.json";
-import highTom from "@/assets/pads/hightom.png.asset.json";
-import midTom from "@/assets/pads/midtom.png.asset.json";
-import floorTom from "@/assets/pads/floortom.png.asset.json";
-import ride from "@/assets/pads/ride.png.asset.json";
-import pedalL from "@/assets/pads/pedalL_up.png.asset.json";
-import pedalR from "@/assets/pads/pedalR_up.png.asset.json";
-
-const SPRITES: Record<PartId, string> = { crash: crash.url, hihat: hihat.url, snare: snare.url, highTom: highTom.url, midTom: midTom.url, floorTom: floorTom.url, ride: ride.url, pedalHat: pedalL.url, kick: pedalR.url };
-const POS: Record<PartId, { left: string; top: string; width: string }> = {
-  crash: { left: "12%", top: "21%", width: "22%" }, highTom: { left: "35%", top: "27%", width: "16%" }, midTom: { left: "50%", top: "27%", width: "16%" }, ride: { left: "67%", top: "21%", width: "22%" }, hihat: { left: "21%", top: "50%", width: "19%" }, snare: { left: "41%", top: "53%", width: "19%" }, floorTom: { left: "63%", top: "48%", width: "20%" }, pedalHat: { left: "38%", top: "78%", width: "8%" }, kick: { left: "55%", top: "78%", width: "8%" },
-};
-
-export function TutorialStage({ targets = [], hitPart, progress, needed, hold }: { targets?: readonly PartId[]; hitPart: PartId | null; progress: number; needed: number; hold: boolean }) {
+export function TutorialStage({
+  step,
+  index,
+  flashes,
+  progress,
+  needed,
+  hold,
+  restartKey,
+}: {
+  step: TutorialStep;
+  index: number;
+  flashes: React.MutableRefObject<Record<string, number>>;
+  progress: number;
+  needed: number;
+  hold: boolean;
+  restartKey: number;
+}) {
   const { language } = useLanguage();
   const labels = tutorialLabels(language);
-  const [pulse, setPulse] = useState(0);
-  useEffect(() => { const timer = window.setInterval(() => setPulse((v) => v + 1), 900); return () => window.clearInterval(timer); }, []);
-  const active = useMemo(() => targets.length ? targets[pulse % targets.length] : null, [targets, pulse]);
-  return <div className="relative h-full min-h-[260px] overflow-hidden bg-[rgba(8,7,9,0.54)]">
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_35%,rgba(252,136,0,0.14),rgba(8,7,9,0.08)_44%,rgba(8,7,9,0.72)_100%)]" />
-    {Object.keys(POS).map((key) => { const id = key as PartId; const highlighted = hitPart === id || active === id; return <div key={id} className="absolute transition-all duration-150" style={{ ...POS[id], transform: highlighted ? "scale(1.08)" : "scale(1)", filter: highlighted ? "brightness(1.45) drop-shadow(0 0 12px rgba(252,136,0,.9))" : "brightness(.72)", opacity: targets.length && !targets.includes(id) ? .42 : .94 }}><img src={SPRITES[id]} alt={language === "zh-CN" ? PART_BY_ID[id].label : PART_BY_ID[id].labelEn} className="block h-auto w-full" /></div>; })}
-    {targets.length > 0 && <div key={`${pulse}-${active}`} className="taiko-tutorial-note absolute left-1/2 top-[8%] h-7 w-7 rounded-full border-2 border-[var(--taiko-accent)] bg-[rgba(252,136,0,0.72)] shadow-[0_0_18px_rgba(252,136,0,0.85)]" />}
-    <div className="absolute bottom-3 left-3 rounded-md border border-[var(--taiko-glass-line)] bg-[rgba(8,7,9,0.72)] px-3 py-1.5 text-xs text-[rgba(255,255,255,0.84)]">{hold ? labels.holding : `${progress} / ${needed}`}</div>
-  </div>;
+  const copy = tutorialStepCopy(language, index, step);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  const chart = useMemo(() => buildPracticeChart(step, copy.title), [step, copy.title]);
+  const showNotes = step.kind !== "parts" && step.kind !== "done";
+  // 「认识鼓件」只显示鼓阵；其余步骤仍显示全部 9 件，避免与正式游戏构图不同
+  const parts = useMemo<readonly PartId[]>(() => VISIBLE_PARTS.nine, []);
+  const pulseRef = useRef(0);
+
+  // 「认识鼓件」步骤：轮流点亮各鼓件（用正式渲染器的命中高亮）
+  useEffect(() => {
+    if (step.kind !== "parts") return;
+    const timer = window.setInterval(() => {
+      const id = parts[pulseRef.current % parts.length]!;
+      pulseRef.current += 1;
+      flashes.current[id] = performance.now() + 420;
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, [flashes, parts, step.kind]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, quality.params.maxDpr);
+      canvas.width = Math.max(1, wrap.clientWidth * dpr);
+      canvas.height = Math.max(1, wrap.clientHeight * dpr);
+      canvas.style.width = `${wrap.clientWidth}px`;
+      canvas.style.height = `${wrap.clientHeight}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    if (ro) ro.observe(wrap);
+    else window.addEventListener("resize", resize);
+
+    const t0 = performance.now();
+    let raf = 0;
+    const draw = () => {
+      raf = requestAnimationFrame(draw);
+      const now = performance.now();
+      const elapsed = now - t0;
+      const timeMs = chart.durationMs > 0 ? elapsed % chart.durationMs : elapsed;
+      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, {
+        chart,
+        timeMs,
+        speed: 1,
+        now,
+        flashes: flashes.current,
+        combo: 0,
+        score: 0,
+        parts,
+        showNotes,
+        minimalHud: true,
+        sticks: null,
+      });
+    };
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+      if (!ro) window.removeEventListener("resize", resize);
+    };
+  }, [chart, flashes, parts, showNotes, restartKey]);
+
+  return (
+    <div ref={wrapRef} className="relative h-full min-h-[240px] w-full overflow-hidden bg-[var(--taiko-paper)]">
+      <canvas ref={canvasRef} className="block h-full w-full" />
+      <div className="absolute bottom-3 left-3 rounded-md border border-[var(--taiko-glass-line)] bg-[rgba(8,7,9,0.72)] px-3 py-1.5 text-xs text-[rgba(255,255,255,0.84)]">
+        {hold ? labels.holding : `${progress} / ${needed}`}
+      </div>
+    </div>
+  );
 }

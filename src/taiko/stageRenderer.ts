@@ -130,6 +130,8 @@ export interface StageFrame {
   countText?: string | null;
   /** 是否绘制飞行音符（未开始时为 false，只显示鼓阵） */
   showNotes?: boolean;
+  /** 精简 HUD（教学用）：不画进度条、分数、连击、判定统计 */
+  minimalHud?: boolean;
 
   /** 判定统计（HUD 显示 P/G/M 与准确率） */
   stats?: { perfect: number; good: number; miss: number } | null;
@@ -1081,47 +1083,50 @@ function chordItems(
 
 export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
   ctx.save();
+  const minimal = f.minimalHud === true;
 
-  // 顶部细进度条
-  const progress = f.chart.durationMs > 0 ? f.timeMs / f.chart.durationMs : 0;
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  ctx.fillRect(0, 0, w, 3);
-  ctx.shadowColor = "#5D8CF4";
-  ctx.shadowBlur = GLOW ? 8 : 0;
-  ctx.fillStyle = "#5D8CF4";
-  ctx.fillRect(0, 0, w * Math.min(1, progress), 3);
-  ctx.shadowBlur = 0;
-
-  // 生存模式血条（进度条下方一条粗条，低血变红闪）
-  if (f.hp !== undefined && f.hp !== null) {
-    const bw = w * 0.34;
-    const bx = (w - bw) / 2;
-    const by = 14;
-    ctx.fillStyle = "rgba(255,255,255,0.1)";
-    ctx.fillRect(bx, by, bw, 8);
-    const low = f.hp < 0.3;
-    const col = low ? "#f87171" : f.hp < 0.6 ? "#fbbf24" : "#4ade80";
-    ctx.shadowColor = col;
-    ctx.shadowBlur = GLOW ? (low ? 14 + 8 * Math.sin(f.now / 120) : 10) : 0;
-    ctx.fillStyle = col;
-    ctx.fillRect(bx, by, bw * Math.max(0, f.hp), 8);
+  if (!minimal) {
+    // 顶部细进度条
+    const progress = f.chart.durationMs > 0 ? f.timeMs / f.chart.durationMs : 0;
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fillRect(0, 0, w, 3);
+    ctx.shadowColor = "#5D8CF4";
+    ctx.shadowBlur = GLOW ? 8 : 0;
+    ctx.fillStyle = "#5D8CF4";
+    ctx.fillRect(0, 0, w * Math.min(1, progress), 3);
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(255,255,255,0.25)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(bx, by, bw, 8);
-  }
 
-  // 左上得分
-  ctx.textAlign = "left";
-  ctx.fillStyle = "rgba(255,255,255,0.4)";
-  ctx.font = "600 10px system-ui, sans-serif";
-  ctx.fillText("S C O R E", 28, 30);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = "800 26px system-ui, sans-serif";
-  ctx.shadowColor = "rgba(255,255,255,0.3)";
-  ctx.shadowBlur = GLOW ? 10 : 0;
-  ctx.fillText(String(f.score).padStart(7, "0"), 28, 58);
-  ctx.shadowBlur = 0;
+    // 生存模式血条（进度条下方一条粗条，低血变红闪）
+    if (f.hp !== undefined && f.hp !== null) {
+      const bw = w * 0.34;
+      const bx = (w - bw) / 2;
+      const by = 14;
+      ctx.fillStyle = "rgba(255,255,255,0.1)";
+      ctx.fillRect(bx, by, bw, 8);
+      const low = f.hp < 0.3;
+      const col = low ? "#f87171" : f.hp < 0.6 ? "#fbbf24" : "#4ade80";
+      ctx.shadowColor = col;
+      ctx.shadowBlur = GLOW ? (low ? 14 + 8 * Math.sin(f.now / 120) : 10) : 0;
+      ctx.fillStyle = col;
+      ctx.fillRect(bx, by, bw * Math.max(0, f.hp), 8);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, bw, 8);
+    }
+
+    // 左上得分
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(255,255,255,0.4)";
+    ctx.font = "600 10px system-ui, sans-serif";
+    ctx.fillText("S C O R E", 28, 30);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "800 26px system-ui, sans-serif";
+    ctx.shadowColor = "rgba(255,255,255,0.3)";
+    ctx.shadowBlur = GLOW ? 10 : 0;
+    ctx.fillText(String(f.score).padStart(7, "0"), 28, 58);
+    ctx.shadowBlur = 0;
+  }
 
   // 右上曲名 + BPM
   ctx.textAlign = "right";
@@ -1133,7 +1138,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.fillText(`BPM ${f.chart.bpm}`, w - 28, 50);
 
   // 连击（左上角，分数下方，大号斜体）
-  if (f.combo > 0) {
+  if (!minimal && f.combo > 0) {
     const size = Math.round(h * 0.062);
     ctx.textAlign = "left";
     ctx.shadowColor = "rgba(255,255,255,0.4)";
@@ -1148,7 +1153,7 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   }
 
   // 判定统计 + 准确率（连击下方）
-  if (f.stats) {
+  if (!minimal && f.stats) {
     const judged = f.stats.perfect + f.stats.good + f.stats.miss;
     if (judged > 0) {
       const acc = ((f.stats.perfect + f.stats.good * 0.5) / judged) * 100;

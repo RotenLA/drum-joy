@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { midiManager } from "../midiInput";
-import { partOfNote, type PartId } from "../laneLayouts";
+import { partOfNote } from "../laneLayouts";
 import { loadKitEnabled, playDrum } from "../drumKit";
 import { useLanguage } from "../i18n";
 import { TutorialStage } from "./TutorialStage";
@@ -16,13 +16,15 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const labels = tutorialLabels(language);
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [hitPart, setHitPart] = useState<PartId | null>(null);
   const [held, setHeld] = useState(false);
   const [passed, setPassed] = useState(false);
+  const [restartKey, setRestartKey] = useState(0);
+  /** 命中闪光：partId -> 到期时间戳（performance.now 基准），交给正式渲染器 */
+  const flashes = useRef<Record<string, number>>({});
   const step = TUTORIAL_STEPS[index] ?? TUTORIAL_STEPS[0];
   const needed = step.needed ?? 1;
 
-  const reset = useCallback(() => { setProgress(0); setHeld(false); setPassed(false); setHitPart(null); }, []);
+  const reset = useCallback(() => { setProgress(0); setHeld(false); setPassed(false); flashes.current = {}; setRestartKey((v) => v + 1); }, []);
   const advance = useCallback(() => { if (index >= TUTORIAL_STEPS.length - 1) { markTutorialSeen(); onLeave(); return; } setIndex((v) => v + 1); reset(); }, [index, onLeave, reset]);
 
   useEffect(() => { void midiManager.init(); }, []);
@@ -30,7 +32,7 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
     const off = midiManager.onNote((note, velocity) => {
       const part = partOfNote(note);
       if (!part) return;
-      setHitPart(part); window.setTimeout(() => setHitPart((old) => old === part ? null : old), 180);
+      flashes.current[part] = performance.now() + 200;
       if (loadKitEnabled()) playDrum(part, velocity, undefined, note);
       if (step.kind === "hold" && part === "pedalHat") { setHeld(true); return; }
       if (!step.targets?.includes(part) || passed) return;
@@ -51,7 +53,7 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const copy = tutorialStepCopy(language, index, step);
 
   return <div className="taiko-tutorial-layout absolute inset-0 z-50 flex min-h-0 bg-[var(--taiko-paper)]">
-    <section className="relative min-h-0 min-w-0 flex-[2.1]"><TutorialStage {...(step.targets ? { targets: step.targets } : {})} hitPart={hitPart} progress={progress} needed={needed} hold={held} />{passed && <div className="absolute inset-0 flex items-center justify-center bg-[rgba(8,7,9,0.34)]"><div className="rounded-lg border border-[var(--taiko-accent)] bg-[var(--taiko-glass-strong)] px-8 py-5 text-center text-xl text-[var(--taiko-accent)]">{labels.complete}</div></div>}</section>
+    <section className="relative min-h-0 min-w-0 flex-[2.1]"><TutorialStage step={step} index={index} flashes={flashes} progress={progress} needed={needed} hold={held} restartKey={restartKey} />{passed && <div className="absolute inset-0 flex items-center justify-center bg-[rgba(8,7,9,0.34)]"><div className="rounded-lg border border-[var(--taiko-accent)] bg-[var(--taiko-glass-strong)] px-8 py-5 text-center text-xl text-[var(--taiko-accent)]">{labels.complete}</div></div>}</section>
     <aside className="taiko-scroll relative min-h-0 min-w-[260px] flex-1 overflow-y-auto border-l border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] px-5 pb-5 pt-16 backdrop-blur-[18px]">
       <Button variant="outline" size="sm" onClick={() => { markTutorialSeen(); onLeave(); }} className="absolute right-3 top-3 border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[var(--taiko-ink)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"><X size={15} />{labels.leave}</Button>
       <p className="text-xs tabular-nums text-[var(--taiko-accent)]">{labels.tutorial} {index + 1} / {TUTORIAL_STEPS.length}</p>
