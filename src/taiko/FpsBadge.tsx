@@ -48,6 +48,8 @@ export function FpsBadge() {
         lastLong: latencyMeter.lastLongFrame,
         voices: activeVoiceCount(),
         lookahead: Math.round(currentLookaheadMs()),
+        audJitter: audioJitterMs(),
+        outLatency: outputLatencyMs(),
       });
     }, 500);
     return () => window.clearInterval(id);
