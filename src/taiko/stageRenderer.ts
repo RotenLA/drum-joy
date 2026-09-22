@@ -130,6 +130,8 @@ export interface StageFrame {
   countText?: string | null;
   /** 是否绘制飞行音符（未开始时为 false，只显示鼓阵） */
   showNotes?: boolean;
+  /** 精简 HUD（教学用）：不画进度条、分数、连击、判定统计 */
+  minimalHud?: boolean;
 
   /** 判定统计（HUD 显示 P/G/M 与准确率） */
   stats?: { perfect: number; good: number; miss: number } | null;
