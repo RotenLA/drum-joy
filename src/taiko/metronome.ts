@@ -35,6 +35,37 @@ export function getAudioContext(): AudioContext {
   return sharedCtx;
 }
 
+let unlocked = false;
+
+/**
+ * 首次用户手势时解锁音频：iOS/WKWebView 的 AudioContext 只有在手势里
+ * resume + 播一帧静音后才会真正接通输出，否则第一批敲击会明显抖动。
+ */
+export function unlockAudio(): void {
+  if (unlocked || typeof window === "undefined") return;
+  const run = () => {
+    if (unlocked) return;
+    unlocked = true;
+    try {
+      const ctx = getAudioContext();
+      void ctx.resume();
+      const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(ctx.currentTime);
+    } catch {
+      // 环境不支持，忽略
+    }
+    for (const ev of ["pointerdown", "touchstart", "keydown"] as const) {
+      window.removeEventListener(ev, run);
+    }
+  };
+  for (const ev of ["pointerdown", "touchstart", "keydown"] as const) {
+    window.addEventListener(ev, run, { passive: true });
+  }
+}
+
 /** 输出链路实测延迟（毫秒）：baseLatency + outputLatency，取不到给 0 */
 export function outputLatencyMs(): number {
   if (!sharedCtx) return 0;
