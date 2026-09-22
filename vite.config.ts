@@ -55,5 +55,6 @@ export default defineConfig({
   },
   vite: {
     plugins: [legacyCssDowngrade()],
+    build: { target: "chrome90" },
   },
 });

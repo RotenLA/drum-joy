@@ -27,6 +27,7 @@ import { quality, type QualityTier } from "./perf";
 import { FpsBadge } from "./FpsBadge";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
 import { addHistory } from "./history";
+import { TutorialOverlay, markTutorialSeen, tutorialSeen } from "./tutorial/TutorialOverlay";
 
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±100ms / Good ±200ms，超时未击为 Miss（调手感改这里） */
@@ -59,6 +60,11 @@ export function FallScreen({
   const [phase, setPhase] = useState<Phase>("idle");
   const [mixerOpen, setMixerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+
+  useEffect(() => {
+    if (!tutorialSeen()) setTutorialOpen(true);
+  }, []);
 
 
   const phaseRef = useRef<Phase>("idle");
@@ -424,8 +430,9 @@ export function FallScreen({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(wrap);
+    const ro = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    if (ro) ro.observe(wrap);
+    else window.addEventListener("resize", resize);
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
@@ -531,7 +538,8 @@ export function FallScreen({
 
     return () => {
       cancelAnimationFrame(raf);
-      ro.disconnect();
+      ro?.disconnect();
+      if (!ro) window.removeEventListener("resize", resize);
     };
   }, [playChart, speed, parts, hasAudio, readTimeMs, tier]);
 
@@ -686,6 +694,16 @@ export function FallScreen({
             onStart={start}
             onOpenSettings={() => setSettingsOpen(true)}
             onExit={onExit}
+            onStartTutorial={() => setTutorialOpen(true)}
+          />
+        )}
+
+        {phase === "idle" && tutorialOpen && (
+          <TutorialOverlay
+            onLeave={() => {
+              markTutorialSeen();
+              setTutorialOpen(false);
+            }}
           />
         )}
 
