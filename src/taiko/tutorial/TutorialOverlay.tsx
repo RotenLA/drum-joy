@@ -42,9 +42,16 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
       if (!step.targets?.includes(part) || passed) return;
       setProgress((value) => { const next = value + 1; if (next >= needed) setPassed(true); return Math.min(next, needed); });
     });
-    const offUp = midiManager.onNoteOff((note) => { if (step.kind === "hold" && partOfNote(note) === "pedalHat" && held) { setHeld(false); setProgress(1); setPassed(true); } });
+    const offUp = midiManager.onNoteOff((note) => { if (step.kind === "hold" && partOfNote(note) === "pedalHat") { setHeld(false); if (!passed) setProgress(0); } });
     return () => { off(); offUp(); };
   }, [held, needed, passed, step.kind, step.targets]);
+
+  // 100 BPM × 8 拍 = 4.8 秒；中途抬起会取消并归零。
+  useEffect(() => {
+    if (step.kind !== "hold" || !held || passed) return;
+    const timer = window.setTimeout(() => { setProgress(1); setPassed(true); setHeld(false); }, 4800);
+    return () => window.clearTimeout(timer);
+  }, [held, passed, step.kind]);
 
   const adapterReady = devices.m || midiManager.inputs().some((d) => /pd2u|pd2max|pd2|max/i.test(d.name));
   const canNext = useMemo(() => step.kind === "device" ? (index === 0 ? adapterReady : stickSeen && pedalSeen) : step.kind === "parts" || step.kind === "done" || passed, [adapterReady, index, passed, pedalSeen, step.kind, stickSeen]);

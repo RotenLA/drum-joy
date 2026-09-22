@@ -27,3 +27,11 @@
 - src/styles.css
 - vite.config.ts
 - README-CHANGES.md
+
+## 本地运行
+
+解压并按原目录覆盖后运行：
+
+1. `bun install`
+2. `bun run electron:rebuild:asio`
+3. `bun run electron:pack:win`
