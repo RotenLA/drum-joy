@@ -303,13 +303,13 @@ export function ChartScreen({
 
       {tab === "songs" ? (
         <>
-          {songCards}
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={tr("搜索歌名或艺人", "Search title or artist")}
-            className="mt-3 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-sm text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+            className="mb-3 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-sm text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
           />
+          {songCards}
         </>
       ) : (
         historyList

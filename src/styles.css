@@ -62,97 +62,57 @@
 }
 
 /*
- * 固定深色：不跟随系统浅色模式（Unity 内嵌 WebView 一律深色 UI）
- * 每个变量先写一遍 hex 兜底、再写 oklch：安卓 13 常见的旧版 WebView
- * （Chrome < 111）不认识 oklch，会直接丢弃该行并保留上一行的 hex，
- * 从而不会整页失去配色变成白屏。
+ * 固定深色：不跟随系统浅色模式（Unity 内嵌 WebView 一律深色 UI）。
+ * 这里必须只保留旧 WebView 可直接解析的颜色。自定义属性会接受任意文本，
+ * 所以「先 hex、后 oklch」并不能兜底：旧内核仍会用后者覆盖前者，直到
+ * var() 被代入真实颜色属性时才判定无效，结果就是整个界面丢失背景与颜色。
  */
 :root,
 .dark {
   color-scheme: dark;
   --radius: 0.625rem;
   --background: #100c0a;
-  --background: oklch(0.16 0.008 60);
   --foreground: #f4f1ed;
-  --foreground: oklch(0.96 0.006 80);
   --card: #1c1714;
-  --card: oklch(0.21 0.01 60);
   --card-foreground: #f4f1ed;
-  --card-foreground: oklch(0.96 0.006 80);
   --popover: #1c1714;
-  --popover: oklch(0.21 0.01 60);
   --popover-foreground: #f4f1ed;
-  --popover-foreground: oklch(0.96 0.006 80);
   --primary: #f88b1c;
-  --primary: oklch(0.74 0.17 58);
   --primary-foreground: #180f09;
-  --primary-foreground: oklch(0.18 0.02 60);
   --secondary: #2b2521;
-  --secondary: oklch(0.27 0.012 60);
   --secondary-foreground: #f4f1ed;
-  --secondary-foreground: oklch(0.96 0.006 80);
   --muted: #2b2521;
-  --muted: oklch(0.27 0.012 60);
   --muted-foreground: #ada397;
-  --muted-foreground: oklch(0.72 0.02 70);
   --accent: #392a1e;
-  --accent: oklch(0.3 0.03 60);
   --accent-foreground: #f4f1ed;
-  --accent-foreground: oklch(0.96 0.006 80);
   --destructive: #f14d4c;
-  --destructive: oklch(0.65 0.2 25);
   --destructive-foreground: #fbf8f4;
-  --destructive-foreground: oklch(0.98 0.005 80);
   --border: rgba(255, 255, 255, 0.12);
-  --border: oklch(1 0 0 / 12%);
   --input: rgba(255, 255, 255, 0.16);
-  --input: oklch(1 0 0 / 16%);
   --ring: #f88b1c;
-  --ring: oklch(0.74 0.17 58);
   --chart-1: #f88b1c;
-  --chart-1: oklch(0.74 0.17 58);
   --chart-2: #e7b643;
-  --chart-2: oklch(0.8 0.14 85);
   --chart-3: #dd8364;
-  --chart-3: oklch(0.7 0.12 40);
   --chart-4: #d15d4d;
-  --chart-4: oklch(0.62 0.15 30);
   --chart-5: #e2ce80;
-  --chart-5: oklch(0.85 0.1 95);
   --sidebar: #17130f;
-  --sidebar: oklch(0.19 0.01 60);
   --sidebar-foreground: #f4f1ed;
-  --sidebar-foreground: oklch(0.96 0.006 80);
   --sidebar-primary: #f88b1c;
-  --sidebar-primary: oklch(0.74 0.17 58);
   --sidebar-primary-foreground: #180f09;
-  --sidebar-primary-foreground: oklch(0.18 0.02 60);
   --sidebar-accent: #2b2521;
-  --sidebar-accent: oklch(0.27 0.012 60);
   --sidebar-accent-foreground: #f4f1ed;
-  --sidebar-accent-foreground: oklch(0.96 0.006 80);
   --sidebar-border: rgba(255, 255, 255, 0.12);
-  --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: #f88b1c;
-  --sidebar-ring: oklch(0.74 0.17 58);
 
   /* PD2U 模块：黑底 + 橙色高亮 */
   --taiko-paper: #0e0a08;
-  --taiko-paper: oklch(0.15 0.008 60);
   --taiko-surface: #1d1713;
-  --taiko-surface: oklch(0.21 0.012 60);
   --taiko-line: #40362d;
-  --taiko-line: oklch(0.34 0.02 62);
   --taiko-ink: #f1eee9;
-  --taiko-ink: oklch(0.95 0.008 80);
   --taiko-accent: #fc8800;
-  --taiko-accent: oklch(0.74 0.18 58);
   --taiko-accent-2: #efca61;
-  --taiko-accent-2: oklch(0.85 0.13 90);
   --taiko-don: #fa6e1d;
-  --taiko-don: oklch(0.7 0.19 45);
   --taiko-ka: #e7bf57;
-  --taiko-ka: oklch(0.82 0.13 88);
 }
 
 @layer base {
