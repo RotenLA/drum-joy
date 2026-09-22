@@ -1,7 +1,7 @@
 import type { Language } from "../i18n";
 import type { PartId } from "../laneLayouts";
 
-export type TutorialKind = "device" | "parts" | "short" | "hold" | "combo" | "done";
+export type TutorialKind = "parts" | "short" | "hold" | "combo" | "done";
 
 export interface TutorialStep {
   kind: TutorialKind;
@@ -14,8 +14,6 @@ export interface TutorialStep {
 }
 
 export const TUTORIAL_STEPS: readonly [TutorialStep, ...TutorialStep[]] = [
-  { kind: "device", titleZh: "连接适配器", titleEn: "Connect the adapter", bodyZh: "打开 PD2U / PD2MAX 适配器，并连接到设备。检测成功后即可继续。", bodyEn: "Turn on your PD2U / PD2MAX adapter and connect it to this device." },
-  { kind: "device", titleZh: "连接鼓槌与踏板", titleEn: "Connect sticks and pedals", bodyZh: "随意敲击鼓槌并踩下踏板。检测到手部与脚部输入后即可继续。", bodyEn: "Strike with a stick and press a pedal. Continue after both inputs are detected." },
   { kind: "parts", titleZh: "认识鼓件", titleEn: "Meet the kit", bodyZh: "跟随舞台上的高亮认识鼓面与踏板。敲击任意鼓件可看到即时反馈。", bodyEn: "Follow the highlights to learn the pads and pedals. Strike any part for feedback." },
   { kind: "short", titleZh: "军鼓短音符", titleEn: "Snare notes", bodyZh: "四拍预热后跟着下落音符敲军鼓，连续正确 8 次通过。", bodyEn: "After four count-in beats, follow the falling snare notes. Hit 8 correctly in a row.", targets: ["snare"], needed: 8 },
   { kind: "short", titleZh: "底鼓短音符", titleEn: "Kick notes", bodyZh: "跟着下落音符踩右踏板，连续正确 8 次通过。", bodyEn: "Follow the falling notes with the right pedal. Hit 8 correctly in a row.", targets: ["kick"], needed: 8 },
