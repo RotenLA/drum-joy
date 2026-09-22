@@ -10,7 +10,7 @@ import { STEM_KINDS, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
 import { clearHistory, readHistory, type HistoryEntry } from "./history";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
-import { Play, Search } from "lucide-react";
+import { Play, Search, Settings } from "lucide-react";
 
 const fmtTime = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -30,10 +30,12 @@ export function SongPicker({
   speed,
   onSpeedChange,
   onStart,
+  onOpenSettings,
 }: {
   speed: number;
   onSpeedChange?: ((s: number) => void) | undefined;
   onStart: () => void;
+  onOpenSettings: () => void;
 }) {
   const song = useSong();
   const { tr } = useLanguage();
@@ -120,7 +122,7 @@ export function SongPicker({
   const curDiff = diffLabel(song.difficulty);
 
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-[rgba(8,10,16,0.55)] backdrop-blur-[10px]">
+    <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-picker-glass)] backdrop-blur-[16px]">
       {/* 顶部：标签 + 搜索 横向并排 */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 py-3">
         {(
@@ -132,18 +134,17 @@ export function SongPicker({
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`px-4 py-2 text-sm tracking-wide transition-colors ${
+            className={`rounded-md px-4 py-2 text-sm tracking-wide transition-colors ${
               tab === id
                 ? "bg-[var(--taiko-accent)] text-[#12141a]"
                 : "bg-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.16)]"
             }`}
-            style={{ clipPath: "polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%)" }}
           >
             {label}
           </button>
         ))}
 
-        <label className="ml-auto flex min-w-0 items-center gap-2 bg-[rgba(255,255,255,0.08)] px-3 py-1.5">
+        <label className="ml-auto flex min-w-0 items-center gap-2 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 py-1.5 backdrop-blur-[18px]">
           <Search size={14} className="shrink-0 text-[rgba(255,255,255,0.5)]" />
           <input
             value={query}
@@ -179,7 +180,7 @@ export function SongPicker({
             return (
               <div
                 key={item.id}
-                className="relative shrink-0 transition-all duration-300"
+                className="relative shrink-0 rounded-lg transition-all duration-300"
                 style={{
                   height: "min(86%, 360px)",
                   width: wide ? "min(72vw, 420px)" : "clamp(84px, 13vw, 124px)",
@@ -191,10 +192,10 @@ export function SongPicker({
                   type="button"
                   onClick={() => void pickSong(item)}
                   disabled={loadingId !== null}
-                  className={`relative block h-full w-full overflow-hidden text-left transition-all duration-300 ${
+                  className={`relative block h-full w-full overflow-hidden rounded-lg border text-left shadow-xl backdrop-blur-[18px] transition-all duration-300 ${
                     wide
-                      ? "ring-2 ring-[var(--taiko-accent)]"
-                      : "ring-1 ring-[rgba(255,255,255,0.14)] hover:ring-[rgba(255,255,255,0.4)]"
+                      ? "border-[var(--taiko-accent)] ring-1 ring-[var(--taiko-accent)]"
+                      : "border-[var(--taiko-glass-line)] opacity-80 hover:border-[var(--taiko-glass-line-strong)] hover:opacity-100"
                   }`}
                   style={{ background: CARD_GRADIENTS[i % CARD_GRADIENTS.length] }}
                 >
@@ -235,12 +236,11 @@ export function SongPicker({
                     </span>
                   ) : (
                     <span
-                      className="relative z-10 flex h-full items-end justify-center pb-5"
-                      style={{ transform: "skewX(9deg)" }}
+                      className="relative z-10 flex h-full items-center justify-center overflow-hidden"
                     >
                       <span
-                        className="max-h-full truncate text-sm tracking-wide text-[rgba(255,255,255,0.85)]"
-                        style={{ writingMode: "vertical-rl" }}
+                        className="block max-w-[280px] shrink-0 truncate whitespace-nowrap text-sm tracking-wide text-[rgba(255,255,255,0.85)]"
+                        style={{ transform: "skewX(9deg) rotate(-90deg)" }}
                       >
                         {item.title}
                       </span>
@@ -251,8 +251,19 @@ export function SongPicker({
                 {active && ready && !loadingId && (
                   <button
                     type="button"
+                    onClick={onOpenSettings}
+                    aria-label={tr("全局设置", "Global settings")}
+                    className="absolute right-4 top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-[var(--taiko-glass-line-strong)] bg-[var(--taiko-glass-strong)] text-[var(--taiko-ink)]/80 backdrop-blur-[18px] transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+                  >
+                    <Settings size={17} />
+                  </button>
+                )}
+
+                {active && ready && !loadingId && (
+                  <button
+                    type="button"
                     onClick={onStart}
-                    className="absolute bottom-4 right-4 z-20 flex items-center gap-2 bg-[var(--taiko-accent)] px-5 py-2.5 text-sm font-semibold tracking-[0.2em] text-[#12141a] transition-transform hover:scale-[1.04]"
+                    className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-md bg-[var(--taiko-accent)] px-5 py-2.5 text-sm font-semibold tracking-[0.2em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04]"
                   >
                     <Play size={16} />
                     {tr("开始", "PLAY")}
