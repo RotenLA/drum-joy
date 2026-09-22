@@ -24,7 +24,8 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const [held, setHeld] = useState(false);
   const [passed, setPassed] = useState(false);
   const [devices, setDevices] = useState(deviceState.state);
-  const step = TUTORIAL_STEPS[index] ?? TUTORIAL_STEPS[0];
+  const step = TUTORIAL_STEPS[index];
+  if (!step) return null;
   const needed = step.needed ?? 1;
 
   const reset = useCallback(() => { setProgress(0); setHeld(false); setPassed(false); setHitPart(null); }, []);
@@ -51,8 +52,8 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const title = language === "zh-CN" || language === "zh-TW" ? step.titleZh : step.titleEn;
   const body = language === "zh-CN" || language === "zh-TW" ? step.bodyZh : step.bodyEn;
 
-  return <div className="absolute inset-0 z-50 flex min-h-0 bg-[var(--taiko-paper)]">
-    <section className="min-h-0 min-w-0 flex-[2.1]"><TutorialStage targets={step.targets} hitPart={hitPart} progress={progress} needed={needed} hold={held} />{passed && <div className="absolute inset-y-0 left-0 flex w-[68%] items-center justify-center bg-[rgba(8,7,9,0.34)]"><div className="rounded-lg border border-[var(--taiko-accent)] bg-[var(--taiko-glass-strong)] px-8 py-5 text-center text-xl text-[var(--taiko-accent)]">{language === "zh-CN" ? "完成！" : "Complete!"}</div></div>}</section>
+  return <div className="taiko-tutorial-layout absolute inset-0 z-50 flex min-h-0 bg-[var(--taiko-paper)]">
+    <section className="relative min-h-0 min-w-0 flex-[2.1]"><TutorialStage {...(step.targets ? { targets: step.targets } : {})} hitPart={hitPart} progress={progress} needed={needed} hold={held} />{passed && <div className="absolute inset-0 flex items-center justify-center bg-[rgba(8,7,9,0.34)]"><div className="rounded-lg border border-[var(--taiko-accent)] bg-[var(--taiko-glass-strong)] px-8 py-5 text-center text-xl text-[var(--taiko-accent)]">{language === "zh-CN" ? "完成！" : "Complete!"}</div></div>}</section>
     <aside className="taiko-scroll relative min-h-0 min-w-[260px] flex-1 overflow-y-auto border-l border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] px-5 pb-5 pt-16 backdrop-blur-[18px]">
       <Button variant="outline" size="sm" onClick={() => { markTutorialSeen(); onLeave(); }} className="absolute right-3 top-3 border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[var(--taiko-ink)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"><X size={15} />{labels.leave}</Button>
       <p className="text-xs tabular-nums text-[var(--taiko-accent)]">{labels.tutorial} {index + 1} / {TUTORIAL_STEPS.length}</p>

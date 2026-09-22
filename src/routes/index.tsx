@@ -60,7 +60,11 @@ const UPGRADE_COPY: Record<string, { title: string; body: string; exit: string }
 function UnsupportedBrowser({ engine }: { engine: number }) {
   const raw = new URLSearchParams(window.location.search).get("lang")?.toLowerCase() ?? "zh-CN";
   const key = raw === "zh" ? "zh-CN" : raw.startsWith("zh-tw") || raw.startsWith("zh-hant") ? "zh-TW" : raw.split("-")[0] ?? "zh-CN";
-  const copy = UPGRADE_COPY[key] ?? UPGRADE_COPY.en;
+  const copy = UPGRADE_COPY[key] ?? UPGRADE_COPY["en"] ?? {
+    title: "System browser component is too old",
+    body: "Please update your system browser component and try again.",
+    exit: "Exit",
+  };
   return <main className="flex min-h-screen items-center justify-center bg-[var(--taiko-paper)] p-6 text-[var(--taiko-ink)]"><section className="w-full max-w-lg rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] p-7 text-center"><h1 className="text-xl font-semibold">{copy.title}</h1><p className="mt-3 text-sm leading-7 text-[rgba(255,255,255,0.7)]">{copy.body}</p>{engine > 0 && <p className="mt-2 text-xs text-[rgba(255,255,255,0.44)]">WebView / Chrome {engine}</p>}<Button className="mt-6 bg-[var(--taiko-accent)] text-[var(--taiko-paper)]" onClick={() => { const fn = (window as unknown as { __pd2uExit?: () => void }).__pd2uExit; if (typeof fn === "function") fn(); }}>{copy.exit}</Button></section></main>;
 }
 
