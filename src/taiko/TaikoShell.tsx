@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Gamepad2, ListMusic, Settings2, LogOut } from "lucide-react";
+import { Gamepad2, ListMusic, LogOut } from "lucide-react";
 import { SongProvider, useSong } from "./songStore";
 import { FallScreen } from "./FallScreen";
 import { ChartScreen } from "./ChartScreen";
-import { MappingScreen } from "./MappingScreen";
 import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
 import { installDeviceBridge, deviceState, type DeviceSnapshot } from "./deviceState";
