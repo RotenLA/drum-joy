@@ -8,7 +8,8 @@ import { quality } from "../perf";
 import { renderStage } from "../stageRenderer";
 import { useLanguage } from "../i18n";
 import { tutorialLabels, tutorialStepCopy, type TutorialStep } from "./steps";
-import { buildPracticeChart } from "./practiceChart";
+import { buildPracticeChart, PRACTICE_BPM } from "./practiceChart";
+import { Metronome, unlockAudio } from "../metronome";
 
 export function TutorialStage({
   step,
