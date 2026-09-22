@@ -13,7 +13,7 @@ export interface TutorialStep {
   needed?: number;
 }
 
-export const TUTORIAL_STEPS = [
+export const TUTORIAL_STEPS: readonly [TutorialStep, ...TutorialStep[]] = [
   { kind: "device", titleZh: "连接适配器", titleEn: "Connect the adapter", bodyZh: "打开 PD2U / PD2MAX 适配器，并连接到设备。检测成功后即可继续。", bodyEn: "Turn on your PD2U / PD2MAX adapter and connect it to this device." },
   { kind: "device", titleZh: "连接鼓槌与踏板", titleEn: "Connect sticks and pedals", bodyZh: "随意敲击鼓槌并踩下踏板。检测到手部与脚部输入后即可继续。", bodyEn: "Strike with a stick and press a pedal. Continue after both inputs are detected." },
   { kind: "parts", titleZh: "认识鼓件", titleEn: "Meet the kit", bodyZh: "跟随舞台上的高亮认识鼓面与踏板。敲击任意鼓件可看到即时反馈。", bodyEn: "Follow the highlights to learn the pads and pedals. Strike any part for feedback." },
@@ -24,7 +24,7 @@ export const TUTORIAL_STEPS = [
   { kind: "combo", titleZh: "踏板与踩镲", titleEn: "Pedal and hi-hat", bodyZh: "保持左踏板踩下，同时跟随音符敲击闭镲。", bodyEn: "Keep the left pedal held while following the closed hi-hat notes.", targets: ["pedalHat", "hihat"], needed: 8 },
   { kind: "combo", titleZh: "军鼓与底鼓", titleEn: "Snare and kick", bodyZh: "交替敲击军鼓与底鼓，连续正确 8 次完成组合练习。", bodyEn: "Alternate between snare and kick for 8 correct hits.", targets: ["snare", "kick"], needed: 8 },
   { kind: "done", titleZh: "教学完成", titleEn: "Tutorial complete", bodyZh: "你已经掌握基本演奏方法，现在可以选择歌曲开始游玩。", bodyEn: "You know the basics. Choose a song and start playing." },
-] satisfies readonly [TutorialStep, ...TutorialStep[]];
+];
 
 const STEP_COPY: Partial<Record<Language, readonly { title: string; body: string }[]>> = {
   "zh-TW": [
