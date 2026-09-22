@@ -271,10 +271,8 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
   makeRoom(ctx, part);
   const src = ctx.createBufferSource();
   src.buffer = buf;
-  const g = ctx.createGain();
-  g.gain.value = v;
+  const g = takeGain(ctx, v);
   src.connect(g);
-  g.connect(bus(ctx));
   src.start(t);
   const voice: Voice = { part, src, gain: g, at: t };
   voices.push(voice);
@@ -282,10 +280,10 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
     dropVoice(voice);
     try {
       src.disconnect();
-      g.disconnect();
     } catch {
       // 已断开
     }
+    recycleGain(g);
   };
   return true;
 }
