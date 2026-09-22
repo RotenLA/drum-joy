@@ -8,7 +8,7 @@
  */
 import { debugLog } from "./debugLog";
 import { PAD_ANCHORS, type PartId } from "./laneLayouts";
-import { stickPoint, type StickLayer } from "./stickMapping";
+import { layerOfPitch, stickPoint, type StickLayer } from "./stickMapping";
 
 export type StickSide = "l" | "r";
 
