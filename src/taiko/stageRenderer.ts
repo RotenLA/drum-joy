@@ -380,12 +380,16 @@ const TRANSIT_NOTE_DEPTH = -1;
 const ARRIVAL_DEPTH = 2;
 const CUE_DEPTH = 3;
 
-/** 音符进入自身鼓面的程度（0~1），用于平滑显现到达层。 */
-function arrivalBlend(pad: PadGeom, x: number, y: number): number {
-  const dx = (x - pad.cx) / Math.max(1, pad.rx);
-  const dy = (y - pad.cy) / Math.max(1, pad.ry);
+/** 音符进入自身鼓面的程度（0~1），严格在旋转后的鼓面轮廓内平滑显现。 */
+function arrivalBlend(pad: PadGeom, x: number, y: number, angle: number): number {
+  const cos = Math.cos(-angle);
+  const sin = Math.sin(-angle);
+  const px = x - pad.cx;
+  const py = y - pad.cy;
+  const dx = (px * cos - py * sin) / Math.max(1, pad.rx);
+  const dy = (px * sin + py * cos) / Math.max(1, pad.ry);
   const distance = Math.hypot(dx, dy);
-  const raw = Math.max(0, Math.min(1, (1.35 - distance) / 0.7));
+  const raw = Math.max(0, Math.min(1, (1 - distance) / 0.55));
   return raw * raw * (3 - 2 * raw);
 }
 
@@ -515,7 +519,7 @@ function noteItems(
       draw: () => drawHead(1),
     });
 
-    const arriving = arrivalBlend(pad, x, y);
+    const arriving = arrivalBlend(pad, x, y, faceAngle);
     if (arriving > 0) {
       items.push({
         depth: ARRIVAL_DEPTH,
