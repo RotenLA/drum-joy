@@ -502,13 +502,9 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   }, [phase]);
 
   return (
-    // 演奏区吃掉全部剩余高度，底部控制栏按内容高度自适应（窄高窗口自动压扁）
-    <div className="grid h-full min-h-0 w-full grid-rows-[minmax(0,1fr)_auto] overflow-hidden bg-[var(--taiko-paper)]">
-
-      <div
-        ref={wrapRef}
-        className="relative min-h-0 overflow-hidden bg-[var(--taiko-paper)]"
-      >
+    // 演奏区吃满整个窗口；调音台收进左下角抽屉
+    <div className="relative h-full min-h-0 w-full overflow-hidden bg-[var(--taiko-paper)]">
+      <div ref={wrapRef} className="relative h-full min-h-0 overflow-hidden bg-[var(--taiko-paper)]">
         <canvas ref={canvasRef} className="block h-full w-full" />
 
         {/* 演奏区实测帧数 */}
@@ -517,34 +513,88 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
         {/* 可开关的调试打印小窗 */}
         <DebugLogPanel />
 
-        {/* 空态 / 开始 / 暂停 / 结算遮罩 */}
-        {!song.midi && (
-          <Overlay>
-            <p className="text-sm text-white/80">{tr("还没有谱面", "No chart yet")}</p>
-            <p className="text-xs text-white/50">
-              {tr("请先到「谱面」屏导入去鼓伴奏音频与对应的鼓 MIDI", "Go to the Chart screen to import a no-drums backing track and its drum MIDI")}
-            </p>
-          </Overlay>
-        )}
-        {song.midi && (!playChart || playChart.notes.length === 0) && (
-          <Overlay>
-            <p className="text-sm text-white/80">{tr("谱面为空", "Chart is empty")}</p>
-            <p className="text-xs text-white/50">{tr("该 MIDI 中没有可识别的鼓音符", "No recognizable drum notes in this MIDI")}</p>
-          </Overlay>
-        )}
-        {song.midi && playChart && playChart.notes.length > 0 && phase === "idle" && (
-          <Overlay>
+        {/* 顶部右侧：暂停 / 速度难度信息 */}
+        {(phase === "playing" || phase === "countdown") && (
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+            <span className="hidden text-xs text-[rgba(255,255,255,0.6)] lg:block">
+              {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
+              {(() => {
+                const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
+                return d ? tr(d.label, d.labelEn) : "";
+              })()}
+            </span>
             <button
-              onClick={start}
-              className="border border-white/70 px-10 py-3 text-base tracking-[0.3em] text-white transition-colors hover:bg-white hover:text-black"
+              onClick={togglePause}
+              className="bg-[rgba(255,255,255,0.12)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.9)] transition-colors hover:bg-[rgba(255,255,255,0.24)]"
             >
-              {tr("开始", "Start")}
+              {tr("暂停", "Pause")}
             </button>
-            <p className="text-xs text-white/40">
-              {tr("回车也可开始 · 空格暂停", "Enter to start · Space to pause")}
-              {hasAudio ? "" : tr(" · 无音频，静音试玩", " · No audio, silent practice")}
-            </p>
-          </Overlay>
+            <HelpDot label={tr("游玩", "Play")} text={helpText("play", language)} />
+          </div>
+        )}
+
+        {/* 左下角抽屉式调音台 */}
+        <div className="absolute bottom-3 left-3 z-20">
+          {mixerOpen && (
+            <div className="mb-2 w-[min(78vw,420px)] bg-[rgba(10,12,18,0.82)] px-4 py-3 backdrop-blur-[8px]">
+              <div className="mb-2 flex items-baseline gap-3">
+                <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">
+                  {tr("调音台", "Mixer")}
+                </span>
+                <span className="text-[10px] text-[rgba(255,255,255,0.45)]">
+                  {tr("100% = 原始文件音量", "100% = original file volume")}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                {STEM_KINDS.map((key) => {
+                  const track = stems[key];
+                  const value = song.mix[key];
+                  return (
+                    <label key={key} className="flex min-w-0 flex-col gap-1">
+                      <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 text-[10px] text-[rgba(255,255,255,0.7)]">
+                        <span className={`truncate ${track ? "" : "opacity-40"}`}>
+                          {STEM_LABEL[key]}
+                          {track ? "" : tr("（无）", " (none)")}
+                        </span>
+                        <span className="tabular-nums text-[rgba(255,255,255,0.55)]">
+                          {Math.round(value * 100)}%
+                        </span>
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={Math.round(value * 100)}
+                        disabled={!track}
+                        onChange={(e) =>
+                          song.setSong({ mix: { ...song.mix, [key]: Number(e.target.value) / 100 } })
+                        }
+                        className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[rgba(255,255,255,0.25)] accent-[var(--taiko-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setMixerOpen((v) => !v)}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] transition-colors ${
+              mixerOpen
+                ? "bg-[var(--taiko-accent)] text-[#12141a]"
+                : "bg-[rgba(10,12,18,0.7)] text-[rgba(255,255,255,0.75)] hover:bg-[rgba(10,12,18,0.9)]"
+            }`}
+          >
+            <SlidersHorizontal size={13} />
+            {tr("调音台", "Mixer")}
+          </button>
+        </div>
+
+        {/* 选歌层：未开始时覆盖在虚化的舞台上 */}
+        {phase === "idle" && (
+          <SongPicker speed={speed} onSpeedChange={onSpeedChange} onStart={start} />
         )}
 
         {phase === "paused" && (
@@ -563,6 +613,12 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
               >
                 {tr("重新开始", "Restart")}
               </button>
+              <button
+                onClick={() => setPhaseBoth("idle")}
+                className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
+              >
+                {tr("选择歌曲", "Songs")}
+              </button>
             </div>
           </Overlay>
         )}
@@ -579,57 +635,22 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
             <p className="text-xs tabular-nums text-white/50">
               Perfect {judged.perfect} · Good {judged.good} · Miss {judged.miss}
             </p>
-            <button
-              onClick={start}
-              className="mt-2 border border-white/70 px-8 py-2 text-sm tracking-[0.2em] text-white transition-colors hover:bg-white hover:text-black"
-            >
-              {tr("再来一次", "Retry")}
-            </button>
+            <div className="mt-2 flex gap-3">
+              <button
+                onClick={start}
+                className="border border-white/70 px-8 py-2 text-sm tracking-[0.2em] text-white transition-colors hover:bg-white hover:text-black"
+              >
+                {tr("再来一次", "Retry")}
+              </button>
+              <button
+                onClick={() => setPhaseBoth("idle")}
+                className="border border-white/30 px-8 py-2 text-sm tracking-[0.2em] text-white/70 transition-colors hover:border-white/70 hover:text-white"
+              >
+                {tr("选择歌曲", "Songs")}
+              </button>
+            </div>
           </Overlay>
         )}
-      </div>
-
-      <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-t border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-[var(--safe-left)] py-2 pr-[var(--safe-right)]">
-        <div className="min-w-0">
-          <div className="mb-2 hidden items-baseline gap-3 lg:flex">
-            <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">{tr("调音台", "Mixer")}</span>
-            <span className="text-[10px] text-[var(--taiko-ink)]/45">{tr("100% = 原始文件音量", "100% = original file volume")}</span>
-          </div>
-          <div className="grid grid-cols-4 gap-2 md:gap-4">
-            {STEM_KINDS.map((key) => {
-              const track = stems[key];
-              const value = song.mix[key];
-              return (
-                <label key={key} className="flex min-w-0 flex-col gap-1">
-                  <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 text-[10px] text-[var(--taiko-ink)]/70 md:text-[11px]">
-                    <span className={`truncate ${track ? "" : "text-[var(--taiko-ink)]/35"}`}>
-                      {STEM_LABEL[key]}{track ? "" : tr("（无）", " (none)")}
-                    </span>
-                    <span className="tabular-nums text-[var(--taiko-ink)]/55">{Math.round(value * 100)}%</span>
-                  </span>
-                  <input type="range" min={0} max={100} step={1} value={Math.round(value * 100)} disabled={!track}
-                    onChange={(e) => song.setSong({ mix: { ...song.mix, [key]: Number(e.target.value) / 100 } })}
-                    className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)] disabled:cursor-not-allowed disabled:opacity-40" />
-                </label>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="grid shrink-0 grid-cols-[auto_auto] items-center justify-end gap-2">
-          <button onClick={togglePause} disabled={phase !== "playing" && phase !== "paused"}
-            className="h-9 min-w-16 border border-[var(--taiko-ink)] px-3 text-xs text-[var(--taiko-ink)] transition-colors hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)] disabled:cursor-not-allowed disabled:opacity-30 md:min-w-20 md:px-5 md:text-sm">
-            {phase === "paused" ? tr("继续", "Resume") : tr("暂停", "Pause")}
-          </button>
-          <HelpDot label={tr("游玩", "Play")} text={helpText("play", language)} />
-          <span className="col-span-2 hidden text-xs text-[var(--taiko-ink)]/50 lg:block">
-            {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
-            {(() => {
-              const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
-              return d ? tr(d.label, d.labelEn) : "";
-            })()}
-          </span>
-        </div>
       </div>
     </div>
   );
@@ -637,8 +658,9 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
 
 function Overlay({ children }: { children: React.ReactNode }) {
   return (
-    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/55">
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/55">
       {children}
     </div>
   );
 }
+
