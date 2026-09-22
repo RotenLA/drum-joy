@@ -10,7 +10,7 @@ import { STEM_KINDS, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
 import { clearHistory, readHistory, type HistoryEntry } from "./history";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
-import { Play, Search, Settings } from "lucide-react";
+import { LogOut, Play, Search, Settings } from "lucide-react";
 
 const fmtTime = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -31,11 +31,13 @@ export function SongPicker({
   onSpeedChange,
   onStart,
   onOpenSettings,
+  onExit,
 }: {
   speed: number;
   onSpeedChange?: ((s: number) => void) | undefined;
   onStart: () => void;
   onOpenSettings: () => void;
+  onExit?: (() => void) | undefined;
 }) {
   const song = useSong();
   const { tr } = useLanguage();
@@ -123,18 +125,28 @@ export function SongPicker({
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-picker-glass)] backdrop-blur-[16px]">
-      {/* 顶部：标签 + 搜索 横向并排 */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 py-3">
-        {(
-          [
-            ["songs", tr("选择歌曲", "Songs")],
-            ["history", tr("历史演奏", "History")],
-          ] as const
-        ).map(([id, label]) => (
+      {/* 顶部：退出独立在左，标签与搜索统一靠右 */}
+      <div className="flex shrink-0 items-center gap-2 px-3 py-3 sm:px-4">
+        <button
+          type="button"
+          onClick={onExit}
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 py-2 text-sm text-[rgba(255,255,255,0.76)] backdrop-blur-[18px] transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+        >
+          <LogOut size={15} />
+          {tr("退出", "Exit")}
+        </button>
+
+        <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
+          {(
+            [
+              ["songs", tr("选择歌曲", "Songs")],
+              ["history", tr("历史演奏", "History")],
+            ] as const
+          ).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`rounded-md px-4 py-2 text-sm tracking-wide transition-colors ${
+            className={`shrink-0 rounded-md px-2.5 py-2 text-xs tracking-wide transition-colors sm:px-4 sm:text-sm ${
               tab === id
                 ? "bg-[var(--taiko-accent)] text-[#12141a]"
                 : "bg-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.16)]"
@@ -142,17 +154,18 @@ export function SongPicker({
           >
             {label}
           </button>
-        ))}
+          ))}
 
-        <label className="ml-auto flex min-w-0 items-center gap-2 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 py-1.5 backdrop-blur-[18px]">
-          <Search size={14} className="shrink-0 text-[rgba(255,255,255,0.5)]" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={tr("搜索歌名或艺人", "Search title or artist")}
-            className="w-36 min-w-0 bg-transparent text-base text-[rgba(255,255,255,0.9)] outline-none placeholder:text-[rgba(255,255,255,0.35)] sm:w-56"
-          />
-        </label>
+          <label className="flex min-w-0 items-center gap-2 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-2.5 py-1.5 backdrop-blur-[18px] sm:px-3">
+            <Search size={14} className="shrink-0 text-[rgba(255,255,255,0.5)]" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={tr("搜索歌名或艺人", "Search title or artist")}
+              className="w-28 min-w-0 bg-transparent text-base text-[rgba(255,255,255,0.9)] outline-none placeholder:text-[rgba(255,255,255,0.35)] sm:w-56"
+            />
+          </label>
+        </div>
       </div>
 
       {(warn || listErr) && (

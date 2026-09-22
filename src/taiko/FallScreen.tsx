@@ -14,7 +14,7 @@ import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
 import { useLanguage } from "./i18n";
 import { SongPicker } from "./SongPicker";
-import { LogOut, SlidersHorizontal, X } from "lucide-react";
+import { SlidersHorizontal, X } from "lucide-react";
 import { GlobalSettings } from "./GlobalSettings";
 
 
@@ -525,7 +525,7 @@ export function FallScreen({
         <canvas ref={canvasRef} className="block h-full w-full" />
 
         {/* 演奏区实测帧数 */}
-        <FpsBadge />
+        {phase !== "idle" && <FpsBadge />}
 
         {/* 可开关的调试打印小窗 */}
         <DebugLogPanel />
@@ -618,6 +618,7 @@ export function FallScreen({
             onSpeedChange={onSpeedChange}
             onStart={start}
             onOpenSettings={() => setSettingsOpen(true)}
+            onExit={onExit}
           />
         )}
 
@@ -632,15 +633,7 @@ export function FallScreen({
             }}
           >
             <div className="taiko-scroll max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] p-3 shadow-2xl backdrop-blur-[24px]">
-              <div className="mb-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={onExit}
-                  className="flex items-center gap-1.5 rounded-md border border-[var(--taiko-line)] px-3 py-1.5 text-xs text-[var(--taiko-ink)]/75 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
-                >
-                  <LogOut size={14} />
-                  {tr("退出", "Exit")}
-                </button>
+              <div className="mb-2 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={() => setSettingsOpen(false)}
