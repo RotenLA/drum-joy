@@ -20,6 +20,8 @@ export interface MidiInputInfo {
 
 interface MidiMessageLike {
   data: Uint8Array | null;
+  /** 浏览器给出的这条消息的真实到达时刻（同 performance.now() 时基） */
+  timeStamp?: number;
 }
 
 interface MidiInputLike {
