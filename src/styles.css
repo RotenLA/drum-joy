@@ -187,14 +187,6 @@
   animation: taiko-marquee var(--taiko-marquee-dur, 9s) ease-in-out infinite alternate;
 }
 
-@keyframes taiko-tutorial-fall {
-  from { transform: translate(-50%, 0) scale(0.55); opacity: 0; }
-  15% { opacity: 1; }
-  to { transform: translate(-50%, 48vh) scale(1); opacity: 0.15; }
-}
-.taiko-tutorial-note {
-  animation: taiko-tutorial-fall 900ms linear infinite;
-}
 
 @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
   .backdrop-blur-\[16px\], .backdrop-blur-\[18px\], .backdrop-blur-\[24px\] {
