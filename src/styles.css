@@ -160,6 +160,33 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* 选歌卡片横向滑动：拖拽 + 触摸，隐藏滚动条 */
+.taiko-hscroll {
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+}
+.taiko-hscroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* 歌名过长时循环滚动 */
+@keyframes taiko-marquee {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  88%,
+  100% {
+    transform: translateX(var(--taiko-marquee-shift, 0px));
+  }
+}
+.taiko-marquee-run {
+  animation: taiko-marquee var(--taiko-marquee-dur, 9s) ease-in-out infinite alternate;
+}
+
 /* iOS 会在聚焦小于 16px 的表单控件时自动放大页面。仅触屏设备统一抬到 16px。 */
 @media (pointer: coarse) {
   input,
