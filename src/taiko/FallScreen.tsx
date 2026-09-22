@@ -8,7 +8,8 @@ import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick, getAudioContext } from "./metronome";
-import { loadKitEnabled, playDrum } from "./drumKit";
+import { loadKitEnabled, playDrum, warmUpDrums } from "./drumKit";
+import { latencyMeter } from "./latencyMeter";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
 import { useLanguage } from "./i18n";
@@ -56,6 +57,8 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
   const maxComboRef = useRef(0);
   const scoreRef = useRef(0);
   const missCursorRef = useRef(0);
+  /** 鼓件 → 该鼓件音符下标（按时间升序），判定时只在时间窗附近二分查找 */
+  const noteIndexRef = useRef<Partial<Record<PartId, number[]>>>({});
   const timersRef = useRef<number[]>([]);
   const countdownStartRef = useRef(0);
   const countdownMsRef = useRef(0);
@@ -114,6 +117,21 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
     phaseRef.current = p;
     setPhase(p);
   }, []);
+
+  // 谱面变化时重建判定索引（按鼓件分组，沿用谱面本身的时间升序）
+  useEffect(() => {
+    const map: Partial<Record<PartId, number[]>> = {};
+    const notes = playChart?.notes ?? [];
+    for (let i = 0; i < notes.length; i++) {
+      const n = notes[i]!;
+      if (n.note === undefined) continue;
+      const p = partOfNote(n.note);
+      if (!p) continue;
+      (map[p] ??= []).push(i);
+    }
+    noteIndexRef.current = map;
+  }, [playChart]);
+
 
   const resetRun = useCallback(() => {
     judgedRef.current = new Uint8Array(playChart?.notes.length ?? 0);
@@ -183,6 +201,8 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
     (part: PartId, atMs?: number, velocity = 100, note?: number) => {
       const now = performance.now();
       const at = atMs !== undefined && Number.isFinite(atMs) ? atMs : now;
+      // 抖动量表：真实敲击时刻 → 网页实际处理时刻
+      if (atMs !== undefined && Number.isFinite(atMs)) latencyMeter.recordInput(now - atMs);
       flashesRef.current[part] = now + FLASH_MS;
       if (kitOnRef.current) playDrum(part, velocity, undefined, note);
 
@@ -190,16 +210,29 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
       const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
       const notes = playChart.notes;
+      // 只在该鼓件的时间窗附近查找（二分定位），不再遍历整首曲子
+      const idx = noteIndexRef.current[part];
       let best = -1;
       let bestDiff = Infinity;
-      for (let i = 0; i < notes.length; i++) {
-        if (judgedRef.current[i]) continue;
-        const n = notes[i]!;
-        if (n.note === undefined || partOfNote(n.note) !== part) continue;
-        const diff = Math.abs(n.timeMs - t);
-        if (diff <= GOOD_MS && diff < bestDiff) {
-          best = i;
-          bestDiff = diff;
+      if (idx && idx.length) {
+        const lo = t - GOOD_MS;
+        let a = 0;
+        let b = idx.length;
+        while (a < b) {
+          const m = (a + b) >> 1;
+          if (notes[idx[m]!]!.timeMs < lo) a = m + 1;
+          else b = m;
+        }
+        for (let k = a; k < idx.length; k++) {
+          const i = idx[k]!;
+          const n = notes[i]!;
+          if (n.timeMs > t + GOOD_MS) break;
+          if (judgedRef.current[i]) continue;
+          const diff = Math.abs(n.timeMs - t);
+          if (diff < bestDiff) {
+            best = i;
+            bestDiff = diff;
+          }
         }
       }
       if (best < 0) return;
@@ -245,6 +278,9 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
     timersRef.current.forEach((t) => window.clearTimeout(t));
     timersRef.current = [];
     resetRun();
+    latencyMeter.reset();
+    // 倒计时那 4 拍里把鼓组样本与音频节点热起来，避免首次敲某个鼓时才解码
+    if (kitOnRef.current) void warmUpDrums();
     const beatMs = 60000 / playChart.bpm;
     beatMsRef.current = beatMs;
     const countdownMs = COUNT_IN_BEATS * beatMs;
@@ -342,6 +378,7 @@ export function FallScreen({ speed, suspended = false }: { speed: number; suspen
       if (dt && dt < minFrame) return;
       last = now;
       quality.sample(dt, now);
+      latencyMeter.recordFrame(dt);
 
       let ph = phaseRef.current;
       const t = readTimeMs(now);

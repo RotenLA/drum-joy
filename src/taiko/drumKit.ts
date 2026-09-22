@@ -248,9 +248,28 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * @param velocity MIDI 力度 1~127（键盘触发默认 100）
  * @param note 原始 MIDI 键位，用于逐键位响度衰减
  */
+/**
+ * 敲击发声的固定前瞻（秒）。
+ * 原来是「立刻播」（+1ms），音频线程忙的时候这一声会被推到下一个音频块，
+ * 表现为偶发的延迟尖峰。统一提前 10ms 排程后总延迟恒定、不再随忙闲抖动；
+ * 这 10ms 已包含在 calibration.ts 的默认 judge/visual 偏移里，手感不变。
+ */
+export const HIT_LOOKAHEAD_SEC = 0.01;
+
+/** 开演前预热：加载当前鼓组样本，并静音跑一次建立音频节点图 */
+export async function warmUpDrums(kitId?: number): Promise<void> {
+  const id = kitId ?? loadKitId();
+  const ctx = getAudioContext();
+  await ensureKitLoaded(id);
+  // 静音触发一次，让节点图与解码路径提前热起来
+  for (const part of ["kick", "snare", "hihat"] as PartId[]) {
+    playSample(ctx, id, part, ctx.currentTime + HIT_LOOKAHEAD_SEC, 0.0001);
+  }
+}
+
 export function playDrum(part: PartId, velocity = 100, kitId?: number, note?: number): void {
   const ctx = getAudioContext();
-  const t = ctx.currentTime + 0.001;
+  const t = ctx.currentTime + HIT_LOOKAHEAD_SEC;
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
 
   if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
