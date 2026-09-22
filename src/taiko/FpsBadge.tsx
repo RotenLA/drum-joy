@@ -35,18 +35,21 @@ export function FpsBadge() {
     return () => window.clearInterval(id);
   }, []);
 
+  const inNow = jitter.input > 0 ? `${jitter.input}` : "-";
+  const inMax = jitter.inputMax > 0 ? `${jitter.inputMax}` : "-";
+
   return (
     <div
-      className="pointer-events-none absolute z-40 rounded bg-[var(--taiko-paper)]/70 px-1.5 py-0.5 font-mono text-[10px] leading-none text-[var(--taiko-ink)]/70"
+      className="pointer-events-none absolute z-40 rounded-md border border-[rgba(255,255,255,0.12)] bg-[rgba(10,12,18,0.72)] px-2 py-1.5 font-mono text-[11px] leading-tight text-[rgba(255,255,255,0.82)] backdrop-blur-[8px]"
       style={{ top: "var(--safe-top)", left: "var(--safe-left)" }}
     >
-      <div>{fps} FPS</div>
+      <div className="tabular-nums text-[rgba(255,255,255,0.95)]">{fps} FPS</div>
       {jitter.on ? (
         <>
-          <div className="mt-0.5">
-            IN {jitter.input}/{jitter.inputMax}ms
+          <div className="mt-1 text-[rgba(255,255,255,0.65)]" title="输入延迟：当前/最近50次最大（0或-表示暂无敲击）">
+            IN {inNow}/{inMax}ms
           </div>
-          <div className="mt-0.5">
+          <div className="mt-0.5 text-[rgba(255,255,255,0.65)]" title="长帧：累计次数 / 最近一次耗时（>30ms视为长帧）">
             LF {jitter.longFrames} ({jitter.lastLong}ms)
           </div>
         </>
