@@ -25,10 +25,16 @@ export interface LoadedLibrarySong {
 
 async function fetchWithProgress(
   url: string,
+  label: string,
   onBytes: (delta: number) => void,
 ): Promise<ArrayBuffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`下载失败 ${res.status}`);
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (cause) {
+    throw new Error(`${label} 网络下载失败`, { cause });
+  }
+  if (!res.ok) throw new Error(`${label} 下载失败 (${res.status})`);
   const body = res.body;
   if (!body) {
     const buf = await res.arrayBuffer();
@@ -71,8 +77,13 @@ export async function loadLibrarySong(
     onProgress?.(Math.min(92, (done / totalBytes) * 92));
   };
 
-  const midiBuf = await fetchWithProgress(assets.urls.midi, bump);
-  const midi = parseMidi(midiBuf);
+  const midiBuf = await fetchWithProgress(assets.urls.midi, "MIDI", bump);
+  let midi: ParsedMidi;
+  try {
+    midi = parseMidi(midiBuf);
+  } catch (cause) {
+    throw new Error("MIDI 文件解析失败", { cause });
+  }
 
   // 云端固化谱面：命中后客户端不再自己生成
   const cloud: Partial<Record<string, TaikoChart>> = {};
@@ -85,7 +96,7 @@ export async function loadLibrarySong(
   for (const kind of STEM_KINDS) {
     const url = assets.urls[kind];
     if (!url) continue;
-    raw[kind] = await fetchWithProgress(url, bump);
+    raw[kind] = await fetchWithProgress(url, STEM_LABEL[kind], bump);
   }
 
   const ctx = getAudioContext();
@@ -93,7 +104,14 @@ export async function loadLibrarySong(
   let decoded = 0;
   const kinds = STEM_KINDS.filter((k) => raw[k]);
   for (const kind of kinds) {
-    const buffer = await ctx.decodeAudioData(raw[kind]!);
+    const source = raw[kind];
+    if (!source) continue;
+    let buffer: AudioBuffer;
+    try {
+      buffer = await ctx.decodeAudioData(source);
+    } catch (cause) {
+      throw new Error(`${STEM_LABEL[kind]}音频解码失败`, { cause });
+    }
     stems[kind] = {
       buffer,
       fileName: `${song.title}_${STEM_LABEL[kind]}.mp3`,
