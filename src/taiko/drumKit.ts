@@ -336,6 +336,31 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * 这 10ms 已包含在 calibration.ts 的默认 judge/visual 偏移里，手感不变。
  */
 export const HIT_LOOKAHEAD_SEC = 0.01;
+/** 密集段的提前量上限（秒）：音频线程忙时多留一点，避免这一声掉到下个音频块 */
+const HIT_LOOKAHEAD_BUSY_SEC = 0.018;
+/** 判定「密集」的窗口与击打数 */
+const BUSY_WINDOW_MS = 300;
+const BUSY_HITS = 6;
+
+const recentHits: number[] = [];
+
+/**
+ * 自适应提前量：平时保持最小 10ms（手感最直接），
+ * 最近 300ms 内击打数超过阈值时临时加到 18ms，压住突发延迟尖峰。
+ */
+function lookaheadSec(): number {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  while (recentHits.length && now - recentHits[0]! > BUSY_WINDOW_MS) recentHits.shift();
+  recentHits.push(now);
+  return recentHits.length >= BUSY_HITS ? HIT_LOOKAHEAD_BUSY_SEC : HIT_LOOKAHEAD_SEC;
+}
+
+/** 当前提前量（毫秒，调试面板用，不推进统计窗口） */
+export function currentLookaheadMs(): number {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const n = recentHits.filter((t) => now - t <= BUSY_WINDOW_MS).length;
+  return (n >= BUSY_HITS ? HIT_LOOKAHEAD_BUSY_SEC : HIT_LOOKAHEAD_SEC) * 1000;
+}
 
 /** 开演前预热：加载当前鼓组样本，并静音跑一次建立音频节点图 */
 export async function warmUpDrums(kitId?: number): Promise<void> {
@@ -346,11 +371,12 @@ export async function warmUpDrums(kitId?: number): Promise<void> {
   for (const part of ["kick", "snare", "hihat"] as PartId[]) {
     playSample(ctx, id, part, ctx.currentTime + HIT_LOOKAHEAD_SEC, 0.0001);
   }
+  recentHits.length = 0;
 }
 
 export function playDrum(part: PartId, velocity = 100, kitId?: number, note?: number): void {
   const ctx = getAudioContext();
-  const t = ctx.currentTime + HIT_LOOKAHEAD_SEC;
+  const t = ctx.currentTime + lookaheadSec();
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
 
   if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
