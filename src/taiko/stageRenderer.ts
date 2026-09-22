@@ -394,6 +394,12 @@ function noteDepth(anchor: PadAnchor, yNorm: number, p: number): number {
   return ground + (arrived - ground) * smooth;
 }
 
+/** 音符、色带与缩圈共用素材中实测的鼓面角度。 */
+function noteAngle(part: PartId, pad: PadGeom): number {
+  const measured = padSpriteMeta(part)?.ringAngleDeg;
+  return measured === undefined ? pad.rot : (measured * Math.PI) / 180;
+}
+
 /**
  * 飞行中的音符 → 纵深绘制项。
  * 音符按当前所在高度参与统一排序：飞过某个鼓盘所在深度之前会被该鼓面遮挡，
@@ -445,45 +451,50 @@ function noteItems(
     // 踏板顶面朝向：正方形先 rotate(th)，再统一压扁 0.42。
     // 长音符色带沿同一朝向取宽度方向，才和踏板/音符块看起来是一体的。
     const pedalTh = part === "kick" ? -PEDAL_TILT : PEDAL_TILT;
+    const faceAngle = anchor.square ? pedalTh : noteAngle(part, pad);
 
     // 长音色带按所属层的纵深排序：踏板色带在地面层，被所有空中鼓面实心遮挡；
     // 手击鼓的色带按自身高度参与排序。取头部纵深再退让 ε，保证头部压在色带上。
     if (hold) {
-      items.push({
-        depth: noteDepth(anchor, y / h, p) - 0.0005,
-        draw: () => {
+      // 一条长色带可能同时跨过多排鼓件，不能用头部的单一 depth 绘制整条。
+      // 沿路径切段后，每段按自己的位置进入纵深队列，鼓面便能只遮住实际相交的部分。
+      const segmentCount = Math.max(1, Math.min(24, Math.ceil(Math.hypot(head.x - tail.x, head.y - tail.y) / 42)));
+      for (let segment = 0; segment < segmentCount; segment++) {
+        const a = segment / segmentCount;
+        const b = (segment + 1) / segmentCount;
+        const ax = tail.x + (head.x - tail.x) * a;
+        const ay = tail.y + (head.y - tail.y) * a;
+        const bx = tail.x + (head.x - tail.x) * b;
+        const by = tail.y + (head.y - tail.y) * b;
+        const ar = tail.rx + (head.rx - tail.rx) * a;
+        const br = tail.rx + (head.rx - tail.rx) * b;
+        const segmentP = tail.p + (head.p - tail.p) * ((a + b) / 2);
+        items.push({
+          depth: noteDepth(anchor, (ay + by) / (2 * h), segmentP) - 0.0005,
+          draw: () => {
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.shadowColor = color;
-        let ux: number;
-        let uy: number;
-        if (anchor.square) {
-          ux = Math.cos(pedalTh);
-          uy = 0.42 * Math.sin(pedalTh);
-        } else {
-          ux = Math.cos(pad.rot);
-          uy = 0.42 * Math.sin(pad.rot);
-        }
-        const ul = Math.hypot(ux, uy) || 1;
-        ux /= ul;
-        uy /= ul;
-        const wh = head.rx * 0.9;
-        const wt = tail.rx * 0.9;
-        ctx.shadowBlur = GLOW ? 14 * scale : 0;
-        ctx.fillStyle = hexToRgba(color, 0.28);
-        ctx.strokeStyle = hexToRgba(color, 0.75);
-        ctx.lineWidth = Math.max(1, rx * 0.08);
-        ctx.beginPath();
-        ctx.moveTo(tail.x + ux * wt, tail.y + uy * wt);
-        ctx.lineTo(head.x + ux * wh, head.y + uy * wh);
-        ctx.lineTo(head.x - ux * wh, head.y - uy * wh);
-        ctx.lineTo(tail.x - ux * wt, tail.y - uy * wt);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-        },
-      });
+          const ux = Math.cos(faceAngle);
+          const uy = Math.sin(faceAngle);
+          const aw = ar * 0.9;
+          const bw = br * 0.9;
+          ctx.shadowBlur = GLOW ? 14 * scale : 0;
+          ctx.fillStyle = hexToRgba(color, 0.28);
+          ctx.strokeStyle = hexToRgba(color, 0.75);
+          ctx.lineWidth = Math.max(1, rx * 0.08);
+          ctx.beginPath();
+          ctx.moveTo(ax + ux * aw, ay + uy * aw);
+          ctx.lineTo(bx + ux * bw, by + uy * bw);
+          ctx.lineTo(bx - ux * bw, by - uy * bw);
+          ctx.lineTo(ax - ux * aw, ay - uy * aw);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+          },
+        });
+      }
     }
 
     items.push({
@@ -509,7 +520,7 @@ function noteItems(
             ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
             ctx.restore();
           } else {
-            ctx.ellipse(0, 0, rx, rx * 0.42, pad.rot, 0, Math.PI * 2);
+            ctx.ellipse(0, 0, rx, rx * (pad.ry / pad.rx), faceAngle, 0, Math.PI * 2);
           }
           ctx.fill();
           ctx.stroke();
@@ -801,6 +812,8 @@ function drawPad(
     const oy = -meta.offY * ringW * (anchor.ratio ?? 0.42);
     ctx.save();
     ctx.translate(p.cx + ox, p.cy + oy);
+    // 实体鼓面轻微透光：后方音符仍由鼓面遮挡，只留下很淡的空间层次。
+    ctx.globalAlpha = 0.94;
     ctx.drawImage(sprite, -dw / 2, -dh / 2, dw, dh);
     if (intensity > 0) {
       const hit = padSpriteHit(partId);
