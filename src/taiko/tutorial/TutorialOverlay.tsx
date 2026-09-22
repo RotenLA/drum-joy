@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { midiManager } from "../midiInput";
-import { deviceState } from "../deviceState";
 import { partOfNote, type PartId } from "../laneLayouts";
 import { loadKitEnabled, playDrum } from "../drumKit";
 import { useLanguage } from "../i18n";
@@ -19,25 +18,21 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [hitPart, setHitPart] = useState<PartId | null>(null);
-  const [stickSeen, setStickSeen] = useState(false);
-  const [pedalSeen, setPedalSeen] = useState(false);
   const [held, setHeld] = useState(false);
   const [passed, setPassed] = useState(false);
-  const [devices, setDevices] = useState(deviceState.state);
   const step = TUTORIAL_STEPS[index] ?? TUTORIAL_STEPS[0];
   const needed = step.needed ?? 1;
 
   const reset = useCallback(() => { setProgress(0); setHeld(false); setPassed(false); setHitPart(null); }, []);
   const advance = useCallback(() => { if (index >= TUTORIAL_STEPS.length - 1) { markTutorialSeen(); onLeave(); return; } setIndex((v) => v + 1); reset(); }, [index, onLeave, reset]);
 
-  useEffect(() => { void midiManager.init(); deviceState.query(); return deviceState.subscribe(setDevices); }, []);
+  useEffect(() => { void midiManager.init(); }, []);
   useEffect(() => {
     const off = midiManager.onNote((note, velocity) => {
       const part = partOfNote(note);
       if (!part) return;
       setHitPart(part); window.setTimeout(() => setHitPart((old) => old === part ? null : old), 180);
       if (loadKitEnabled()) playDrum(part, velocity, undefined, note);
-      if (note === 36 || note === 44) setPedalSeen(true); else setStickSeen(true);
       if (step.kind === "hold" && part === "pedalHat") { setHeld(true); return; }
       if (!step.targets?.includes(part) || passed) return;
       setProgress((value) => { const next = value + 1; if (next >= needed) setPassed(true); return Math.min(next, needed); });
@@ -53,8 +48,7 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
     return () => window.clearTimeout(timer);
   }, [held, passed, step.kind]);
 
-  const adapterReady = devices.m || midiManager.inputs().some((d) => /pd2u|pd2max|pd2|max/i.test(d.name));
-  const canNext = useMemo(() => step.kind === "device" ? (index === 0 ? adapterReady : stickSeen && pedalSeen) : step.kind === "parts" || step.kind === "done" || passed, [adapterReady, index, passed, pedalSeen, step.kind, stickSeen]);
+  const canNext = useMemo(() => step.kind === "parts" || step.kind === "done" || passed, [passed, step.kind]);
   const copy = tutorialStepCopy(language, index, step);
 
   return <div className="taiko-tutorial-layout absolute inset-0 z-50 flex min-h-0 bg-[var(--taiko-paper)]">
@@ -64,7 +58,6 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
       <p className="text-xs tabular-nums text-[var(--taiko-accent)]">{labels.tutorial} {index + 1} / {TUTORIAL_STEPS.length}</p>
       <h2 className="mt-2 text-2xl font-semibold text-[var(--taiko-ink)]">{copy.title}</h2>
       <p className="mt-3 text-sm leading-7 text-[rgba(255,255,255,0.72)]">{copy.body}</p>
-      {step.kind === "device" && <div className="mt-5 space-y-2 text-sm"><Status ok={index === 0 ? adapterReady : stickSeen} text={index === 0 ? "PD2U / PD2MAX" : labels.stick} /><Status ok={index === 0 ? adapterReady : pedalSeen} text={index === 0 ? labels.adapter : labels.pedal} /></div>}
       {step.targets && <p className="mt-5 text-sm text-[rgba(255,255,255,0.62)]">{labels.progress}: {progress} / {needed}</p>}
       <div className="mt-7 flex flex-wrap gap-2">
         <Button onClick={advance} disabled={!canNext} className="bg-[var(--taiko-accent)] text-[var(--taiko-paper)] hover:bg-[var(--taiko-accent-2)]">{step.kind === "done" ? labels.finish : labels.next}</Button>
@@ -74,5 +67,3 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
     </aside>
   </div>;
 }
-
-function Status({ ok, text }: { ok: boolean; text: string }) { return <div className={`rounded-md border px-3 py-2 ${ok ? "border-[var(--taiko-accent)] text-[var(--taiko-accent)]" : "border-[var(--taiko-glass-line)] text-[rgba(255,255,255,0.5)]"}`}>{ok ? "●" : "○"} {text}</div>; }
