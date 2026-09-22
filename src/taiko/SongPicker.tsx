@@ -39,7 +39,7 @@ function VerticalTitle({ title }: { title: string }) {
     if (!box || !text) return;
     const measure = () => {
       // 旋转 -90° 后，文本宽度对应卡片高度
-      const over = text.scrollWidth - box.clientHeight + 24;
+      const over = text.scrollWidth - (box.clientHeight - 24);
       setShift(over > 8 ? over : 0);
     };
     measure();
@@ -50,25 +50,28 @@ function VerticalTitle({ title }: { title: string }) {
 
   return (
     <span ref={boxRef} className="relative block h-full w-full overflow-hidden">
-      <span
-        className="absolute bottom-0 right-3 origin-bottom-right"
-        style={{ transform: "skewX(9deg) rotate(-90deg)" }}
-      >
+      {/* 贴右侧的竖排条：文字绕自身中心逆时针 90° */}
+      <span className="absolute inset-y-0 right-0 block w-14 overflow-hidden">
         <span
-          ref={textRef}
-          className={`block whitespace-nowrap text-[22px] font-semibold tracking-wide text-[rgba(255,255,255,0.9)] ${
-            shift ? "taiko-marquee-run" : ""
-          }`}
-          style={
-            shift
-              ? ({
-                  "--taiko-marquee-shift": `${-shift}px`,
-                  "--taiko-marquee-dur": `${Math.max(7, shift / 22)}s`,
-                } as React.CSSProperties)
-              : undefined
-          }
+          className="absolute left-1/2 top-1/2 block whitespace-nowrap"
+          style={{ transform: "translate(-50%, -50%) skewX(9deg) rotate(-90deg)" }}
         >
-          {title}
+          <span
+            ref={textRef}
+            className={`block whitespace-nowrap text-[22px] font-semibold tracking-wide text-[rgba(255,255,255,0.9)] ${
+              shift ? "taiko-marquee-run" : ""
+            }`}
+            style={
+              shift
+                ? ({
+                    "--taiko-marquee-shift": `${-shift}px`,
+                    "--taiko-marquee-dur": `${Math.max(7, shift / 22)}s`,
+                  } as React.CSSProperties)
+                : undefined
+            }
+          >
+            {title}
+          </span>
         </span>
       </span>
     </span>
