@@ -13,6 +13,9 @@ import { latencyMeter } from "./latencyMeter";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
 import { useLanguage } from "./i18n";
+import { SongPicker } from "./SongPicker";
+import { SlidersHorizontal } from "lucide-react";
+
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
 import { getPlayChart } from "./chartCache";
