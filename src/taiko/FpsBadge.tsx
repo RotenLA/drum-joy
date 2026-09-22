@@ -93,6 +93,12 @@ export function FpsBadge() {
           >
             AUD {jitter.audJitter}ms / {jitter.outLatency}ms
           </div>
+          <div
+            className="mt-0.5 text-[rgba(255,255,255,0.65)]"
+            title="敲击→发声耽误：当前值 / 峰值（峰值超过发声预算时才会听到不跟手）"
+          >
+            HIT {jitter.hitDelay}/{jitter.hitPeak}pk ms
+          </div>
         </>
       ) : null}
     </div>
