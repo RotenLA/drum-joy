@@ -94,7 +94,7 @@ class StickManager {
   }
 
   /** 只有当前画面可见的手击鼓面才可触发上下层切换；踏板不参与。 */
-  switchLayerForHit(part: PartId, visibleParts: readonly PartId[], preferredSide?: StickSide): void {
+  switchLayerForHit(part: PartId, visibleParts: readonly PartId[]): void {
     if (!visibleParts.includes(part)) return;
     const layer: StickLayer | null =
       part === "crash" || part === "highTom" || part === "midTom" || part === "ride"
@@ -104,7 +104,8 @@ class StickManager {
           : null;
     if (!layer) return;
 
-    const side = preferredSide ?? this.closestSide(part);
+    const side = this.closestSide(part, layer);
+    if (!side) return;
     const previous = this.layers[side];
     if (previous === layer) return;
     const at = now();
@@ -114,16 +115,21 @@ class StickManager {
     debugLog.push("stick", `${side.toUpperCase()} ${previous} → ${layer} (${part})`);
   }
 
-  private closestSide(part: PartId): StickSide {
-    const targetX = PAD_ANCHORS[part].cx;
-    const poseL = this.snap?.l;
-    const poseR = this.snap?.r;
-    if (!poseL && !poseR) return targetX < 0.5 ? "l" : "r";
+  private closestSide(part: PartId, targetLayer: StickLayer): StickSide | null {
+    const snapshot = this.latest();
+    const poseL = snapshot?.l;
+    const poseR = snapshot?.r;
+    if (!poseL && !poseR) return null;
     if (!poseL) return "r";
     if (!poseR) return "l";
-    const lx = stickPoint(poseL, this.layers.l).x;
-    const rx = stickPoint(poseR, this.layers.r).x;
-    return Math.abs(lx - targetX) <= Math.abs(rx - targetX) ? "l" : "r";
+    const target = PAD_ANCHORS[part];
+    // 两根棒都投影到目标鼓面所在层，再比较真实指向与鼓面中心的距离。
+    // 这样 l/r 身份始终来自硬件，只决定哪根棒执行这次上下层切换。
+    const left = stickPoint(poseL, targetLayer);
+    const right = stickPoint(poseR, targetLayer);
+    const distance = (point: { x: number; y: number }) =>
+      Math.hypot(point.x - target.cx, point.y - target.cy);
+    return distance(left) <= distance(right) ? "l" : "r";
   }
 }
 

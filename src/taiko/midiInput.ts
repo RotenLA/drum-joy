@@ -6,7 +6,6 @@
 
 import { debugLog } from "./debugLog";
 import { PART_BY_ID, partOfNote } from "./laneLayouts";
-import type { StickSide } from "./stickInput";
 
 /** 音符号 → 「(部件名)」，未映射时留空 */
 function partTag(note: number): string {
@@ -37,7 +36,7 @@ interface MidiAccessLike {
 }
 
 /** atMs：敲击时刻（performance.now() 基准），判定用它而不是下一帧渲染时刻 */
-type NoteListener = (note: number, velocity: number, atMs: number, side?: StickSide) => void;
+type NoteListener = (note: number, velocity: number, atMs: number) => void;
 type NoteOffListener = (note: number) => void;
 type StateListener = () => void;
 
@@ -116,15 +115,14 @@ class MidiManager {
    * 宿主（Unity 等）注入 note-on：与硬件消息走同一套 listener，
    * 因此映射、判定、鼓盘闪光行为完全一致。
    */
-  injectNoteOn(note: number, velocity: number, hostTimeMs?: number, side?: StickSide): void {
+  injectNoteOn(note: number, velocity: number, hostTimeMs?: number): void {
     const n = Math.round(note);
     const v = Math.round(velocity);
     // 接口约定：note 1-127，velocity 1-127（0 视为静音，忽略）
     if (n < 1 || n > 127 || v < 1 || v > 127) return;
     const at = this.toLocalTime(hostTimeMs);
     debugLog.push("inject", `注入 note-on  ${n} vel ${v}${partTag(n)}`);
-    const validSide = side === "l" || side === "r" ? side : undefined;
-    for (const f of this.noteListeners) f(n, v, at, validSide);
+    for (const f of this.noteListeners) f(n, v, at);
   }
 
   /**
@@ -190,8 +188,8 @@ export function installExternalBridge(): void {
   const w = window as unknown as Record<string, unknown>;
   if (w["__pd2uBridgeInstalled"]) return;
   w["__pd2uBridgeInstalled"] = true;
-  w["__pd2uNoteOn"] = (note: number, velocity: number, hostTimeMs?: number, side?: StickSide) =>
-    midiManager.injectNoteOn(note, velocity, hostTimeMs, side);
+  w["__pd2uNoteOn"] = (note: number, velocity: number, hostTimeMs?: number) =>
+    midiManager.injectNoteOn(note, velocity, hostTimeMs);
   w["__pd2uNoteOff"] = (note: number) => midiManager.injectNoteOff(note);
   debugLog.push("system", "已挂载 window.__pd2uNoteOn / __pd2uNoteOff");
 }

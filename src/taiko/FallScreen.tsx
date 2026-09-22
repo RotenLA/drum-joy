@@ -286,12 +286,12 @@ export function FallScreen({
   useEffect(() => {
     void midiManager.init();
     unlockAudio(); // iOS/WKWebView：首次手势里接通音频输出，避免第一批敲击抖动
-    const offNote = midiManager.onNote((note, vel, atMs, side) => {
+    const offNote = midiManager.onNote((note, vel, atMs) => {
       const part = partOfNote(note);
       if (!part) return;
       if (part === "pedalHat") pedalHeldRef.current = true;
       if (parts.includes(part)) {
-        stickManager.switchLayerForHit(part, parts, side);
+        stickManager.switchLayerForHit(part, parts);
         hitPart(part, atMs, vel, note);
       }
     });
