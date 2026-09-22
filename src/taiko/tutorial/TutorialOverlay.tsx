@@ -16,13 +16,15 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const labels = tutorialLabels(language);
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [hitPart, setHitPart] = useState<PartId | null>(null);
   const [held, setHeld] = useState(false);
   const [passed, setPassed] = useState(false);
+  const [restartKey, setRestartKey] = useState(0);
+  /** 命中闪光：partId -> 到期时间戳（performance.now 基准），交给正式渲染器 */
+  const flashes = useRef<Record<string, number>>({});
   const step = TUTORIAL_STEPS[index] ?? TUTORIAL_STEPS[0];
   const needed = step.needed ?? 1;
 
-  const reset = useCallback(() => { setProgress(0); setHeld(false); setPassed(false); setHitPart(null); }, []);
+  const reset = useCallback(() => { setProgress(0); setHeld(false); setPassed(false); flashes.current = {}; setRestartKey((v) => v + 1); }, []);
   const advance = useCallback(() => { if (index >= TUTORIAL_STEPS.length - 1) { markTutorialSeen(); onLeave(); return; } setIndex((v) => v + 1); reset(); }, [index, onLeave, reset]);
 
   useEffect(() => { void midiManager.init(); }, []);
