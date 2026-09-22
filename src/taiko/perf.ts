@@ -41,6 +41,9 @@ export const TIER_LABEL_EN: Record<QualityMode, string> = {
   low: "Low",
 };
 
+/** iOS 绘制像素比上限（3 倍屏按 1.5 绘制，肉眼几乎无差别） */
+const IOS_MAX_DPR = 1.5;
+
 const STORE_KEY = "taiko.quality.v1";
 const TIERS: QualityTier[] = ["high", "medium", "low"];
 
