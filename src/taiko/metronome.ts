@@ -3,13 +3,44 @@
  * 节拍器两种模式：自由运行（getPositionMs 返回 null）或跟随外部时钟
  * （如歌曲播放器），按 beat 网格用 30ms 轮询 + 150ms 前瞻调度滴答声。
  */
+import { isAndroid } from "./platform";
 
 let sharedCtx: AudioContext | null = null;
 
+type Ctor = new (opts?: AudioContextOptions) => AudioContext;
+
+function createCtx(): AudioContext {
+  const w = globalThis as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
+  const Ctx = w.AudioContext ?? w.webkitAudioContext;
+  if (!Ctx) throw new Error("当前环境不支持 Web Audio");
+  // 安卓硬件原生采样率基本都是 48kHz：显式锁定可跳过系统重采样，省下 20~30ms 延迟
+  const opts: AudioContextOptions = isAndroid()
+    ? { latencyHint: "interactive", sampleRate: 48000 }
+    : { latencyHint: "interactive" };
+  try {
+    return new Ctx(opts);
+  } catch {
+    try {
+      return new Ctx({ latencyHint: "interactive" });
+    } catch {
+      return new Ctx();
+    }
+  }
+}
+
 export function getAudioContext(): AudioContext {
-  if (!sharedCtx) sharedCtx = new AudioContext();
+  if (!sharedCtx) sharedCtx = createCtx();
   if (sharedCtx.state === "suspended") void sharedCtx.resume();
   return sharedCtx;
+}
+
+/** 输出链路实测延迟（毫秒）：baseLatency + outputLatency，取不到给 0 */
+export function outputLatencyMs(): number {
+  if (!sharedCtx) return 0;
+  const base = Number(sharedCtx.baseLatency ?? 0);
+  const out = Number((sharedCtx as AudioContext & { outputLatency?: number }).outputLatency ?? 0);
+  const ms = (base + out) * 1000;
+  return Number.isFinite(ms) ? Math.round(ms) : 0;
 }
 
 /** 单次滴答（倒计时 / 手动触发用）。whenSec 为 AudioContext 时钟时间 */
