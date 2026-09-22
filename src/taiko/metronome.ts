@@ -3,7 +3,7 @@
  * 节拍器两种模式：自由运行（getPositionMs 返回 null）或跟随外部时钟
  * （如歌曲播放器），按 beat 网格用 30ms 轮询 + 150ms 前瞻调度滴答声。
  */
-import { isAndroid } from "./platform";
+import { isAndroid, isIOS } from "./platform";
 
 let sharedCtx: AudioContext | null = null;
 
@@ -13,8 +13,9 @@ function createCtx(): AudioContext {
   const w = globalThis as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
   const Ctx = w.AudioContext ?? w.webkitAudioContext;
   if (!Ctx) throw new Error("当前环境不支持 Web Audio");
-  // 安卓硬件原生采样率基本都是 48kHz：显式锁定可跳过系统重采样，省下 20~30ms 延迟
-  const opts: AudioContextOptions = isAndroid()
+  // 安卓硬件原生采样率基本都是 48kHz：显式锁定可跳过系统重采样，省下 20~30ms 延迟。
+  // iOS/iPadOS 必须跟随系统原生采样率（强制 48k 会触发 WKWebView 内部重采样并加大缓冲）。
+  const opts: AudioContextOptions = isAndroid() && !isIOS()
     ? { latencyHint: "interactive", sampleRate: 48000 }
     : { latencyHint: "interactive" };
   try {
@@ -32,6 +33,37 @@ export function getAudioContext(): AudioContext {
   if (!sharedCtx) sharedCtx = createCtx();
   if (sharedCtx.state === "suspended") void sharedCtx.resume();
   return sharedCtx;
+}
+
+let unlocked = false;
+
+/**
+ * 首次用户手势时解锁音频：iOS/WKWebView 的 AudioContext 只有在手势里
+ * resume + 播一帧静音后才会真正接通输出，否则第一批敲击会明显抖动。
+ */
+export function unlockAudio(): void {
+  if (unlocked || typeof window === "undefined") return;
+  const run = () => {
+    if (unlocked) return;
+    unlocked = true;
+    try {
+      const ctx = getAudioContext();
+      void ctx.resume();
+      const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      src.start(ctx.currentTime);
+    } catch {
+      // 环境不支持，忽略
+    }
+    for (const ev of ["pointerdown", "touchstart", "keydown"] as const) {
+      window.removeEventListener(ev, run);
+    }
+  };
+  for (const ev of ["pointerdown", "touchstart", "keydown"] as const) {
+    window.addEventListener(ev, run, { passive: true });
+  }
 }
 
 /** 输出链路实测延迟（毫秒）：baseLatency + outputLatency，取不到给 0 */

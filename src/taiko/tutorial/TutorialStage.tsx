@@ -8,7 +8,8 @@ import { quality } from "../perf";
 import { renderStage } from "../stageRenderer";
 import { useLanguage } from "../i18n";
 import { tutorialLabels, tutorialStepCopy, type TutorialStep } from "./steps";
-import { buildPracticeChart } from "./practiceChart";
+import { buildPracticeChart, PRACTICE_BPM } from "./practiceChart";
+import { Metronome, unlockAudio } from "../metronome";
 
 export function TutorialStage({
   step,
@@ -37,18 +38,25 @@ export function TutorialStage({
   const showNotes = step.kind !== "parts" && step.kind !== "done";
   // 「认识鼓件」只显示鼓阵；其余步骤仍显示全部 9 件，避免与正式游戏构图不同
   const parts = useMemo<readonly PartId[]>(() => VISIBLE_PARTS.nine, []);
-  const pulseRef = useRef(0);
+  /** 教学内部时钟（毫秒），节拍器跟着它走 */
+  const timeRef = useRef(0);
 
-  // 「认识鼓件」步骤：轮流点亮各鼓件（用正式渲染器的命中高亮）
+  // 练习步骤配 100 BPM 4/4 节拍器：认识鼓件与教学完成不响
   useEffect(() => {
-    if (step.kind !== "parts") return;
-    const timer = window.setInterval(() => {
-      const id = parts[pulseRef.current % parts.length]!;
-      pulseRef.current += 1;
-      flashes.current[id] = performance.now() + 420;
-    }, 700);
-    return () => window.clearInterval(timer);
-  }, [flashes, parts, step.kind]);
+    if (!showNotes) return;
+    unlockAudio();
+    const metro = new Metronome();
+    metro.start({ bpm: PRACTICE_BPM, beatsPerBar: 4, getPositionMs: () => timeRef.current });
+    const onVisible = () => {
+      if (document.visibilityState === "hidden") metro.stop();
+      else metro.start({ bpm: PRACTICE_BPM, beatsPerBar: 4, getPositionMs: () => timeRef.current });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      metro.stop();
+    };
+  }, [showNotes, restartKey, index]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -77,6 +85,7 @@ export function TutorialStage({
       const now = performance.now();
       const elapsed = now - t0;
       const timeMs = chart.durationMs > 0 ? elapsed % chart.durationMs : elapsed;
+      timeRef.current = timeMs;
       renderStage(ctx, canvas.clientWidth, canvas.clientHeight, {
         chart,
         timeMs,

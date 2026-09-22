@@ -5,6 +5,7 @@
  * 默认开启，可在谱面页全局参数里关闭；开关与鼓组选择都存 localStorage。
  */
 import { getAudioContext } from "./metronome";
+import { isAndroid, isIOS } from "./platform";
 import type { PartId } from "./laneLayouts";
 import { KIT_SAMPLES } from "./kitSamples";
 
@@ -164,10 +165,20 @@ export function releaseOtherKits(keepKitId: number): void {
 
 // ---------------- 发声数量控制 ----------------
 
+/**
+ * 同时发声上限按平台区分：
+ * iOS 音频线程对同时活跃的 BufferSource 更敏感（密集段容易突发卡顿），
+ * 桌面余量大可以多留一点尾音。
+ */
+const VOICE_LIMITS = isIOS()
+  ? { perPart: 3, total: 12 }
+  : isAndroid()
+    ? { perPart: 3, total: 14 }
+    : { perPart: 4, total: 16 };
 /** 单个鼓件最多同时发声数（连打时掐掉最早那一声的尾巴） */
-const MAX_VOICES_PER_PART = 3;
+const MAX_VOICES_PER_PART = VOICE_LIMITS.perPart;
 /** 全局最多同时发声数（密集段防止音频线程被压满） */
-const MAX_VOICES_TOTAL = 14;
+const MAX_VOICES_TOTAL = VOICE_LIMITS.total;
 /** 掐音淡出时长（秒），足够短听不出断口 */
 const CHOKE_SEC = 0.035;
 

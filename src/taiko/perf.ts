@@ -5,6 +5,8 @@
  * 默认 auto：按实测帧时间自动降档（只降不升，带冷却，避免来回抖动）。
  */
 
+import { isIOS } from "./platform";
+
 export type QualityTier = "high" | "medium" | "low";
 export type QualityMode = "auto" | QualityTier;
 
@@ -40,6 +42,9 @@ export const TIER_LABEL_EN: Record<QualityMode, string> = {
   medium: "Mid",
   low: "Low",
 };
+
+/** iOS 绘制像素比上限（3 倍屏按 1.5 绘制，肉眼几乎无差别） */
+const IOS_MAX_DPR = 1.5;
 
 const STORE_KEY = "taiko.quality.v1";
 const TIERS: QualityTier[] = ["high", "medium", "low"];
@@ -118,7 +123,11 @@ class QualityController {
   }
 
   get params(): QualityParams {
-    return QUALITY[this.tier];
+    const p = QUALITY[this.tier];
+    // iOS 屏幕多为 3 倍像素密度，按原上限绘制的像素量约为安卓的两倍，
+    // 密集段容易出现突发掉帧；这里只压绘制精度，观感基本无差。
+    if (isIOS() && p.maxDpr > IOS_MAX_DPR) return { ...p, maxDpr: IOS_MAX_DPR };
+    return p;
   }
 
   /** 游玩屏实测帧率（只在真实渲染帧时更新，30 帧上限会如实体现） */
