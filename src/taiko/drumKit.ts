@@ -461,13 +461,21 @@ function mapToCtxTime(ctx: AudioContext, atMs: number): number {
   return ctxNow - (nowPerf - atMs) / 1000;
 }
 
+/** 时间戳明显不可信（音频时钟刚挂起/恢复）时的容忍上限（秒） */
+const STALE_LIMIT_SEC = 0.06;
+
 /** 排程时刻：敲击时刻 + 预算；来不及就立刻发声 */
 function scheduleTime(ctx: AudioContext, atMs?: number): number {
-  if (atMs === undefined || !Number.isFinite(atMs)) return ctx.currentTime + hitBudgetSec;
+  const now = ctx.currentTime;
+  if (atMs === undefined || !Number.isFinite(atMs)) return now + hitBudgetSec;
   const delay = Math.max(0, perfNow() - atMs);
   hitDelayLastMs = Math.round(delay);
   if (hitDelayLastMs > hitDelayPeakMs) hitDelayPeakMs = hitDelayLastMs;
-  return Math.max(ctx.currentTime + MIN_LEAD_SEC, mapToCtxTime(ctx, atMs) + hitBudgetSec);
+  const want = mapToCtxTime(ctx, atMs) + hitBudgetSec;
+  // 两条时钟对不上（挂起/恢复后 currentTime 停过）时别死抱着一个过去的时刻，
+  // 退回「现在 + 预算」，保持稳定的一点提前量而不是贴着缓冲边缘发声。
+  if (!Number.isFinite(want) || want < now - STALE_LIMIT_SEC) return now + hitBudgetSec;
+  return Math.max(now + MIN_LEAD_SEC, want);
 }
 
 // ---------------- 音频时钟抖动量表 ----------------
