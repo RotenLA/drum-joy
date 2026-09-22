@@ -181,10 +181,10 @@ export const updateSong = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const patch: Record<string, unknown> = {};
-    if (data.title !== undefined) patch["title"] = data.title;
-    if (data.artist !== undefined) patch["artist"] = data.artist;
-    if (data.published !== undefined) patch["published"] = data.published;
+    const patch: { title?: string; artist?: string | null; published?: boolean } = {};
+    if (data.title !== undefined) patch.title = data.title;
+    if (data.artist !== undefined) patch.artist = data.artist;
+    if (data.published !== undefined) patch.published = data.published;
     const { error } = await supabaseAdmin.from("songs").update(patch).eq("id", data.id);
     if (error) throw new Error(error.message);
     return { ok: true as const };

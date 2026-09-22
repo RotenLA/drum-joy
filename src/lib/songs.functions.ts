@@ -3,6 +3,7 @@
  * 存储桶为私有桶，下载走一小时有效的签名链接。
  */
 import { createServerFn } from "@tanstack/react-start";
+import type { TaikoChart } from "@/shared/taikoChart";
 
 const BUCKET = "songs";
 const URL_TTL = 3600;
@@ -46,7 +47,7 @@ export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async 
 export interface SongAssets {
   urls: { vocals: string | null; bass: string | null; drums: string | null; other: string | null; midi: string };
   sizes: Record<string, number>;
-  charts: Record<string, unknown>;
+  charts: Record<string, TaikoChart>;
 }
 
 export const getSongAssets = createServerFn({ method: "POST" })
@@ -77,8 +78,8 @@ export const getSongAssets = createServerFn({ method: "POST" })
       .from("song_charts")
       .select("difficulty, chart")
       .eq("song_id", data.id);
-    const charts: Record<string, unknown> = {};
-    for (const row of chartRows ?? []) charts[row.difficulty] = row.chart;
+    const charts: Record<string, TaikoChart> = {};
+    for (const row of chartRows ?? []) charts[row.difficulty] = row.chart as unknown as TaikoChart;
 
     return {
       urls: {
