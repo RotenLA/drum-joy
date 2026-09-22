@@ -226,6 +226,12 @@ export function FallScreen({
       if (kitOnRef.current) playDrum(part, velocity, undefined, note);
 
       if (phaseRef.current !== "playing" || !playChart) return;
+      // 宿主偶发卡顿会把一批击打迟送过来；明显超窗的只出声不判定，
+      // 避免用一个错误时刻去命中/顶掉附近的音符。
+      if (now - at > LATE_INPUT_LIMIT_MS) {
+        debugLog.push("midi", `击打迟到 ${Math.round(now - at)}ms，只出声不判定`);
+        return;
+      }
       // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
       const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
       const notes = playChart.notes;
