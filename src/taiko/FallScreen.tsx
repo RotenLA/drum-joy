@@ -10,6 +10,7 @@ import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick, getAudioContext } from "./metronome";
 import { loadKitEnabled, playDrum, warmUpDrums } from "./drumKit";
 import { latencyMeter } from "./latencyMeter";
+import { debugLog } from "./debugLog";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
 import { useLanguage } from "./i18n";
