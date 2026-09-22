@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { quality } from "./perf";
 import { debugLog } from "./debugLog";
 import { latencyMeter } from "./latencyMeter";
-import { activeVoiceCount, currentLookaheadMs } from "./drumKit";
+import { activeVoiceCount, audioJitterMs, currentLookaheadMs } from "./drumKit";
+import { outputLatencyMs } from "./metronome";
 
 /**
  * 游玩演奏区左上角帧数徽章。
