@@ -530,20 +530,15 @@ export function FallScreen({
         {/* 可开关的调试打印小窗 */}
         <DebugLogPanel />
 
-        {/* 顶部右侧：歌曲信息在上，暂停按钮在下，避免重叠 */}
+        {/* 顶部右侧：暂停按钮放在画布曲名/BPM 下方，避免重叠 */}
         {(phase === "playing" || phase === "countdown") && (
-          <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
-            <span className="text-right text-xs leading-tight text-[rgba(255,255,255,0.75)]">
-              {song.fileName || ""}
-              {song.fileName ? <br /> : null}
-              <span className="text-[rgba(255,255,255,0.55)]">
-                {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
-                {(() => {
-                  const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
-                  return d ? tr(d.label, d.labelEn) : "";
-                })()}
-                {song.bpm ? ` · BPM ${Math.round(song.bpm)}` : ""}
-              </span>
+          <div className="absolute right-3 top-16 z-10 flex flex-col items-end gap-2">
+            <span className="hidden text-right text-xs leading-tight text-[rgba(255,255,255,0.6)] lg:block">
+              {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
+              {(() => {
+                const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
+                return d ? tr(d.label, d.labelEn) : "";
+              })()}
             </span>
             <div className="flex items-center gap-2">
               <button
