@@ -50,11 +50,11 @@ function VerticalTitle({ title }: { title: string }) {
 
   return (
     <span ref={boxRef} className="relative block h-full w-full overflow-hidden">
-      {/* 贴右侧的竖排条：文字绕自身中心逆时针 90° */}
+      {/* 贴右侧的竖排条：文字绕自身中心逆时针 90°，不反向抵消卡片斜切，随斜边倾斜 */}
       <span className="absolute inset-y-0 right-0 block w-14 overflow-hidden">
         <span
           className="absolute left-1/2 top-1/2 block whitespace-nowrap"
-          style={{ transform: "translate(-50%, -50%) skewX(9deg) rotate(-90deg)" }}
+          style={{ transform: "translate(-50%, -50%) rotate(-90deg)" }}
         >
           <span
             ref={textRef}
