@@ -160,7 +160,7 @@ export function ChartScreen({
             disabled={loadingId !== null}
             className={`relative overflow-hidden border px-4 py-3 text-left transition-colors disabled:opacity-60 ${
               active
-                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)]/15"
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)]"
                 : "border-[var(--taiko-line)] hover:border-[var(--taiko-accent)]"
             }`}
           >
@@ -169,7 +169,7 @@ export function ChartScreen({
             )}
             {busyThis && (
               <span
-                className="absolute inset-y-0 left-0 bg-[var(--taiko-accent)]/25 transition-[width] duration-200"
+                className="absolute inset-y-0 left-0 bg-[var(--taiko-accent-progress)] transition-[width] duration-200"
                 style={{ width: `${percent}%` }}
               />
             )}
@@ -184,7 +184,7 @@ export function ChartScreen({
                 </span>
                 <span
                   className={`mt-1 block truncate text-xs tabular-nums ${
-                    active ? "text-[var(--taiko-accent)]/80" : "text-[var(--taiko-ink)]/55"
+                    active ? "text-[var(--taiko-accent-2)]" : "text-[var(--taiko-ink)]/55"
                   }`}
                 >
                   {item.artist ? `${item.artist} · ` : ""}
@@ -285,7 +285,7 @@ export function ChartScreen({
             onClick={() => setTab(id)}
             className={`border px-3 py-1.5 text-sm transition-colors ${
               tab === id
-                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)]/15 text-[var(--taiko-accent)]"
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] text-[var(--taiko-accent)]"
                 : "border-[var(--taiko-line)] hover:border-[var(--taiko-accent)]"
             }`}
           >
@@ -307,7 +307,7 @@ export function ChartScreen({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={tr("搜索歌名或艺人", "Search title or artist")}
-            className="mb-3 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-sm text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+            className="mb-3 w-full border border-[var(--taiko-line)] bg-transparent px-3 py-2 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
           />
           {songCards}
         </>
