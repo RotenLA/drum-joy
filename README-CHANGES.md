@@ -16,3 +16,6 @@
 - src/taiko/history.ts
 - src/styles.css
 - README-CHANGES.md
+
+## 竖排歌名随卡片斜切倾斜（本轮）
+- src/taiko/SongPicker.tsx：去掉竖排歌名内部反向 skewX(9deg)，仅保留 rotate(-90deg)，文字继承卡片斜切，沿斜边倾斜显示（对照 Phigros 选歌页）；字号、贴右、过长滚动逻辑不变。
