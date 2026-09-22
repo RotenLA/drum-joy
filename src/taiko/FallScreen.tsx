@@ -27,7 +27,7 @@ import { quality, type QualityTier } from "./perf";
 import { FpsBadge } from "./FpsBadge";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
 import { addHistory } from "./history";
-import { TutorialOverlay, markTutorialSeen, tutorialSeen } from "./tutorial/TutorialOverlay";
+import { TutorialOverlay, markTutorialSeen } from "./tutorial/TutorialOverlay";
 
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±100ms / Good ±200ms，超时未击为 Miss（调手感改这里） */
@@ -61,11 +61,6 @@ export function FallScreen({
   const [mixerOpen, setMixerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
-
-  useEffect(() => {
-    if (!tutorialSeen()) setTutorialOpen(true);
-  }, []);
-
 
   const phaseRef = useRef<Phase>("idle");
   const timeRef = useRef(0);
