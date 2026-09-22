@@ -354,6 +354,34 @@ export function FallScreen({
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [togglePause]);
 
+  // 演奏中申请屏幕常亮：安卓息屏后系统更容易回收整个 WebView
+  useEffect(() => {
+    if (phase !== "playing" && phase !== "countdown") return;
+    type WakeLockSentinel = { release: () => Promise<void> };
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinel> };
+    };
+    if (!nav.wakeLock) return;
+    let sentinel: WakeLockSentinel | null = null;
+    let cancelled = false;
+    nav.wakeLock
+      .request("screen")
+      .then((s) => {
+        if (cancelled) void s.release().catch(() => {});
+        else {
+          sentinel = s;
+          debugLog.push("host", "已申请屏幕常亮");
+        }
+      })
+      .catch(() => {
+        // 宿主未授权则忽略，交给安卓外壳设置 FLAG_KEEP_SCREEN_ON
+      });
+    return () => {
+      cancelled = true;
+      void sentinel?.release().catch(() => {});
+    };
+  }, [phase]);
+
   // 空格暂停/继续，回车开始
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
