@@ -131,16 +131,25 @@ function CrashOverlay() {
   const [msg, setMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    // React 内部的水合重测警告（#418/#421/#422/#423/#425）属于良性提示，
+    // 框架会自动在客户端重建这棵树，不需要在屏幕上打扰用户。
+    const benign = (text: string) =>
+      /Minified React error #(418|421|422|423|425)/.test(text) ||
+      /hydrat/i.test(text) ||
+      /did not match/i.test(text);
+
     const report = (text: string) => {
-      setMsg((prev) => prev ?? text);
       try {
         const host = window as unknown as { __pd2uLog?: (s: string) => void };
         host.__pd2uLog?.(text);
       } catch {
         // 宿主未注入日志通道
       }
+      if (benign(text)) return;
+      setMsg((prev) => prev ?? text);
     };
-    const onErr = (e: ErrorEvent) => report(`${e.message} @ ${e.filename}:${e.lineno}`);
+    const onErr = (e: ErrorEvent) =>
+      report(`${e.message} @ ${e.filename}:${e.lineno}`);
     const onRej = (e: PromiseRejectionEvent) => report(String(e.reason));
     window.addEventListener("error", onErr);
     window.addEventListener("unhandledrejection", onRej);
@@ -149,6 +158,7 @@ function CrashOverlay() {
       window.removeEventListener("unhandledrejection", onRej);
     };
   }, []);
+
 
   if (!msg) return null;
   return (
