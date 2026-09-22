@@ -499,24 +499,49 @@ export function FallScreen({
   const totalJudged = judged.perfect + judged.good + judged.miss;
   const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
 
-  // 一曲结束 → 记一条本机历史演奏
+  /** 写一条本机历史演奏（同一局只写一次） */
+  const recordRun = useCallback(
+    (completed: boolean) => {
+      if (!playedRef.current || !song.fileName) return;
+      playedRef.current = false;
+      const s = statsRef.current;
+      const total = s.perfect + s.good + s.miss;
+      const dur = durationMs;
+      const progress = completed
+        ? 100
+        : dur > 0
+          ? Math.max(0, Math.min(100, (timeRef.current / dur) * 100))
+          : 0;
+      addHistory({
+        songId: song.songId,
+        title: song.fileName,
+        difficulty: song.difficulty,
+        speed,
+        accuracy: total > 0 ? ((s.perfect + s.good * 0.5) / total) * 100 : 0,
+        maxCombo: maxComboRef.current,
+        notes: total,
+        completed,
+        progress: Math.round(progress),
+        playedAt: Date.now(),
+      });
+    },
+    [song.songId, song.fileName, song.difficulty, speed, durationMs],
+  );
+
+  // 一曲结束 → 记一条完整记录
   useEffect(() => {
-    if (phase !== "ended" || !song.fileName) return;
-    const s = statsRef.current;
-    const total = s.perfect + s.good + s.miss;
-    addHistory({
-      songId: song.songId,
-      title: song.fileName,
-      difficulty: song.difficulty,
-      speed,
-      accuracy: total > 0 ? ((s.perfect + s.good * 0.5) / total) * 100 : 0,
-      maxCombo: maxComboRef.current,
-      notes: total,
-      playedAt: Date.now(),
-    });
+    if (phase !== "ended") return;
+    recordRun(true);
     // 只在结束的那一刻记录
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
+
+  /** 中途返回选歌：先记一条未完成记录 */
+  const backToPicker = useCallback(() => {
+    recordRun(false);
+    songPlayer.stop();
+    setPhaseBoth("idle");
+  }, [recordRun, setPhaseBoth]);
 
   return (
     // 演奏区吃满整个窗口；调音台收进左下角抽屉
