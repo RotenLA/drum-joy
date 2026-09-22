@@ -546,8 +546,9 @@ export function FallScreen({
           </div>
         )}
 
-        {/* 左下角抽屉式调音台 */}
-        <div className="absolute bottom-3 left-3 z-20">
+        {/* 左下角抽屉式调音台（选歌时隐藏，保持选歌层干净） */}
+        {phase !== "idle" && <div className="absolute bottom-3 left-3 z-30">
+
           {mixerOpen && (
             <div className="mb-2 w-[min(78vw,420px)] bg-[rgba(10,12,18,0.82)] px-4 py-3 backdrop-blur-[8px]">
               <div className="mb-2 flex items-baseline gap-3">
