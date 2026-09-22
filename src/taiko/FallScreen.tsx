@@ -370,7 +370,7 @@ export function FallScreen({
         if (cancelled) void s.release().catch(() => {});
         else {
           sentinel = s;
-          debugLog.push("host", "已申请屏幕常亮");
+          debugLog.push("system", "已申请屏幕常亮");
         }
       })
       .catch(() => {
