@@ -50,7 +50,7 @@ export function TaikoShell() {
 }
 
 function ShellInner() {
-  const [screen, setScreen] = useState<ScreenKey>("chart");
+  const [screen, setScreen] = useState<ScreenKey>("play");
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
   const [devices, setDevices] = useState<DeviceSnapshot | null>(null);
   const song = useSong();
