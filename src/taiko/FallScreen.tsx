@@ -530,23 +530,30 @@ export function FallScreen({
         {/* 可开关的调试打印小窗 */}
         <DebugLogPanel />
 
-        {/* 顶部右侧：暂停 / 速度难度信息 */}
+        {/* 顶部右侧：歌曲信息在上，暂停按钮在下，避免重叠 */}
         {(phase === "playing" || phase === "countdown") && (
-          <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
-            <span className="hidden text-xs text-[rgba(255,255,255,0.6)] lg:block">
-              {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
-              {(() => {
-                const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
-                return d ? tr(d.label, d.labelEn) : "";
-              })()}
+          <div className="absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
+            <span className="text-right text-xs leading-tight text-[rgba(255,255,255,0.75)]">
+              {song.fileName || ""}
+              {song.fileName ? <br /> : null}
+              <span className="text-[rgba(255,255,255,0.55)]">
+                {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
+                {(() => {
+                  const d = DIFFICULTIES.find((d) => d.id === song.difficulty);
+                  return d ? tr(d.label, d.labelEn) : "";
+                })()}
+                {song.bpm ? ` · BPM ${Math.round(song.bpm)}` : ""}
+              </span>
             </span>
-            <button
-              onClick={togglePause}
-              className="bg-[rgba(255,255,255,0.12)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.9)] transition-colors hover:bg-[rgba(255,255,255,0.24)]"
-            >
-              {tr("暂停", "Pause")}
-            </button>
-            <HelpDot label={tr("游玩", "Play")} text={helpText("play", language)} />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={togglePause}
+                className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
+              >
+                {tr("暂停", "Pause")}
+              </button>
+              <HelpDot label={tr("游玩", "Play")} text={helpText("play", language)} />
+            </div>
           </div>
         )}
 
