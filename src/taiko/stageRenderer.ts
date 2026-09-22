@@ -1000,7 +1000,7 @@ function cueItems(
     nearest.set(part, note.timeMs - from);
   }
   return [...nearest].map(([part, remaining]) => ({
-    depth: PAD_ANCHORS[part].cy + 0.003,
+    depth: CUE_DEPTH,
     draw: () => drawCueOutline(ctx, part, remaining, w, h),
   }));
 }
@@ -1055,10 +1055,9 @@ function chordItems(
     group.sort((a, b) => a.x - b.x);
     const alpha = (0.05 + 0.13 * progress) * Math.min(1, progress * 6);
     const pts = group;
-    // 连线只是辅助提示，取「最远端」的纵深：跨越踏板等远层时不会整体浮在前景鼓面上
-    const depth = pts.reduce((m, pt) => Math.min(m, pt.y), Infinity) / h - 0.002;
     items.push({
-      depth,
+      // 连线与在途音符同处固定后景，不再因端点跨越鼓面边缘而跳层。
+      depth: TRANSIT_BAND_DEPTH + 0.1,
       draw: () => {
         ctx.save();
         ctx.shadowBlur = 0;
@@ -1300,8 +1299,8 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   ctx.translate(v.x, v.y);
   drawLanes(ctx, v.w, v.h, parts);
 
-  // 鼓盘与音符合并成一条按纵深排序的绘制队列：越靠下（离玩家越近）越后画，
-  // 于是飞行中的音符会被更近的鼓面正确遮挡。
+  // 固定层级队列：连续色带 → 在途音符 → 全部实体鼓面 → 到达自身鼓面的音符 → 缩圈。
+  // 不再使用飞行位置切换层级，因此任意交叉路径经过鼓面边缘都不会突然前后跳动。
   const items: DepthItem[] = [];
   for (const id of parts) {
     const expiry = f.flashes[id] ?? 0;
