@@ -17,8 +17,7 @@ import type { StickPose } from "./stickInput";
 
 /** 俯仰分水岭（度）：开发端 pitchingBorder */
 export const PITCH_BORDER = 21;
-/** 过渡带半宽（度）：跨越分水岭时上下层做平滑过渡，避免瞬间跳层 */
-const PITCH_BLEND = 8;
+export type StickLayer = "upper" | "lower";
 
 interface Zone {
   part: PartId;
@@ -45,8 +44,11 @@ const LOWER_ZONES: readonly Zone[] = [
 /** 俯仰可用范围：上层向上、下层向下各留一段行程用于纵向微调 */
 const PITCH_UPPER_TOP = 58;
 const PITCH_LOWER_BOTTOM = -18;
-/** 纵向微调幅度（归一化屏高）：同一鼓面内抬/压手腕的位移 */
-const PITCH_SHIFT = 0.055;
+/** 纵向只做极轻微跟随；上下层幅度完全一致。 */
+const PITCH_SHIFT = 0.012;
+/** 两排鼓面之间的中线，棒尖仅靠姿态绝不越过它。 */
+const ROW_MID_Y = 0.475;
+const ROW_GUARD = 0.018;
 
 interface ControlPoint {
   deg: number;
@@ -98,11 +100,6 @@ const smoothstep = (t: number) => {
   return c * c * (3 - 2 * c);
 };
 
-/** 当前俯仰角落在哪个层（1 = 上层，0 = 下层，中间为过渡权重） */
-export function upperWeight(pitchDeg: number): number {
-  return smoothstep((pitchDeg - (PITCH_BORDER - PITCH_BLEND)) / (PITCH_BLEND * 2));
-}
-
 /** 按开发标定判定当前角度指向哪个鼓面（用于调试展示） */
 export function partOfPose(pose: StickPose): PartId {
   const zones = pose.p > PITCH_BORDER ? UPPER_ZONES : LOWER_ZONES;
@@ -114,20 +111,26 @@ export function partOfPose(pose: StickPose): PartId {
  * 棒尖落点（归一化 0-1，x 相对 16:9 参考宽、y 相对画布高）。
  * 横向由偏航角分区决定，纵向为所在层鼓盘高度 + 俯仰角微调。
  */
-export function stickPoint(pose: StickPose): { x: number; y: number } {
+export function stickPoint(
+  pose: StickPose,
+  layer: StickLayer = "lower",
+  layerMix?: number,
+): { x: number; y: number } {
   const yaw = Number.isFinite(pose.y) ? pose.y : 0;
   const pitch = Number.isFinite(pose.p) ? pose.p : 0;
 
   const upper = sampleTrack(UPPER_TRACK, yaw);
   const lower = sampleTrack(LOWER_TRACK, yaw);
-  const w = upperWeight(pitch);
+  const w = layerMix === undefined ? (layer === "upper" ? 1 : 0) : smoothstep(layerMix);
 
-  // 层内纵向微调：上层越抬越高，下层越压越低，都限制在该层附近
-  const upperShift = -smoothstep((pitch - PITCH_BORDER) / (PITCH_UPPER_TOP - PITCH_BORDER)) * PITCH_SHIFT;
-  const lowerShift = smoothstep((PITCH_BORDER - pitch) / (PITCH_BORDER - PITCH_LOWER_BOTTOM)) * PITCH_SHIFT;
+  // 两层采用相同幅度的轻微纵向跟随，且分别锁在中线两侧。
+  const pitchT = smoothstep((pitch - PITCH_LOWER_BOTTOM) / (PITCH_UPPER_TOP - PITCH_LOWER_BOTTOM));
+  const shift = (0.5 - pitchT) * PITCH_SHIFT * 2;
+  const upperY = Math.min(ROW_MID_Y - ROW_GUARD, upper.y + shift);
+  const lowerY = Math.max(ROW_MID_Y + ROW_GUARD, lower.y + shift);
 
   const x = lower.x + (upper.x - lower.x) * w;
-  const y = lower.y + lowerShift + (upper.y + upperShift - (lower.y + lowerShift)) * w;
+  const y = lowerY + (upperY - lowerY) * w;
 
   return { x: Math.max(0.03, Math.min(0.97, x)), y: Math.max(0.05, Math.min(0.95, y)) };
 }

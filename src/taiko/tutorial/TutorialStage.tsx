@@ -10,6 +10,7 @@ import { useLanguage } from "../i18n";
 import { tutorialLabels, tutorialStepCopy, type TutorialStep } from "./steps";
 import { buildPracticeChart, PRACTICE_BPM } from "./practiceChart";
 import { Metronome, unlockAudio } from "../metronome";
+import { stickManager } from "../stickInput";
 
 export function TutorialStage({
   step,
@@ -97,7 +98,7 @@ export function TutorialStage({
         parts,
         showNotes,
         minimalHud: true,
-        sticks: null,
+        sticks: stickManager.latest(),
       });
     };
     raf = requestAnimationFrame(draw);

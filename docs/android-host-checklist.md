@@ -31,8 +31,9 @@ webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
 
 ## 3. 击打事件传输
 
-- `window.__pd2uNoteOn(note, velocity, hostTimeMs)` 请**始终带上第三个参数**，
-  用采集到击打的那一刻的宿主时间戳（毫秒）。
+- `window.__pd2uNoteOn(note, velocity, hostTimeMs, side)` 请**始终带上第三个参数**，
+  用采集到击打的那一刻的宿主时间戳（毫秒）；能识别击打手时，第四个参数传 `"l"` 或 `"r"`。
+- 暂时不传 `side` 也兼容，网页会按两根鼓棒当前横向位置选择离目标鼓面最近的一根。
 - 一批多个击打请逐条调用，每条带自己的时间戳，不要合并成同一时刻。
 - 不要把击打事件排队等下一帧再发；采集到即发。
 - 网页侧对迟到超过 400ms 的击打只出声不判定，避免错误命中。

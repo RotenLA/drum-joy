@@ -7,6 +7,8 @@ import { loadKitEnabled, playDrum, saveKitEnabled, subscribeKitEnabled } from ".
 import { useLanguage } from "../i18n";
 import { TutorialStage } from "./TutorialStage";
 import { TUTORIAL_STEPS, tutorialLabels, tutorialStepCopy } from "./steps";
+import { VISIBLE_PARTS } from "../laneLayouts";
+import { stickManager } from "../stickInput";
 
 export const TUTORIAL_SEEN_KEY = "taiko.tutorial.v3";
 export const markTutorialSeen = () => { try { localStorage.setItem(TUTORIAL_SEEN_KEY, "1"); } catch { /* memory-only environment */ } };
@@ -30,14 +32,17 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const step = TUTORIAL_STEPS[index] ?? TUTORIAL_STEPS[0];
   const needed = step.needed ?? 1;
 
+  useEffect(() => { stickManager.resetLayers(); }, []);
+
   const reset = useCallback(() => { setProgress(0); setHeld(false); setPassed(false); flashes.current = {}; setRestartKey((v) => v + 1); }, []);
   const advance = useCallback(() => { if (index >= TUTORIAL_STEPS.length - 1) { markTutorialSeen(); onLeave(); return; } setIndex((v) => v + 1); reset(); }, [index, onLeave, reset]);
 
   useEffect(() => { void midiManager.init(); }, []);
   useEffect(() => {
-    const off = midiManager.onNote((note, velocity) => {
+    const off = midiManager.onNote((note, velocity, _atMs, side) => {
       const part = partOfNote(note);
       if (!part) return;
+      stickManager.switchLayerForHit(part, VISIBLE_PARTS.nine, side);
       flashes.current[part] = performance.now() + 200;
       if (loadKitEnabled()) playDrum(part, velocity, undefined, note);
       if (step.kind === "hold" && part === "pedalHat") { setHeld(true); return; }

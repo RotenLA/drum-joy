@@ -286,11 +286,14 @@ export function FallScreen({
   useEffect(() => {
     void midiManager.init();
     unlockAudio(); // iOS/WKWebView：首次手势里接通音频输出，避免第一批敲击抖动
-    const offNote = midiManager.onNote((note, vel, atMs) => {
+    const offNote = midiManager.onNote((note, vel, atMs, side) => {
       const part = partOfNote(note);
       if (!part) return;
       if (part === "pedalHat") pedalHeldRef.current = true;
-      if (parts.includes(part)) hitPart(part, atMs, vel, note);
+      if (parts.includes(part)) {
+        stickManager.switchLayerForHit(part, parts, side);
+        hitPart(part, atMs, vel, note);
+      }
     });
 
     const offUp = midiManager.onNoteOff((note) => {
@@ -310,6 +313,7 @@ export function FallScreen({
     resetRun();
     playedRef.current = true;
     latencyMeter.reset();
+    stickManager.resetLayers();
     // 倒计时那 4 拍里把鼓组样本与音频节点热起来，避免首次敲某个鼓时才解码
     if (kitOnRef.current) void warmUpDrums();
     const beatMs = 60000 / playChart.bpm;

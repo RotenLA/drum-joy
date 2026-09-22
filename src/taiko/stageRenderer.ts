@@ -19,7 +19,8 @@ import {
   type PartId,
 } from "./laneLayouts";
 import { quality } from "./perf";
-import { stickPoint } from "./stickMapping";
+import { stickPoint, type StickLayer } from "./stickMapping";
+import type { StickLayerTransition } from "./stickInput";
 import {
   padSprite,
   padSpriteHit,
@@ -141,6 +142,8 @@ export interface StageFrame {
   sticks?: {
     l: { p: number; y: number } | null;
     r: { p: number; y: number } | null;
+    layers?: { l: StickLayer; r: StickLayer };
+    transitions?: { l: StickLayerTransition | null; r: StickLayerTransition | null };
   } | null;
 }
 
@@ -1209,6 +1212,9 @@ function drawStick(
   h: number,
   pose: { p: number; y: number },
   side: "l" | "r",
+  layer: StickLayer = "lower",
+  transition?: StickLayerTransition | null,
+  now = 0,
 ) {
   const clamp = (v: number) => Math.max(-1, Math.min(1, v));
   const yaw = clamp(pose.y / STICK_YAW_RANGE);
@@ -1219,7 +1225,12 @@ function drawStick(
   // 横向与鼓盘锚点同一坐标系（16:9 参考宽），角度落在某分区即落在该鼓面上
   const rw = refWidth(w, h);
   const toX = (nx: number) => w / 2 + (nx - 0.5) * rw;
-  const point = stickPoint(pose);
+  const transitionMs = 150;
+  const rawT = transition ? Math.max(0, Math.min(1, (now - transition.at) / transitionMs)) : 1;
+  const layerMix = transition && rawT < 1
+    ? transition.from === "upper" ? 1 - rawT : rawT
+    : undefined;
+  const point = stickPoint(pose, layer, layerMix);
   const tipX = toX(point.x);
   const tipY = point.y * h;
 
@@ -1337,8 +1348,8 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   drawParticles(ctx, f.now);
   // 鼓棒画在鼓盘/音符上层
   if (f.sticks) {
-    if (f.sticks.l) drawStick(ctx, v.w, v.h, f.sticks.l, "l");
-    if (f.sticks.r) drawStick(ctx, v.w, v.h, f.sticks.r, "r");
+    if (f.sticks.l) drawStick(ctx, v.w, v.h, f.sticks.l, "l", f.sticks.layers?.l, f.sticks.transitions?.l, f.now);
+    if (f.sticks.r) drawStick(ctx, v.w, v.h, f.sticks.r, "r", f.sticks.layers?.r, f.sticks.transitions?.r, f.now);
   }
   ctx.restore();
 
@@ -1391,8 +1402,8 @@ export function renderPadArray(
       ctx.restore();
     }
   }
-  if (opts.sticks?.l) drawStick(ctx, v.w, v.h, opts.sticks.l, "l");
-  if (opts.sticks?.r) drawStick(ctx, v.w, v.h, opts.sticks.r, "r");
+  if (opts.sticks?.l) drawStick(ctx, v.w, v.h, opts.sticks.l, "l", opts.sticks.layers?.l, opts.sticks.transitions?.l, opts.now);
+  if (opts.sticks?.r) drawStick(ctx, v.w, v.h, opts.sticks.r, "r", opts.sticks.layers?.r, opts.sticks.transitions?.r, opts.now);
   ctx.restore();
   drawVignette(ctx, w, h);
 }
