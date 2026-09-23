@@ -64,12 +64,26 @@ function ShellInner() {
 
   return (
     <div className="taiko-root overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
-      <main className="h-full min-h-0 min-w-0 overflow-hidden">
-        <FallScreen
-          speed={settings.speed}
-          onSpeedChange={(speed) => updateSettings({ speed })}
-          onExit={exitApp}
-        />
+      <main className="relative h-full min-h-0 min-w-0 overflow-hidden">
+        {lab === "rhythm" ? (
+          <FallScreen
+            key="lab-rhythm"
+            speed={settings.speed}
+            onSpeedChange={(speed) => updateSettings({ speed })}
+            onExit={() => setLab("hub")}
+            gestureHits
+            exitLabel="↩"
+          />
+        ) : (
+          <FallScreen
+            key="release"
+            speed={settings.speed}
+            onSpeedChange={(speed) => updateSettings({ speed })}
+            onExit={exitApp}
+            onSecretUnlock={() => setLab("hub")}
+          />
+        )}
+        {lab === "hub" && <LabHub onPick={(g) => setLab(g)} onBack={() => setLab(null)} />}
       </main>
       <DeviceToast />
       <Toaster position="top-center" />
