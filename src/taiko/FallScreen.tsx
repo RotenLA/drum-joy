@@ -55,12 +55,20 @@ export function FallScreen({
   suspended = false,
   onSpeedChange,
   onExit,
+  gestureHits = false,
+  exitLabel,
+  onSecretUnlock,
 }: {
   speed: number;
   suspended?: boolean;
   onSpeedChange?: ((s: number) => void) | undefined;
   onExit?: (() => void) | undefined;
+  /** 实验版：手部七个鼓面改由鼓棒角度判定，踏板仍走 MIDI */
+  gestureHits?: boolean;
+  exitLabel?: string | undefined;
+  onSecretUnlock?: (() => void) | undefined;
 }) {
+
   const { tr, language } = useLanguage();
   const song = useSong();
   const { stems } = song;
