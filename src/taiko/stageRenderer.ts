@@ -157,9 +157,27 @@ interface Particle {
   color: string;
 }
 
-/** 模块级粒子池与闪光去重表（rAF 逐帧驱动，无额外状态库） */
-const particles: Particle[] = [];
-const lastFlash: Partial<Record<PartId, number>> = {};
+/**
+ * 粒子池与闪光去重表按画布分开保存。
+ * 教学页和游玩页会同时存在两块画布（尺寸不同），共用一份会让粒子按另一块
+ * 画布的坐标生成，表现为火花跑到画面底部。
+ */
+interface CanvasFx {
+  particles: Particle[];
+  lastFlash: Partial<Record<PartId, number>>;
+}
+
+const canvasFx = new WeakMap<CanvasRenderingContext2D, CanvasFx>();
+
+function fxOf(ctx: CanvasRenderingContext2D): CanvasFx {
+  let fx = canvasFx.get(ctx);
+  if (!fx) {
+    fx = { particles: [], lastFlash: {} };
+    canvasFx.set(ctx, fx);
+  }
+  return fx;
+}
+
 
 export function hexToRgba(hex: string, a: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -572,14 +590,14 @@ function holdIndicesOf(chart: TaikoChart): number[] {
   return list;
 }
 
-function spawnSparks(id: PartId, color: string, w: number, h: number, now: number) {
+function spawnSparks(fx: CanvasFx, id: PartId, color: string, w: number, h: number, now: number) {
   const p = geomOf(id, w, h);
   const k = h / 650;
   if (SPARKS <= 0) return;
   for (let i = 0; i < SPARKS; i++) {
     const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
     const sp = (0.06 + Math.random() * 0.12) * k;
-    particles.push({
+    fx.particles.push({
       x: p.cx + (Math.random() - 0.5) * p.rx * 1.2,
       y: p.cy,
       vx: Math.cos(ang) * sp,
@@ -589,16 +607,17 @@ function spawnSparks(id: PartId, color: string, w: number, h: number, now: numbe
       color,
     });
   }
-  if (particles.length > PARTICLE_CAP) particles.splice(0, particles.length - PARTICLE_CAP);
+  if (fx.particles.length > PARTICLE_CAP)
+    fx.particles.splice(0, fx.particles.length - PARTICLE_CAP);
 }
 
-function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
+function drawParticles(ctx: CanvasRenderingContext2D, fx: CanvasFx, now: number) {
   ctx.save();
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const pt = particles[i]!;
+  for (let i = fx.particles.length - 1; i >= 0; i--) {
+    const pt = fx.particles[i]!;
     const age = now - pt.born;
     if (age >= pt.life) {
-      particles.splice(i, 1);
+      fx.particles.splice(i, 1);
       continue;
     }
     const x = pt.x + pt.vx * age;
@@ -614,6 +633,7 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
   }
   ctx.restore();
 }
+
 
 /**
  * 方形踏板鼓盘（底鼓/踩镲踏板）：斜放的立方体。
@@ -1322,12 +1342,13 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   // 固定层级队列：连续色带 → 在途音符 → 全部实体鼓面 → 到达自身鼓面的音符 → 缩圈。
   // 不再使用飞行位置切换层级，因此任意交叉路径经过鼓面边缘都不会突然前后跳动。
   const items: DepthItem[] = [];
+  const fx = fxOf(ctx);
   for (const id of parts) {
     const expiry = f.flashes[id] ?? 0;
     const intensity = Math.max(0, Math.min(1, (expiry - f.now) / FLASH_MS));
-    if (expiry > (lastFlash[id] ?? 0)) {
-      spawnSparks(id, PART_BY_ID[id].color, v.w, v.h, f.now);
-      lastFlash[id] = expiry;
+    if (expiry > (fx.lastFlash[id] ?? 0)) {
+      spawnSparks(fx, id, PART_BY_ID[id].color, v.w, v.h, f.now);
+      fx.lastFlash[id] = expiry;
     }
     const missExpiry = f.missFlashes?.[id] ?? 0;
     const miss = Math.max(0, Math.min(1, (missExpiry - f.now) / 240));
@@ -1345,7 +1366,7 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   items.sort((a, b) => a.depth - b.depth);
   for (const it of items) it.draw();
 
-  drawParticles(ctx, f.now);
+  drawParticles(ctx, fx, f.now);
   // 鼓棒画在鼓盘/音符上层
   if (f.sticks) {
     if (f.sticks.l) drawStick(ctx, v.w, v.h, f.sticks.l, "l", f.sticks.layers?.l, f.sticks.transitions?.l, f.now);
