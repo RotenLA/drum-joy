@@ -157,9 +157,27 @@ interface Particle {
   color: string;
 }
 
-/** 模块级粒子池与闪光去重表（rAF 逐帧驱动，无额外状态库） */
-const particles: Particle[] = [];
-const lastFlash: Partial<Record<PartId, number>> = {};
+/**
+ * 粒子池与闪光去重表按画布分开保存。
+ * 教学页和游玩页会同时存在两块画布（尺寸不同），共用一份会让粒子按另一块
+ * 画布的坐标生成，表现为火花跑到画面底部。
+ */
+interface CanvasFx {
+  particles: Particle[];
+  lastFlash: Partial<Record<PartId, number>>;
+}
+
+const canvasFx = new WeakMap<CanvasRenderingContext2D, CanvasFx>();
+
+function fxOf(ctx: CanvasRenderingContext2D): CanvasFx {
+  let fx = canvasFx.get(ctx);
+  if (!fx) {
+    fx = { particles: [], lastFlash: {} };
+    canvasFx.set(ctx, fx);
+  }
+  return fx;
+}
+
 
 export function hexToRgba(hex: string, a: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
