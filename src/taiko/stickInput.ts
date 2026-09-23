@@ -63,12 +63,19 @@ class StickManager {
   private lastLog = 0;
   private layers: Record<StickSide, StickLayer> = { l: "lower", r: "lower" };
   private transitions: Record<StickSide, StickLayerTransition | null> = { l: null, r: null };
+  private listeners = new Set<(snap: StickSnapshot) => void>();
 
   /** 最新快照；过期或从未收到返回 null */
   latest(): StickSnapshot | null {
     if (!this.snap) return null;
     if (now() - this.snap.at > STICK_STALE_MS) return null;
     return this.snap;
+  }
+
+  /** 订阅每一帧姿态（角度触发判定用）；返回取消订阅函数 */
+  onFrame(fn: (snap: StickSnapshot) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
   }
 
   push(raw: unknown): void {
@@ -85,7 +92,15 @@ class StickManager {
       const f = (s: StickPose | null) => (s ? `p${s.p.toFixed(1)}/y${s.y.toFixed(1)}` : "—");
       debugLog.push("stick", `L ${f(l)}  R ${f(r)}`);
     }
+    for (const fn of this.listeners) {
+      try {
+        fn(this.snap);
+      } catch {
+        // 订阅方出错不影响姿态绘制
+      }
+    }
   }
+
 
   resetLayers(): void {
     this.layers = { l: "lower", r: "lower" };
