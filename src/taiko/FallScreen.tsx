@@ -37,6 +37,17 @@ const LATE_INPUT_LIMIT_MS = 400;
 /** 倒计时拍数（四分音符，无视拍号） */
 const COUNT_IN_BEATS = 4;
 
+/** 调试窗默认隐藏：URL 带 ?debug=1 或宿主设 window.__pd2uDebug=true 才显示 */
+function debugVisible(): boolean {
+  if (typeof window === "undefined") return false;
+  if ((window as unknown as { __pd2uDebug?: boolean }).__pd2uDebug === true) return true;
+  try {
+    return new URLSearchParams(window.location.search).get("debug") === "1";
+  } catch {
+    return false;
+  }
+}
+
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
 export function FallScreen({
