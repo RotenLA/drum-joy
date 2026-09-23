@@ -596,8 +596,8 @@ export function FallScreen({
       <div ref={wrapRef} className="relative h-full min-h-0 overflow-hidden bg-[var(--taiko-paper)]">
         <canvas ref={canvasRef} className="block h-full w-full" />
 
-        {/* 帧数与调试日志默认隐藏，仅 ?debug=1 时出现 */}
-        <DebugLogPanel />
+        {/* 帧数与调试日志默认隐藏，仅 ?debug=1 或 __pd2uDebug 时出现 */}
+        {debugVisible() && <DebugLogPanel />}
 
         {/* 顶部右侧：暂停按钮放在画布曲名/BPM 下方，避免重叠 */}
         {(phase === "playing" || phase === "countdown") && (
