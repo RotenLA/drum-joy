@@ -590,14 +590,14 @@ function holdIndicesOf(chart: TaikoChart): number[] {
   return list;
 }
 
-function spawnSparks(id: PartId, color: string, w: number, h: number, now: number) {
+function spawnSparks(fx: CanvasFx, id: PartId, color: string, w: number, h: number, now: number) {
   const p = geomOf(id, w, h);
   const k = h / 650;
   if (SPARKS <= 0) return;
   for (let i = 0; i < SPARKS; i++) {
     const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
     const sp = (0.06 + Math.random() * 0.12) * k;
-    particles.push({
+    fx.particles.push({
       x: p.cx + (Math.random() - 0.5) * p.rx * 1.2,
       y: p.cy,
       vx: Math.cos(ang) * sp,
@@ -607,16 +607,17 @@ function spawnSparks(id: PartId, color: string, w: number, h: number, now: numbe
       color,
     });
   }
-  if (particles.length > PARTICLE_CAP) particles.splice(0, particles.length - PARTICLE_CAP);
+  if (fx.particles.length > PARTICLE_CAP)
+    fx.particles.splice(0, fx.particles.length - PARTICLE_CAP);
 }
 
-function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
+function drawParticles(ctx: CanvasRenderingContext2D, fx: CanvasFx, now: number) {
   ctx.save();
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const pt = particles[i]!;
+  for (let i = fx.particles.length - 1; i >= 0; i--) {
+    const pt = fx.particles[i]!;
     const age = now - pt.born;
     if (age >= pt.life) {
-      particles.splice(i, 1);
+      fx.particles.splice(i, 1);
       continue;
     }
     const x = pt.x + pt.vx * age;
@@ -632,6 +633,7 @@ function drawParticles(ctx: CanvasRenderingContext2D, now: number) {
   }
   ctx.restore();
 }
+
 
 /**
  * 方形踏板鼓盘（底鼓/踩镲踏板）：斜放的立方体。
