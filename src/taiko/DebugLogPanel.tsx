@@ -48,7 +48,7 @@ export function DebugLogPanel() {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="absolute bottom-3 right-3 z-20 rounded border border-white/25 bg-black/55 px-2.5 py-1 text-[10px] tracking-[0.2em] text-white/70 backdrop-blur transition-colors hover:border-white/60 hover:text-white"
+        className="absolute bottom-3 right-3 z-50 rounded border border-white/25 bg-black/55 px-2.5 py-1 text-[10px] tracking-[0.2em] text-white/70 backdrop-blur transition-colors hover:border-white/60 hover:text-white"
       >
         {tr("调试日志", "Debug log")}
       </button>
@@ -56,7 +56,7 @@ export function DebugLogPanel() {
   }
 
   return (
-    <div className="absolute bottom-3 right-3 z-20 flex h-[46%] w-[52%] max-w-[440px] flex-col rounded border border-white/20 bg-black/70 backdrop-blur">
+    <div className="absolute bottom-3 right-3 z-50 flex h-[46%] w-[52%] max-w-[440px] flex-col rounded border border-white/20 bg-black/70 backdrop-blur">
       <div className="flex items-center gap-2 border-b border-white/15 px-2.5 py-1.5">
         <span className="text-[10px] tracking-[0.2em] text-white/70">{tr("MIDI 到达间隔", "MIDI intervals")}</span>
         <span className="text-[10px] tabular-nums text-white/35">{items.length}</span>
