@@ -326,7 +326,7 @@ export function resetAudioJitter(): void {
 export async function warmUpDrums(kitId?: number): Promise<void> {
   const id = kitId ?? loadKitId();
   const ctx = getAudioContext();
-  primeGainPool(ctx);
+  bus(ctx);
   resetAudioJitter();
   await ensureKitLoaded(id);
   // 静音触发一次，让节点图与解码路径提前热起来
