@@ -459,23 +459,25 @@ export function resetAudioJitter(): void {
 export async function warmUpDrums(kitId?: number): Promise<void> {
   const id = kitId ?? loadKitId();
   const ctx = getAudioContext();
-  initHitLookahead(ctx);
   primeGainPool(ctx);
   resetAudioJitter();
   await ensureKitLoaded(id);
   // 静音触发一次，让节点图与解码路径提前热起来
   for (const part of ["kick", "snare", "hihat"] as PartId[]) {
-    playSample(ctx, id, part, ctx.currentTime + hitLookaheadSec, 0.0001);
+    playSample(ctx, id, part, 0, 0.0001);
   }
 }
 
 export function playDrum(part: PartId, velocity = 100, kitId?: number, note?: number): void {
   const ctx = getAudioContext();
   recordClockSkew(ctx);
-  const t = ctx.currentTime + hitLookaheadSec;
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
 
-  if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
+  // 采样路径：零排程立即发声
+  if (playSample(ctx, kitId ?? loadKitId(), part, 0, v)) return;
+
+  // 合成音兜底路径必须给出具体时刻
+  const t = ctx.currentTime;
 
   switch (part) {
     case "kick":
