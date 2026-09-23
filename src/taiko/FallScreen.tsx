@@ -702,7 +702,10 @@ export function FallScreen({
             onOpenSettings={() => setSettingsOpen(true)}
             onExit={onExit}
             onStartTutorial={() => setTutorialOpen(true)}
+            exitLabel={exitLabel}
+            onSecretUnlock={onSecretUnlock}
           />
+
         )}
 
         {phase === "idle" && tutorialOpen && (
