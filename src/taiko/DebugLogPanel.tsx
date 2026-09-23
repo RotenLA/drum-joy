@@ -3,24 +3,19 @@ import { useEffect, useRef, useState } from "react";
 import { debugLog, formatTime, type DebugEntry } from "./debugLog";
 import { useLanguage } from "./i18n";
 
-function kindStyle(kind: DebugEntry["kind"], tr: (zh: string, en: string) => string) {
-  const table: Record<DebugEntry["kind"], { label: string; color: string }> = {
-    midi: { label: "MIDI", color: "#7DE2FF" },
-    inject: { label: tr("注入", "Inject"), color: "#FFC46B" },
-    stick: { label: tr("鼓棒", "Stick"), color: "#95F96F" },
-    system: { label: tr("系统", "System"), color: "#B39CFF" },
-  };
-  return table[kind];
+function intervalText(entry: DebugEntry, tr: (zh: string, en: string) => string) {
+  if (entry.deltaMs === null) return tr("起点", "START");
+  return `Δ ${entry.deltaMs.toFixed(1)} ms`;
 }
 
 export function DebugLogPanel() {
   const { tr } = useLanguage();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [paused, setPaused] = useState(false);
   const [items, setItems] = useState<readonly DebugEntry[]>([]);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
-  // 关闭时既不订阅也不记录，零开销
+  // 默认开启，关闭时既不订阅也不记录。
   useEffect(() => {
     debugLog.setEnabled(open);
     return () => debugLog.setEnabled(false);
@@ -63,7 +58,7 @@ export function DebugLogPanel() {
   return (
     <div className="absolute bottom-3 right-3 z-20 flex h-[46%] w-[52%] max-w-[440px] flex-col rounded border border-white/20 bg-black/70 backdrop-blur">
       <div className="flex items-center gap-2 border-b border-white/15 px-2.5 py-1.5">
-        <span className="text-[10px] tracking-[0.2em] text-white/70">{tr("调试日志", "Debug log")}</span>
+        <span className="text-[10px] tracking-[0.2em] text-white/70">{tr("MIDI 到达间隔", "MIDI intervals")}</span>
         <span className="text-[10px] tabular-nums text-white/35">{items.length}</span>
         <div className="ml-auto flex gap-1.5">
           <button
@@ -92,16 +87,16 @@ export function DebugLogPanel() {
       >
         {items.length === 0 && (
           <p className="text-white/35">
-            {tr("暂无消息（等待 MIDI 或鼓棒数据）", "No messages yet (waiting for MIDI or stick data)")}
+            {tr("等待 MIDI 敲击", "Waiting for MIDI note-on")}
           </p>
         )}
         {items.map((e) => {
-          const k = kindStyle(e.kind, tr);
           return (
-            <div key={e.id} className="flex gap-2">
+            <div key={e.id} className="grid grid-cols-[82px_64px_56px_1fr] gap-2">
               <span className="tabular-nums text-white/30">{formatTime(e.t)}</span>
-              <span style={{ color: k.color }}>{k.label}</span>
-              <span className="min-w-0 flex-1 break-all text-white/75">{e.text}</span>
+              <span className="text-cyan-200">Note {e.note}</span>
+              <span className="tabular-nums text-white/55">Vel {e.velocity}</span>
+              <span className="tabular-nums text-orange-300">{intervalText(e, tr)}</span>
             </div>
           );
         })}

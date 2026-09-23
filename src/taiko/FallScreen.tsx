@@ -24,22 +24,9 @@ import { getPlayChart } from "./chartCache";
 import { shiftChart } from "@/shared/taikoChart";
 
 import { quality, type QualityTier } from "./perf";
-import { FpsBadge } from "./FpsBadge";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
 import { addHistory } from "./history";
 import { TutorialOverlay, markTutorialSeen } from "./tutorial/TutorialOverlay";
-
-/** 帧数与调试日志默认隐藏；需要排查时用 ?debug=1 或控制台 window.__pd2uDebug = true */
-function debugVisible() {
-  if (typeof window === "undefined") return false;
-  const w = window as unknown as { __pd2uDebug?: boolean };
-  if (w.__pd2uDebug === true) return true;
-  try {
-    return new URLSearchParams(window.location.search).get("debug") === "1";
-  } catch {
-    return false;
-  }
-}
 
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±100ms / Good ±200ms，超时未击为 Miss（调手感改这里） */
@@ -65,10 +52,6 @@ export function FallScreen({
 }) {
   const { tr, language } = useLanguage();
   const song = useSong();
-  const [showDebug, setShowDebug] = useState(false);
-  useEffect(() => {
-    setShowDebug(debugVisible());
-  }, []);
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -614,8 +597,7 @@ export function FallScreen({
         <canvas ref={canvasRef} className="block h-full w-full" />
 
         {/* 帧数与调试日志默认隐藏，仅 ?debug=1 时出现 */}
-        {showDebug && phase !== "idle" && <FpsBadge />}
-        {showDebug && <DebugLogPanel />}
+        <DebugLogPanel />
 
         {/* 顶部右侧：暂停按钮放在画布曲名/BPM 下方，避免重叠 */}
         {(phase === "playing" || phase === "countdown") && (

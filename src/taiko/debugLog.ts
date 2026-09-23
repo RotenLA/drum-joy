@@ -1,7 +1,4 @@
-/**
- * 调试日志环形缓冲：MIDI 敲击/松开、宿主注入、鼓棒快照、系统事件。
- * 与 React 解耦，任何模块都可 push；面板订阅刷新。
- */
+/** MIDI note-on 到达间隔诊断缓冲。 */
 
 export type DebugKind = "midi" | "inject" | "stick" | "system";
 
@@ -9,8 +6,10 @@ export interface DebugEntry {
   id: number;
   /** Date.now() */
   t: number;
-  kind: DebugKind;
-  text: string;
+  note: number;
+  velocity: number;
+  /** 与上一条 note-on 的网页接收时刻之差；首条为 null */
+  deltaMs: number | null;
 }
 
 /** 最多保留的条数 */
@@ -20,21 +19,31 @@ class DebugLog {
   private items: DebugEntry[] = [];
   private seq = 0;
   private listeners = new Set<() => void>();
+  private lastMidiAt: number | null = null;
   /** 面板关闭时完全不记录，避免白白消耗性能 */
   private enabled = false;
 
   setEnabled(on: boolean): void {
     this.enabled = on;
-    if (!on) this.items = [];
+    if (!on) {
+      this.items = [];
+      this.lastMidiAt = null;
+    }
   }
 
   get on(): boolean {
     return this.enabled;
   }
 
-  push(kind: DebugKind, text: string): void {
+  /** 仅保留兼容入口；非 note-on 调试信息不再记录。 */
+  push(_kind: DebugKind, _text: string): void {}
+
+  recordMidiNote(note: number, velocity: number): void {
     if (!this.enabled) return;
-    this.items.push({ id: ++this.seq, t: Date.now(), kind, text });
+    const receivedAt = performance.now();
+    const deltaMs = this.lastMidiAt === null ? null : receivedAt - this.lastMidiAt;
+    this.lastMidiAt = receivedAt;
+    this.items.push({ id: ++this.seq, t: Date.now(), note, velocity, deltaMs });
     if (this.items.length > MAX) this.items.splice(0, this.items.length - MAX);
     for (const f of this.listeners) f();
   }
@@ -45,6 +54,7 @@ class DebugLog {
 
   clear(): void {
     this.items = [];
+    this.lastMidiAt = null;
     for (const f of this.listeners) f();
   }
 
