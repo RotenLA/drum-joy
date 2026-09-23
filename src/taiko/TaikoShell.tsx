@@ -80,7 +80,7 @@ function ShellInner() {
             onSpeedChange={(speed) => updateSettings({ speed })}
             onExit={() => setLab("hub")}
             gestureHits
-            exitLabel="↩"
+            exitLabel={tr("返回", "Back")}
           />
         ) : (
           <FallScreen
