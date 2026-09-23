@@ -144,37 +144,37 @@ class GestureHitDetector {
     // 角速度：负值代表棒头正在往下挥
     const v = (pose.p - prevP) / dt;
 
-    // 还在往下挥：把连续的下探帧串成一次挥击，行程与峰值速度跨帧累计
-    if (v <= -RELEASE_SPEED) {
-      if (!s.downStartAt) {
-        // 起手要有明确的下挥意图，纯缓慢移位不开始计一次挥击
-        if (v > -DOWN_MIN_SPEED) return;
-        s.downStartAt = at;
+    if (!s.descending) {
+      // 起手：出现明确下挥才开始追踪一次挥击
+      if (v <= -DOWN_MIN_SPEED) {
+        s.descending = true;
         s.peak = -v;
         s.travel = Math.max(0, prevP - pose.p);
-        return;
+        s.minP = pose.p;
+        s.lastProgressAt = at;
       }
-      // 超过窗口还在往下 = 慢慢压下去，不是敲击，从当前帧重新起算
-      if (at - s.downStartAt > DOWN_WINDOW_MS) {
-        s.downStartAt = at;
-        s.peak = -v;
-        s.travel = Math.max(0, prevP - pose.p);
-        return;
-      }
-      s.peak = Math.max(s.peak, -v);
-      s.travel += Math.max(0, prevP - pose.p);
       return;
     }
 
-    // 触底 / 停住（速度回升）→ 结算这一下
+    // 正在下挥：只要角度还在继续变低就一路累计，不做任何时间截断
+    if (pose.p < s.minP - 0.05) {
+      s.travel += s.minP - pose.p;
+      s.minP = pose.p;
+      s.peak = Math.max(s.peak, -v);
+      s.lastProgressAt = at;
+      return;
+    }
+
+    // 角度不再变低 = 触底拐点；短暂持平先等一小会儿（STALL_MS）再结算
+    const rebounding = pose.p > s.minP + 0.05;
+    if (!rebounding && at - s.lastProgressAt < STALL_MS) return;
+
     const peak = s.peak;
     const travel = s.travel;
-    const wasDown = s.downStartAt !== 0;
-    s.downStartAt = 0;
+    s.descending = false;
     s.peak = 0;
     s.travel = 0;
-    if (!wasDown) return;
-    // 力度够猛 + 幅度够大 + 不在防抖窗内，才算一次敲击
+    // 幅度够大 + 峰值速度够快 + 不在防抖窗内，才算一次敲击
     // （留 0.5°/s 浮点余量：帧间隔换算出的速度常在阈值边上有微小误差）
     if (peak < ARM_SPEED - 0.5 || travel < MIN_TRAVEL_DEG) {
       glog(`${side} 触底但未达标 peak=${Math.round(peak)} travel=${travel.toFixed(1)}`);
@@ -188,6 +188,7 @@ class GestureHitDetector {
     const part = partOfPose(landing, this.layers[side]);
     glog(`${side} 命中 ${part} p=${landing.p.toFixed(1)} y=${landing.y.toFixed(1)} peak=${Math.round(peak)}`);
     this.emit?.({ side, part, velocity: velocityOf(peak), atMs: at, speed: peak });
+
 
   }
 }
