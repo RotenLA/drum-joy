@@ -331,7 +331,7 @@ export async function warmUpDrums(kitId?: number): Promise<void> {
   await ensureKitLoaded(id);
   // 静音触发一次，让节点图与解码路径提前热起来
   for (const part of ["kick", "snare", "hihat"] as PartId[]) {
-    playSample(ctx, id, part, 0, 0.0001);
+    playSample(ctx, id, part, 0.0001);
   }
 }
 
