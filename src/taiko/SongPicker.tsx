@@ -90,6 +90,8 @@ export function SongPicker({
   onOpenSettings,
   onExit,
   onStartTutorial,
+  exitLabel,
+  onSecretUnlock,
 }: {
   speed: number;
   onSpeedChange?: ((s: number) => void) | undefined;
@@ -97,9 +99,15 @@ export function SongPicker({
   onOpenSettings: () => void;
   onExit?: (() => void) | undefined;
   onStartTutorial: () => void;
+  /** 退出按钮文字（实验室里改成「返回」） */
+  exitLabel?: string | undefined;
+  /** 「选择歌曲」连续点击 12 次的隐藏入口 */
+  onSecretUnlock?: (() => void) | undefined;
 }) {
   const song = useSong();
   const { tr } = useLanguage();
+  const tapRef = useRef({ count: 0, at: 0 });
+
 
   const [tab, setTab] = useState<"songs" | "history">("songs");
   const [library, setLibrary] = useState<LibrarySong[]>([]);
