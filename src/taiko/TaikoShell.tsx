@@ -42,6 +42,11 @@ export function TaikoShell() {
 
 function ShellInner() {
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
+  /** null = 正式版本；"hub" = 测试主界面；其余 = 已进入的测试模式 */
+  const [lab, setLab] = useState<"hub" | LabGame | null>(null);
+  const { tr } = useLanguage();
+
+
 
   useEffect(() => {
     try { const raw = localStorage.getItem(SETTINGS_KEY); if (raw) setSettings((s) => ({ ...s, ...(JSON.parse(raw) as Partial<TaikoSettings>) })); } catch { /* 忽略损坏设置 */ }
