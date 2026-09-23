@@ -14,22 +14,20 @@ import { PART_BY_ID, type PartId } from "./laneLayouts";
 import { layerOfPitch, partOfPose } from "./stickMapping";
 import { stickManager, type StickPose, type StickSide, type StickSnapshot } from "./stickInput";
 
-/** 进入下探状态的角速度阈值（度/秒，负向为往下） */
+/** 起手门槛：一次挥击期间的峰值下探角速度（度/秒）需达到此值 */
 const ARM_SPEED = 200;
-/** 下探结束（触底 / 停住）判定：角速度回升到这个值以上 */
-const RELEASE_SPEED = 45;
-/** 同一根棒两次击打的最短间隔（毫秒） */
-const REFRACTORY_MS = 120;
-/** 一次下探的最小幅度（度），避免轻微抖动误触 */
-const MIN_TRAVEL_DEG = 7;
+/** 认定「开始往下挥」的角速度（度/秒） */
+const DOWN_MIN_SPEED = 55;
+/** 同一根棒两次击打的最短间隔（毫秒）：只滤传感器自身回弹震荡 */
+const REFRACTORY_MS = 65;
+/** 一次下探的最小累计幅度（度），避免轻微抖动误触 */
+const MIN_TRAVEL_DEG = 6;
 /**
- * 宿主姿态流只有 25~30Hz，一次挥击常被切成 3~4 帧，
- * 单帧瞬时速度到不了 ARM_SPEED。所以先把「持续往下」的帧串起来，
- * 在这个窗口（毫秒）内累计行程与峰值速度，再判断是否够一次击打。
+ * 停住判定：正在下挥时若这段时间内俯仰角没有继续变低，
+ * 视为已经触底（没有明显回弹的「按住不动」也能结算）。
  */
-const DOWN_WINDOW_MS = 160;
-/** 认定「还在往下挥」的最小角速度（度/秒）：低于此视为停住 */
-const DOWN_MIN_SPEED = 60;
+const STALL_MS = 55;
+
 
 
 export interface GestureHit {
@@ -46,12 +44,16 @@ export interface GestureHit {
 interface SideState {
   lastP: number | null;
   lastAt: number;
-  /** 本次连续下探开始时刻；0 = 当前没有进行中的下探 */
-  downStartAt: number;
-  /** 本次下探的峰值角速度（度/秒，正值） */
+  /** 是否正处于一次下挥中 */
+  descending: boolean;
+  /** 本次下挥的峰值角速度（度/秒，正值） */
   peak: number;
-  /** 本次下探累计行程（度） */
+  /** 本次下挥累计行程（度） */
   travel: number;
+  /** 本次下挥到目前为止的最低俯仰角 */
+  minP: number;
+  /** 最近一次「角度确实又变低了」的时刻（停住判定用） */
+  lastProgressAt: number;
   /** 最近一帧完整姿态（触底结算时作为落点） */
   lastPose: StickPose | null;
   lastHitAt: number;
@@ -60,12 +62,15 @@ interface SideState {
 const newSide = (): SideState => ({
   lastP: null,
   lastAt: 0,
-  downStartAt: 0,
+  descending: false,
   peak: 0,
   travel: 0,
+  minP: 0,
+  lastProgressAt: 0,
   lastPose: null,
   lastHitAt: 0,
 });
+
 
 
 /** 峰值角速度 → MIDI 力度 */
@@ -139,37 +144,37 @@ class GestureHitDetector {
     // 角速度：负值代表棒头正在往下挥
     const v = (pose.p - prevP) / dt;
 
-    // 还在往下挥：把连续的下探帧串成一次挥击，行程与峰值速度跨帧累计
-    if (v <= -RELEASE_SPEED) {
-      if (!s.downStartAt) {
-        // 起手要有明确的下挥意图，纯缓慢移位不开始计一次挥击
-        if (v > -DOWN_MIN_SPEED) return;
-        s.downStartAt = at;
+    if (!s.descending) {
+      // 起手：出现明确下挥才开始追踪一次挥击
+      if (v <= -DOWN_MIN_SPEED) {
+        s.descending = true;
         s.peak = -v;
         s.travel = Math.max(0, prevP - pose.p);
-        return;
+        s.minP = pose.p;
+        s.lastProgressAt = at;
       }
-      // 超过窗口还在往下 = 慢慢压下去，不是敲击，从当前帧重新起算
-      if (at - s.downStartAt > DOWN_WINDOW_MS) {
-        s.downStartAt = at;
-        s.peak = -v;
-        s.travel = Math.max(0, prevP - pose.p);
-        return;
-      }
-      s.peak = Math.max(s.peak, -v);
-      s.travel += Math.max(0, prevP - pose.p);
       return;
     }
 
-    // 触底 / 停住（速度回升）→ 结算这一下
+    // 正在下挥：只要角度还在继续变低就一路累计，不做任何时间截断
+    if (pose.p < s.minP - 0.05) {
+      s.travel += s.minP - pose.p;
+      s.minP = pose.p;
+      s.peak = Math.max(s.peak, -v);
+      s.lastProgressAt = at;
+      return;
+    }
+
+    // 角度不再变低 = 触底拐点；短暂持平先等一小会儿（STALL_MS）再结算
+    const rebounding = pose.p > s.minP + 0.05;
+    if (!rebounding && at - s.lastProgressAt < STALL_MS) return;
+
     const peak = s.peak;
     const travel = s.travel;
-    const wasDown = s.downStartAt !== 0;
-    s.downStartAt = 0;
+    s.descending = false;
     s.peak = 0;
     s.travel = 0;
-    if (!wasDown) return;
-    // 力度够猛 + 幅度够大 + 不在防抖窗内，才算一次敲击
+    // 幅度够大 + 峰值速度够快 + 不在防抖窗内，才算一次敲击
     // （留 0.5°/s 浮点余量：帧间隔换算出的速度常在阈值边上有微小误差）
     if (peak < ARM_SPEED - 0.5 || travel < MIN_TRAVEL_DEG) {
       glog(`${side} 触底但未达标 peak=${Math.round(peak)} travel=${travel.toFixed(1)}`);
@@ -183,6 +188,7 @@ class GestureHitDetector {
     const part = partOfPose(landing, this.layers[side]);
     glog(`${side} 命中 ${part} p=${landing.p.toFixed(1)} y=${landing.y.toFixed(1)} peak=${Math.round(peak)}`);
     this.emit?.({ side, part, velocity: velocityOf(peak), atMs: at, speed: peak });
+
 
   }
 }
