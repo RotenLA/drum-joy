@@ -51,25 +51,29 @@ export function TutorialOverlay({ onLeave, gestureHits = false }: { onLeave: () 
     setProgress((value) => { const next = value + 1; if (next >= needed) setPassed(true); return Math.min(next, needed); });
   }, [needed, passed, step.kind, step.targets]);
 
+  // 击打入口放进 ref：订阅只挂一次，步骤推进导致的重渲染不会重启角度判定器
+  const onHitRef = useRef(onHit);
+  onHitRef.current = onHit;
+
   useEffect(() => {
     const off = midiManager.onNote((note, velocity, atMs) => {
       const part = partOfNote(note);
       if (!part) return;
       // 律动大师模式：手部鼓面只认角度判定，MIDI 只负责两个踏板
       if (gestureHits && part !== "pedalHat" && part !== "kick") return;
-      onHit(part, velocity, atMs, note);
+      onHitRef.current(part, velocity, atMs, note);
     });
     const offUp = midiManager.onNoteOff((note) => { if (step.kind === "hold" && partOfNote(note) === "pedalHat") { setHeld(false); if (!passed) setProgress(0); } });
     return () => { off(); offUp(); };
-  }, [gestureHits, onHit, passed, step.kind]);
+  }, [gestureHits, passed, step.kind]);
 
   // 律动大师模式：手部击打由鼓棒角度轨迹判定，与进歌演奏完全一致
   useEffect(() => {
     if (!gestureHits) return;
     return gestureHitDetector.start((hit) => {
-      onHit(hit.part, hit.velocity, hit.atMs, noteOfPart(hit.part));
+      onHitRef.current(hit.part, hit.velocity, hit.atMs, noteOfPart(hit.part));
     });
-  }, [gestureHits, onHit]);
+  }, [gestureHits]);
 
 
   // 100 BPM × 8 拍 = 4.8 秒；中途抬起会取消并归零。

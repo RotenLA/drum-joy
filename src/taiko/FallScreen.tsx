@@ -302,6 +302,11 @@ export function FallScreen({
     [playChart, readTimeMs],
   );
 
+  // 击打入口放进 ref：订阅（MIDI / 角度判定）只挂一次，歌曲播放中界面重渲染
+  // 不会反复重启角度判定器——重启会清空正在累计的挥棒轨迹，导致进歌后打不响。
+  const hitPartRef = useRef(hitPart);
+  hitPartRef.current = hitPart;
+
   // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
   // 实验版（gestureHits）里手部鼓面交给角度判定，MIDI 只负责两个踏板。
   useEffect(() => {
@@ -315,7 +320,7 @@ export function FallScreen({
       if (gestureHits && !isPedal) return;
       if (parts.includes(part)) {
         stickManager.switchLayerForHit(part, parts);
-        hitPart(part, atMs, vel, note);
+        hitPartRef.current(part, atMs, vel, note);
       }
     });
 
@@ -326,17 +331,17 @@ export function FallScreen({
       offNote();
       offUp();
     };
-  }, [hitPart, parts, gestureHits]);
+  }, [parts, gestureHits]);
 
-  // 实验版：角度触发手部击打（快速下探 → 触底反弹的那一帧立刻出声判定）
+  // 实验版：角度触发手部击打（快速下探 → 触底停住的那一帧立刻出声判定）
   useEffect(() => {
     if (!gestureHits) return;
     return gestureHitDetector.start((hit) => {
       if (!parts.includes(hit.part)) return;
       stickManager.switchLayerForHit(hit.part, parts);
-      hitPart(hit.part, hit.atMs, hit.velocity, noteOfPart(hit.part));
+      hitPartRef.current(hit.part, hit.atMs, hit.velocity, noteOfPart(hit.part));
     });
-  }, [gestureHits, hitPart, parts]);
+  }, [gestureHits, parts]);
 
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
