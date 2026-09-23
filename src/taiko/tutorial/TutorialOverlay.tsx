@@ -13,7 +13,7 @@ import { stickManager } from "../stickInput";
 export const TUTORIAL_SEEN_KEY = "taiko.tutorial.v3";
 export const markTutorialSeen = () => { try { localStorage.setItem(TUTORIAL_SEEN_KEY, "1"); } catch { /* memory-only environment */ } };
 
-export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
+export function TutorialOverlay({ onLeave, gestureHits = false }: { onLeave: () => void; gestureHits?: boolean }) {
   const { language } = useLanguage();
   const labels = tutorialLabels(language);
   const [index, setIndex] = useState(0);
