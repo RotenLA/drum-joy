@@ -1366,7 +1366,7 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   items.sort((a, b) => a.depth - b.depth);
   for (const it of items) it.draw();
 
-  drawParticles(ctx, f.now);
+  drawParticles(ctx, fx, f.now);
   // 鼓棒画在鼓盘/音符上层
   if (f.sticks) {
     if (f.sticks.l) drawStick(ctx, v.w, v.h, f.sticks.l, "l", f.sticks.layers?.l, f.sticks.transitions?.l, f.now);
