@@ -125,32 +125,6 @@ export function saveKitId(id: number): number {
 const buffers = new Map<string, AudioBuffer>();
 const loading = new Set<number>();
 
-/**
- * 把采样重采样到声卡原生采样率。
- * 样本多为 44.1kHz，而安卓声卡通常跑 48kHz；两者不一致时浏览器会在
- * **播放瞬间**做实时插值重采样，密集敲击叠加几路就会出现音频线程的突发
- * 计算尖刺（听感就是"偶尔突然慢一下"）。这里在加载阶段一次性算好。
- */
-async function alignSampleRate(buf: AudioBuffer, rate: number): Promise<AudioBuffer> {
-  if (Math.abs(buf.sampleRate - rate) < 1) return buf;
-  const w = globalThis as unknown as {
-    OfflineAudioContext?: new (ch: number, len: number, rate: number) => OfflineAudioContext;
-    webkitOfflineAudioContext?: new (ch: number, len: number, rate: number) => OfflineAudioContext;
-  };
-  const Off = w.OfflineAudioContext ?? w.webkitOfflineAudioContext;
-  if (!Off) return buf;
-  try {
-    const len = Math.max(1, Math.ceil((buf.duration * rate) | 0) || 1);
-    const off = new Off(buf.numberOfChannels, len, rate);
-    const src = off.createBufferSource();
-    src.buffer = buf;
-    src.connect(off.destination);
-    src.start(0);
-    return await off.startRendering();
-  } catch {
-    return buf;
-  }
-}
 
 /** 后台加载某套鼓组的全部样本；加载完成前继续用合成音兜底 */
 export async function ensureKitLoaded(kitId: number): Promise<void> {
