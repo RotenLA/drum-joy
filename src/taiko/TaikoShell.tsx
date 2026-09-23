@@ -8,6 +8,9 @@ import { DeviceToast } from "./DeviceToast";
 import { ensureKitLoaded, loadKitEnabled, loadKitId } from "./drumKit";
 import { Toaster } from "@/components/ui/sonner";
 import { debugLog } from "./debugLog";
+import { LabHub, type LabGame } from "./LabHub";
+import { useLanguage } from "./i18n";
+
 
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
