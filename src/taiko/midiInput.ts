@@ -98,7 +98,7 @@ class MidiManager {
     const status = d[0]! & 0xf0;
     // note-on：0x90 且力度 > 0（力度 0 视为 note-off）
     if (status === 0x90 && d[2]! > 0) {
-      debugLog.push("midi", `硬件 note-on  ${d[1]} vel ${d[2]}${partTag(d[1]!)}`);
+      debugLog.recordMidiNote(d[1]!, d[2]!);
       // 优先用消息自带的到达时刻：同一批多条消息会被一起回调，
       // 若统一取 now() 会把它们压成同一时刻，表现为突发延迟/判定偏移。
       const now = performance.now();
@@ -121,7 +121,7 @@ class MidiManager {
     // 接口约定：note 1-127，velocity 1-127（0 视为静音，忽略）
     if (n < 1 || n > 127 || v < 1 || v > 127) return;
     const at = this.toLocalTime(hostTimeMs);
-    debugLog.push("inject", `注入 note-on  ${n} vel ${v}${partTag(n)}`);
+    debugLog.recordMidiNote(n, v);
     for (const f of this.noteListeners) f(n, v, at);
   }
 
