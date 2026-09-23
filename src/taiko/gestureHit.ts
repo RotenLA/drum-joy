@@ -13,13 +13,13 @@ import { partOfPose } from "./stickMapping";
 import { stickManager, type StickPose, type StickSide, type StickSnapshot } from "./stickInput";
 
 /** 进入下探状态的角速度阈值（度/秒，负向为往下） */
-const ARM_SPEED = 170;
+const ARM_SPEED = 200;
 /** 下探结束（触底 / 反弹）判定：角速度回升到这个值以上 */
-const RELEASE_SPEED = 55;
+const RELEASE_SPEED = 45;
 /** 同一根棒两次击打的最短间隔（毫秒） */
-const REFRACTORY_MS = 85;
+const REFRACTORY_MS = 120;
 /** 一次下探的最小幅度（度），避免轻微抖动误触 */
-const MIN_TRAVEL_DEG = 6;
+const MIN_TRAVEL_DEG = 10;
 
 export interface GestureHit {
   side: StickSide;
