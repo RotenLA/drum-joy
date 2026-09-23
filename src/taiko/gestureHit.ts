@@ -116,35 +116,47 @@ class GestureHitDetector {
     // 角速度：负值代表棒头正在往下挥
     const v = (pose.p - prevP) / dt;
 
-    if (!s.armed) {
-      if (v <= -ARM_SPEED) {
-        s.armed = true;
-        s.armPose = { p: prevP, y: pose.y };
+    // 还在往下挥：把连续的下探帧串成一次挥击，行程与峰值速度跨帧累计
+    if (v <= -RELEASE_SPEED) {
+      if (!s.downStartAt) {
+        // 起手要有明确的下挥意图，纯缓慢移位不开始计一次挥击
+        if (v > -DOWN_MIN_SPEED) return;
+        s.downStartAt = at;
+        s.downPose = { p: prevP, y: pose.y };
         s.peak = -v;
-        s.travel = prevP - pose.p;
+        s.travel = Math.max(0, prevP - pose.p);
+        return;
       }
+      // 超过窗口还在往下 = 慢慢压下去，不是敲击，从当前帧重新起算
+      if (at - s.downStartAt > DOWN_WINDOW_MS) {
+        s.downStartAt = at;
+        s.downPose = { p: prevP, y: pose.y };
+        s.peak = -v;
+        s.travel = Math.max(0, prevP - pose.p);
+        return;
+      }
+      s.peak = Math.max(s.peak, -v);
+      s.travel += Math.max(0, prevP - pose.p);
       return;
     }
 
-    s.peak = Math.max(s.peak, -v);
-    s.travel += Math.max(0, prevP - pose.p);
+    // 触底 / 反弹（速度回升）→ 结算这一下
+    const downPose = s.downPose;
+    const peak = s.peak;
+    const travel = s.travel;
+    s.downStartAt = 0;
+    s.downPose = null;
+    s.peak = 0;
+    s.travel = 0;
+    if (!downPose) return;
+    // 力度够猛 + 幅度够大 + 不在防抖窗内，才算一次敲击
+    if (peak < ARM_SPEED || travel < MIN_TRAVEL_DEG) return;
+    if (at - s.lastHitAt < REFRACTORY_MS) return;
+    s.lastHitAt = at;
+    // 落点用「下探开始时」的姿态：那一刻棒还指在目标鼓面上
+    const part = partOfPose(downPose);
+    this.emit?.({ side, part, velocity: velocityOf(peak), atMs: at, speed: peak });
 
-    // 触底 / 反弹 → 立刻出这一下
-    if (v > -RELEASE_SPEED) {
-      const armed = s.armPose;
-      const peak = s.peak;
-      const travel = s.travel;
-      s.armed = false;
-      s.armPose = null;
-      s.peak = 0;
-      s.travel = 0;
-      if (!armed || travel < MIN_TRAVEL_DEG) return;
-      if (at - s.lastHitAt < REFRACTORY_MS) return;
-      s.lastHitAt = at;
-      // 落点用「下探开始时」的姿态：那一刻棒还指在目标鼓面上
-      const part = partOfPose(armed);
-      this.emit?.({ side, part, velocity: velocityOf(peak), atMs: at, speed: peak });
-    }
   }
 }
 
