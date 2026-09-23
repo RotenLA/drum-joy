@@ -1342,12 +1342,13 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   // 固定层级队列：连续色带 → 在途音符 → 全部实体鼓面 → 到达自身鼓面的音符 → 缩圈。
   // 不再使用飞行位置切换层级，因此任意交叉路径经过鼓面边缘都不会突然前后跳动。
   const items: DepthItem[] = [];
+  const fx = fxOf(ctx);
   for (const id of parts) {
     const expiry = f.flashes[id] ?? 0;
     const intensity = Math.max(0, Math.min(1, (expiry - f.now) / FLASH_MS));
-    if (expiry > (lastFlash[id] ?? 0)) {
-      spawnSparks(id, PART_BY_ID[id].color, v.w, v.h, f.now);
-      lastFlash[id] = expiry;
+    if (expiry > (fx.lastFlash[id] ?? 0)) {
+      spawnSparks(fx, id, PART_BY_ID[id].color, v.w, v.h, f.now);
+      fx.lastFlash[id] = expiry;
     }
     const missExpiry = f.missFlashes?.[id] ?? 0;
     const miss = Math.max(0, Math.min(1, (missExpiry - f.now) / 240));
