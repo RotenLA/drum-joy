@@ -227,8 +227,7 @@ export function FallScreen({
       // 抖动量表：真实敲击时刻 → 网页实际处理时刻
       if (atMs !== undefined && Number.isFinite(atMs)) latencyMeter.recordInput(now - atMs);
       flashesRef.current[part] = now + FLASH_MS;
-      // 发声按真实敲击时刻排程：主线程偶发耽误不再变成听感延迟
-      if (kitOnRef.current) playDrum(part, velocity, undefined, note, at);
+      if (kitOnRef.current) playDrum(part, velocity, undefined, note);
 
       if (phaseRef.current !== "playing" || !playChart) return;
       // 宿主偶发卡顿会把一批击打迟送过来；明显超窗的只出声不判定，

@@ -2,13 +2,7 @@ import { useEffect, useState } from "react";
 import { quality } from "./perf";
 import { debugLog } from "./debugLog";
 import { latencyMeter } from "./latencyMeter";
-import {
-  activeVoiceCount,
-  audioJitterMs,
-  currentLookaheadMs,
-  hitDelayMs,
-  hitDelayPeak,
-} from "./drumKit";
+import { activeVoiceCount, audioJitterMs, currentLookaheadMs } from "./drumKit";
 import { outputLatencyMs } from "./metronome";
 
 /**
@@ -31,8 +25,6 @@ export function FpsBadge() {
     lookahead: number;
     audJitter: number;
     outLatency: number;
-    hitDelay: number;
-    hitPeak: number;
   }>({
     on: false,
     input: 0,
@@ -43,8 +35,6 @@ export function FpsBadge() {
     lookahead: 0,
     audJitter: 0,
     outLatency: 0,
-    hitDelay: 0,
-    hitPeak: 0,
   });
 
   useEffect(() => {
@@ -60,8 +50,6 @@ export function FpsBadge() {
         lookahead: Math.round(currentLookaheadMs()),
         audJitter: audioJitterMs(),
         outLatency: outputLatencyMs(),
-        hitDelay: hitDelayMs(),
-        hitPeak: hitDelayPeak(),
       });
     }, 500);
     return () => window.clearInterval(id);
@@ -92,12 +80,6 @@ export function FpsBadge() {
             title="发声抖动：音频时钟漂移最大值 / 输出链路延迟"
           >
             AUD {jitter.audJitter}ms / {jitter.outLatency}ms
-          </div>
-          <div
-            className="mt-0.5 text-[rgba(255,255,255,0.65)]"
-            title="敲击→发声耽误：当前值 / 峰值（峰值超过发声预算时才会听到不跟手）"
-          >
-            HIT {jitter.hitDelay}/{jitter.hitPeak}pk ms
           </div>
         </>
       ) : null}

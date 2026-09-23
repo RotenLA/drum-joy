@@ -171,9 +171,9 @@ export function releaseOtherKits(keepKitId: number): void {
  * 桌面余量大可以多留一点尾音。
  */
 const VOICE_LIMITS = isIOS()
-  ? { perPart: 4, total: 12 }
+  ? { perPart: 3, total: 12 }
   : isAndroid()
-    ? { perPart: 4, total: 14 }
+    ? { perPart: 3, total: 14 }
     : { perPart: 4, total: 16 };
 /** 单个鼓件最多同时发声数（连打时掐掉最早那一声的尾巴） */
 const MAX_VOICES_PER_PART = VOICE_LIMITS.perPart;
@@ -195,8 +195,8 @@ const voices: Voice[] = [];
 function choke(ctx: AudioContext, v: Voice): void {
   const t = ctx.currentTime;
   try {
-    // 单段快速收尾：不取消旧排程、不查当前值，密集段少给音频线程添活
-    v.gain.gain.setValueAtTime(v.gain.gain.value, t);
+    // 单段快速收尾：不再做多段曲线排程，密集段少给音频线程添活
+    v.gain.gain.cancelScheduledValues(t);
     v.gain.gain.linearRampToValueAtTime(0.0001, t + CHOKE_SEC);
     v.src.stop(t + CHOKE_SEC + 0.01);
   } catch {
@@ -276,36 +276,16 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
   src.start(t);
   const voice: Voice = { part, src, gain: g, at: t };
   voices.push(voice);
-  // 回收不在敲击那一瞬间做，攒起来在空闲时批量处理
-  src.onended = () => queueRetire(voice);
-  return true;
-}
-
-/** 发声结束后的回收队列（避免密集段在主线程上零散做清理） */
-const retireQueue: Voice[] = [];
-let retireScheduled = false;
-
-function flushRetire(): void {
-  retireScheduled = false;
-  for (const v of retireQueue.splice(0, retireQueue.length)) {
-    dropVoice(v);
+  src.onended = () => {
+    dropVoice(voice);
     try {
-      v.src.disconnect();
+      src.disconnect();
     } catch {
       // 已断开
     }
-    recycleGain(v.gain);
-  }
-}
-
-function queueRetire(v: Voice): void {
-  retireQueue.push(v);
-  if (retireScheduled) return;
-  retireScheduled = true;
-  const idle = (globalThis as { requestIdleCallback?: (cb: () => void) => number })
-    .requestIdleCallback;
-  if (idle) idle(flushRetire);
-  else setTimeout(flushRetire, 50);
+    recycleGain(g);
+  };
+  return true;
 }
 
 /** 当前同时发声数（调试面板用） */
@@ -399,83 +379,27 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * @param note 原始 MIDI 键位，用于逐键位响度衰减
  */
 /**
- * 发声时间预算（秒）。
- * 过去排程时刻是「调用那一刻 + 10ms」，主线程忙一下（长帧、垃圾回收、宿主
- * 批量投递）这段耽误就 1:1 变成听感延迟 —— 判定还是 PERFECT，声音偶尔慢半下。
- * 现在改成「**真实敲击时刻** + 固定预算」：耽误没超预算时，声音落在同一个
- * 绝对时间点上，忽快忽慢被吸收掉；超预算就立刻发声（不做补偿性提前）。
+ * 敲击发声的提前量（秒）。
+ * 过去会随密集程度在 10ms / 18ms 之间自己跳，密集段声音整体后移、
+ * 松下来又弹回，听上去就是「偶尔突然不跟手」。现在改成**全程固定**，
+ * 开演时按实际音频块长度（baseLatency）算一次即可。
  */
-export const HIT_LOOKAHEAD_SEC = 0.022;
-const HIT_BUDGET_MIN = 0.018;
-const HIT_BUDGET_MAX = 0.03;
-/** 立即发声时至少留的提前量，避免排到过去的时刻 */
-const MIN_LEAD_SEC = 0.004;
+export const HIT_LOOKAHEAD_SEC = 0.01;
+const HIT_LOOKAHEAD_MIN = 0.008;
+const HIT_LOOKAHEAD_MAX = 0.02;
 
-let hitBudgetSec = HIT_LOOKAHEAD_SEC;
+let hitLookaheadSec = HIT_LOOKAHEAD_SEC;
 
-/** 开演时按输出缓冲长度定一次预算（只算一次，之后恒定） */
+/** 开演时按输出缓冲长度定一次提前量（只算一次，之后恒定） */
 export function initHitLookahead(ctx: AudioContext): void {
   const base = Number(ctx.baseLatency ?? 0);
-  const want = Number.isFinite(base) && base > 0 ? base + 0.012 : HIT_LOOKAHEAD_SEC;
-  hitBudgetSec = Math.max(HIT_BUDGET_MIN, Math.min(HIT_BUDGET_MAX, want));
+  const want = Number.isFinite(base) && base > 0 ? base + 0.004 : HIT_LOOKAHEAD_SEC;
+  hitLookaheadSec = Math.max(HIT_LOOKAHEAD_MIN, Math.min(HIT_LOOKAHEAD_MAX, want));
 }
 
-/** 当前预算（毫秒，调试面板用） */
+/** 当前提前量（毫秒，调试面板用） */
 export function currentLookaheadMs(): number {
-  return Math.round(hitBudgetSec * 1000);
-}
-
-// ---------------- 敲击时刻 → 音频时钟 ----------------
-
-let hitDelayLastMs = 0;
-let hitDelayPeakMs = 0;
-
-/** 敲击→发声耽误：当前值（毫秒，调试面板用） */
-export function hitDelayMs(): number {
-  return hitDelayLastMs;
-}
-
-/** 敲击→发声耽误：峰值（毫秒，调试面板用） */
-export function hitDelayPeak(): number {
-  return hitDelayPeakMs;
-}
-
-/**
- * performance.now() 基准的敲击时刻 → ctx 时间轴。
- * 有 getOutputTimestamp() 时用它给出的 contextTime/performanceTime 配对，
- * 比直接读 currentTime 更贴近真实输出位置。
- */
-function mapToCtxTime(ctx: AudioContext, atMs: number): number {
-  const nowPerf = perfNow();
-  let ctxNow = ctx.currentTime;
-  try {
-    const ts = ctx.getOutputTimestamp?.();
-    const ct = ts?.contextTime;
-    const pt = ts?.performanceTime;
-    if (ct !== undefined && pt !== undefined && Number.isFinite(ct) && Number.isFinite(pt)) {
-      ctxNow = ct + (nowPerf - pt) / 1000;
-    }
-  } catch {
-    // 不支持时退回 currentTime
-  }
-  return ctxNow - (nowPerf - atMs) / 1000;
-}
-
-/** 时间戳明显不可信（音频时钟刚挂起/恢复）时的容忍上限（秒） */
-const STALE_LIMIT_SEC = 0.06;
-
-/** 排程时刻：敲击时刻 + 预算；来不及就立刻发声 */
-function scheduleTime(ctx: AudioContext, atMs?: number): number {
-  const now = ctx.currentTime;
-  if (atMs === undefined || !Number.isFinite(atMs)) return now + hitBudgetSec;
-  const delay = Math.max(0, perfNow() - atMs);
-  hitDelayLastMs = Math.round(delay);
-  if (hitDelayLastMs > hitDelayPeakMs) hitDelayPeakMs = hitDelayLastMs;
-  const want = mapToCtxTime(ctx, atMs) + hitBudgetSec;
-  // 两条时钟对不上（挂起/恢复后 currentTime 停过）时别死抱着一个过去的时刻，
-  // 退回「现在 + 预算」，保持稳定的一点提前量而不是贴着缓冲边缘发声。
-  if (!Number.isFinite(want) || want < now - STALE_LIMIT_SEC) return now + hitBudgetSec;
-  return Math.max(now + MIN_LEAD_SEC, want);
+  return Math.round(hitLookaheadSec * 1000);
 }
 
 // ---------------- 音频时钟抖动量表 ----------------
@@ -507,8 +431,6 @@ export function audioJitterMs(): number {
 export function resetAudioJitter(): void {
   clockBaseMs = null;
   clockSkewMaxMs = 0;
-  hitDelayLastMs = 0;
-  hitDelayPeakMs = 0;
 }
 
 /** 开演前预热：加载当前鼓组样本，并静音跑一次建立音频节点图 */
@@ -521,23 +443,14 @@ export async function warmUpDrums(kitId?: number): Promise<void> {
   await ensureKitLoaded(id);
   // 静音触发一次，让节点图与解码路径提前热起来
   for (const part of ["kick", "snare", "hihat"] as PartId[]) {
-    playSample(ctx, id, part, ctx.currentTime + hitBudgetSec, 0.0001);
+    playSample(ctx, id, part, ctx.currentTime + hitLookaheadSec, 0.0001);
   }
 }
 
-/**
- * @param atMs 真实敲击时刻（performance.now() 基准）；给了就按它排程
- */
-export function playDrum(
-  part: PartId,
-  velocity = 100,
-  kitId?: number,
-  note?: number,
-  atMs?: number,
-): void {
+export function playDrum(part: PartId, velocity = 100, kitId?: number, note?: number): void {
   const ctx = getAudioContext();
   recordClockSkew(ctx);
-  const t = scheduleTime(ctx, atMs);
+  const t = ctx.currentTime + hitLookaheadSec;
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
 
   if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
