@@ -295,6 +295,9 @@ function makeRoom(ctx: AudioContext, part: PartId): void {
   }
 }
 
+/**
+ * @param t 排程时刻（ctx 秒）；传 0 = **立即发声**（击打专用，零排程）
+ */
 function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v: number): boolean {
   const buf = buffers.get(`${kitId}:${part}`);
   if (!buf) {
@@ -306,8 +309,10 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
   src.buffer = buf;
   const g = takeGain(ctx, v);
   src.connect(g);
-  src.start(t);
-  const voice: Voice = { part, src, gain: g, at: t };
+  // start(0) 让声卡在最近的一个渲染块立刻出声；任何人为提前量都可能把这一声
+  // 推到下一个音频块，听感上就是突然被拖后 10~20ms。
+  src.start(t > 0 ? t : 0);
+  const voice: Voice = { part, src, gain: g, at: t > 0 ? t : ctx.currentTime };
   voices.push(voice);
   src.onended = () => {
     dropVoice(voice);
