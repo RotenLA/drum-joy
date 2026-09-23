@@ -39,12 +39,13 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
 
   useEffect(() => { void midiManager.init(); }, []);
   useEffect(() => {
-    const off = midiManager.onNote((note, velocity) => {
+    const off = midiManager.onNote((note, velocity, atMs) => {
       const part = partOfNote(note);
       if (!part) return;
       stickManager.switchLayerForHit(part, VISIBLE_PARTS.nine);
       flashes.current[part] = performance.now() + 200;
-      if (loadKitEnabled()) playDrum(part, velocity, undefined, note);
+      if (loadKitEnabled()) playDrum(part, velocity, undefined, note, atMs);
+
       if (step.kind === "hold" && part === "pedalHat") { setHeld(true); return; }
       if (!step.targets?.includes(part) || passed) return;
       setProgress((value) => { const next = value + 1; if (next >= needed) setPassed(true); return Math.min(next, needed); });
