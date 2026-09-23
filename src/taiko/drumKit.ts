@@ -142,9 +142,9 @@ export async function ensureKitLoaded(kitId: number): Promise<void> {
       try {
         const res = await fetch(urls.m4a);
         const raw = await res.arrayBuffer();
-        const decoded = await ctx.decodeAudioData(raw);
-        // 提前对齐声卡采样率：播放时纯内存直读，免去任何实时重采样
-        const buf = await alignSampleRate(decoded, ctx.sampleRate);
+        // 原样解码保留：浏览器自己的混音管道会处理采样率差异，
+        // 不再做离线转码，避免任何音高/长度上的细微改变
+        const buf = await ctx.decodeAudioData(raw);
         buffers.set(`${kitId}:${part}`, buf);
       } catch {
         // 单个样本失败就继续用合成音
