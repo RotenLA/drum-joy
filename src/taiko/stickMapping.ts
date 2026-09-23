@@ -2,10 +2,10 @@
  * 鼓棒定位：直接采用宿主（开发）给出的真实鼓面角度分区标定，
  * 不再需要网页端自己做「位置捕捉」采集与仿射拟合。
  *
- * 开发提供的判定标准（Vector2：x = 偏航/左右，y = 俯仰/上下，单位度）：
- *   俯仰分水岭 pitchingBorder = 21
- *   上层（y > 21）：x < -38.5 吊镲 | -38.5~4 高通 | 4~52 中通 | x > 52 叮叮镲
- *   下层（y ≤ 21）：x ≤ -26 踩镲 | -26~23 军鼓 | x ≥ 23 地通
+ * 开发提供的判定标准（鼓面区域设置图，x = 偏航/左右，y = 俯仰/上下，单位度）：
+ *   俯仰分水岭 pitchingBorder = 24.5
+ *   上层（y > 24.5）：x < -45.8 吊镲 | -45.8~-2.2 高通 | -2.2~45.4 中通 | x > 45.4 叮叮镲
+ *   下层（y ≤ 24.5）：x < -25.5 踩镲 | -25.5~22.6 军鼓 | x > 22.6 地通
  *
  * 映射策略：每个分区把偏航角按区间线性映射到该鼓盘的横向范围（分区中心 →
  * 鼓盘中心，分区边界 → 两鼓之间的中缝），上下两层各算一次再按俯仰角平滑过渡，
@@ -16,7 +16,7 @@ import { PAD_ANCHORS, type PartId } from "./laneLayouts";
 import type { StickPose } from "./stickInput";
 
 /** 俯仰分水岭（度）：开发端 pitchingBorder */
-export const PITCH_BORDER = 21;
+export const PITCH_BORDER = 24.5;
 export type StickLayer = "upper" | "lower";
 
 interface Zone {
@@ -28,17 +28,17 @@ interface Zone {
 
 /** 上层四件（俯仰抬起） */
 const UPPER_ZONES: readonly Zone[] = [
-  { part: "crash", lo: -72, hi: -38.5 },
-  { part: "highTom", lo: -38.5, hi: 4 },
-  { part: "midTom", lo: 4, hi: 52 },
-  { part: "ride", lo: 52, hi: 92 },
+  { part: "crash", lo: -90, hi: -45.8 },
+  { part: "highTom", lo: -45.8, hi: -2.2 },
+  { part: "midTom", lo: -2.2, hi: 45.4 },
+  { part: "ride", lo: 45.4, hi: 92 },
 ];
 
 /** 下层三件（俯仰放平） */
 const LOWER_ZONES: readonly Zone[] = [
-  { part: "hihat", lo: -66, hi: -26 },
-  { part: "snare", lo: -26, hi: 23 },
-  { part: "floorTom", lo: 23, hi: 64 },
+  { part: "hihat", lo: -80, hi: -25.5 },
+  { part: "snare", lo: -25.5, hi: 22.6 },
+  { part: "floorTom", lo: 22.6, hi: 80 },
 ];
 
 /** 俯仰可用范围：上层向上、下层向下各留一段行程用于纵向微调 */
@@ -113,9 +113,14 @@ export function layerOfPitch(pitch: number, current: StickLayer): StickLayer {
   return current;
 }
 
-/** 按开发标定判定当前角度指向哪个鼓面（用于调试展示） */
-export function partOfPose(pose: StickPose): PartId {
-  const zones = pose.p > PITCH_BORDER ? UPPER_ZONES : LOWER_ZONES;
+/**
+ * 按开发标定判定当前角度指向哪个鼓面。
+ * 传入 currentLayer 时上下层带滞回（落在分界附近保持当前层）；
+ * 不传则按分水岭直接分（用于调试展示）。
+ */
+export function partOfPose(pose: StickPose, currentLayer?: StickLayer): PartId {
+  const layer = currentLayer !== undefined ? layerOfPitch(pose.p, currentLayer) : pose.p > PITCH_BORDER ? "upper" : "lower";
+  const zones = layer === "upper" ? UPPER_ZONES : LOWER_ZONES;
   const hit = zones.find((z) => pose.y >= z.lo && pose.y < z.hi);
   return (hit ?? (pose.y < 0 ? zones[0]! : zones[zones.length - 1]!)).part;
 }
