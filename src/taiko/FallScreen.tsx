@@ -29,6 +29,18 @@ import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibr
 import { addHistory } from "./history";
 import { TutorialOverlay, markTutorialSeen } from "./tutorial/TutorialOverlay";
 
+/** 帧数与调试日志默认隐藏；需要排查时用 ?debug=1 或控制台 window.__pd2uDebug = true */
+function debugVisible() {
+  if (typeof window === "undefined") return false;
+  const w = window as unknown as { __pd2uDebug?: boolean };
+  if (w.__pd2uDebug === true) return true;
+  try {
+    return new URLSearchParams(window.location.search).get("debug") === "1";
+  } catch {
+    return false;
+  }
+}
+
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±100ms / Good ±200ms，超时未击为 Miss（调手感改这里） */
 const PERFECT_MS = 100;
