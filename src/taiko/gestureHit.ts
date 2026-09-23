@@ -44,12 +44,16 @@ export interface GestureHit {
 interface SideState {
   lastP: number | null;
   lastAt: number;
-  /** 本次连续下探开始时刻；0 = 当前没有进行中的下探 */
-  downStartAt: number;
-  /** 本次下探的峰值角速度（度/秒，正值） */
+  /** 是否正处于一次下挥中 */
+  descending: boolean;
+  /** 本次下挥的峰值角速度（度/秒，正值） */
   peak: number;
-  /** 本次下探累计行程（度） */
+  /** 本次下挥累计行程（度） */
   travel: number;
+  /** 本次下挥到目前为止的最低俯仰角 */
+  minP: number;
+  /** 最近一次「角度确实又变低了」的时刻（停住判定用） */
+  lastProgressAt: number;
   /** 最近一帧完整姿态（触底结算时作为落点） */
   lastPose: StickPose | null;
   lastHitAt: number;
@@ -58,12 +62,15 @@ interface SideState {
 const newSide = (): SideState => ({
   lastP: null,
   lastAt: 0,
-  downStartAt: 0,
+  descending: false,
   peak: 0,
   travel: 0,
+  minP: 0,
+  lastProgressAt: 0,
   lastPose: null,
   lastHitAt: 0,
 });
+
 
 
 /** 峰值角速度 → MIDI 力度 */
