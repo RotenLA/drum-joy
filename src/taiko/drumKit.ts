@@ -484,8 +484,8 @@ export async function warmUpDrums(kitId?: number): Promise<void> {
 }
 
 /**
- * @param atMs 击打真实发生时刻（performance.now() 基准）；传入后发声落点按
- *   「击打时刻 + 固定微前瞻」对齐，抵掉桥接与主线程调度的随机耗时。
+ * 触发一次鼓音色。收到击打就立刻出声，不做任何排程换算。
+ * @param atMs 仅用于统计（不参与发声时刻计算）
  */
 export function playDrum(
   part: PartId,
@@ -494,14 +494,18 @@ export function playDrum(
   note?: number,
   atMs?: number,
 ): void {
+  void atMs;
   const ctx = getAudioContext();
   recordClockSkew(ctx);
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
-  // 固定微前瞻：由声卡按采样点精确落点，避免音频块边界带来的忽前忽后
-  const t = hitTime(ctx, atMs);
 
-  // 采样路径
-  if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
+  // 采样路径：零排程立刻发声（同一帧内的多个鼓件必然落在同一个声卡周期）
+  if (playSample(ctx, kitId ?? loadKitId(), part, v)) return;
+
+  // 采样未就绪时的合成兜底
+  const t = ctx.currentTime;
+
+
 
 
   switch (part) {
