@@ -44,9 +44,13 @@ export interface GestureHit {
 interface SideState {
   lastP: number | null;
   lastAt: number;
-  armed: boolean;
-  armPose: StickPose | null;
+  /** 本次连续下探开始时刻；0 = 当前没有进行中的下探 */
+  downStartAt: number;
+  /** 下探开始那一刻的姿态（落点鼓面按它判定） */
+  downPose: StickPose | null;
+  /** 本次下探的峰值角速度（度/秒，正值） */
   peak: number;
+  /** 本次下探累计行程（度） */
   travel: number;
   lastHitAt: number;
 }
@@ -54,12 +58,13 @@ interface SideState {
 const newSide = (): SideState => ({
   lastP: null,
   lastAt: 0,
-  armed: false,
-  armPose: null,
+  downStartAt: 0,
+  downPose: null,
   peak: 0,
   travel: 0,
   lastHitAt: 0,
 });
+
 
 /** 峰值角速度 → MIDI 力度 */
 function velocityOf(speed: number): number {
