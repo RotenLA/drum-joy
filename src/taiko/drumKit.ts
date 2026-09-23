@@ -410,33 +410,6 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
   osc.stop(o.t + o.decay + 0.02);
 }
 
-/**
- * 触发一次鼓音色。
- * @param part 鼓件
- * @param velocity MIDI 力度 1~127（键盘触发默认 100）
- * @param note 原始 MIDI 键位，用于逐键位响度衰减
- */
-/**
- * 固定微前瞻窗口（秒）。
- * 移动端声卡按固定音频块（约 5~20ms）输出：`start(0)` 会因为敲击落在块边界
- * 前后而随机被推到下一块，听感就是"匀速敲却忽快忽慢"。
- * 这里改为把每一声排到「击打真实时刻 + 固定窗口」，由声卡按采样点精确落点，
- * 于是整体只多出一个恒定的小延迟（人耳无感），但节奏严格均匀。
- */
-export const HIT_LOOKAHEAD_SEC = 0.014;
-
-/**
- * 把「击打真实时刻」换算成音频时钟上的发声时刻。
- * @param atMs 击打发生时刻（performance.now() 基准），缺省即当前
- */
-function hitTime(ctx: AudioContext, atMs?: number): number {
-  const now = ctx.currentTime;
-  if (atMs === undefined || !Number.isFinite(atMs)) return now + HIT_LOOKAHEAD_SEC;
-  // 从击打发生到这里的处理耗时（桥接 + 主线程调度）
-  const elapsed = Math.max(0, (perfNow() - atMs) / 1000);
-  // 处理耗时已经吃掉窗口时就立刻发声，绝不排到过去
-  return now + Math.max(0, HIT_LOOKAHEAD_SEC - elapsed);
-}
 
 
 // ---------------- 音频时钟抖动量表 ----------------
