@@ -65,6 +65,10 @@ export function FallScreen({
 }) {
   const { tr, language } = useLanguage();
   const song = useSong();
+  const [showDebug, setShowDebug] = useState(false);
+  useEffect(() => {
+    setShowDebug(debugVisible());
+  }, []);
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
   const wrapRef = useRef<HTMLDivElement | null>(null);
