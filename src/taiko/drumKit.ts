@@ -417,28 +417,12 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * @param note 原始 MIDI 键位，用于逐键位响度衰减
  */
 /**
- * 敲击发声的提前量（秒）。
- * 过去会随密集程度在 10ms / 18ms 之间自己跳，密集段声音整体后移、
- * 松下来又弹回，听上去就是「偶尔突然不跟手」。现在改成**全程固定**，
- * 开演时按实际音频块长度（baseLatency）算一次即可。
+ * 敲击发声不再有任何提前量（零排程）。
+ * 移动端声卡按固定音频块（约 5~20ms）向硬件输出：只要人为把这一声排到
+ * 「当前时间 + 提前量」，一旦这个时刻跨过了当前块的边界，系统就会把它推到
+ * 下一个块播放，听感就是突然被拖后一下。击打统一走 start(0) 立即发声。
  */
-export const HIT_LOOKAHEAD_SEC = 0.01;
-const HIT_LOOKAHEAD_MIN = 0.008;
-const HIT_LOOKAHEAD_MAX = 0.02;
-
-let hitLookaheadSec = HIT_LOOKAHEAD_SEC;
-
-/** 开演时按输出缓冲长度定一次提前量（只算一次，之后恒定） */
-export function initHitLookahead(ctx: AudioContext): void {
-  const base = Number(ctx.baseLatency ?? 0);
-  const want = Number.isFinite(base) && base > 0 ? base + 0.004 : HIT_LOOKAHEAD_SEC;
-  hitLookaheadSec = Math.max(HIT_LOOKAHEAD_MIN, Math.min(HIT_LOOKAHEAD_MAX, want));
-}
-
-/** 当前提前量（毫秒，调试面板用） */
-export function currentLookaheadMs(): number {
-  return Math.round(hitLookaheadSec * 1000);
-}
+export const HIT_LOOKAHEAD_SEC = 0;
 
 // ---------------- 音频时钟抖动量表 ----------------
 
