@@ -319,6 +319,7 @@ export async function warmUpDrums(kitId?: number): Promise<void> {
 
 /**
  * 触发一次鼓音色。收到击打就立刻出声，不做任何排程换算。
+ * 采样未就绪时保持静音（不再临时建振荡器/滤波器合成，避免移动端算力开销与失谐）。
  * @param atMs 仅用于统计（不参与发声时刻计算）
  */
 export function playDrum(
@@ -332,58 +333,6 @@ export function playDrum(
   const ctx = getAudioContext();
   recordClockSkew(ctx);
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
-
-  // 采样路径：零排程立刻发声（同一帧内的多个鼓件必然落在同一个声卡周期）
-  if (playSample(ctx, kitId ?? loadKitId(), part, v)) return;
-
-  // 采样未就绪时的合成兜底
-  const t = ctx.currentTime;
-
-
-
-
-  switch (part) {
-    case "kick":
-      // 音高下滑的鼓体 + 一层短促点击，低端喇叭上也能听清
-      toneHit(ctx, { t, gain: 0.95 * v, decay: 0.26, from: 130, to: 45 });
-      noiseHit(ctx, { t, gain: 0.18 * v, decay: 0.03, type: "lowpass", freq: 1800 });
-      break;
-    case "snare":
-      // 噪声主体（带通）+ 一层音体，军鼓的「脆」来自 1.8kHz 附近
-      noiseHit(ctx, { t, gain: 0.6 * v, decay: 0.16, type: "bandpass", freq: 1800, q: 0.8 });
-      noiseHit(ctx, { t, gain: 0.28 * v, decay: 0.05, type: "highpass", freq: 4200 });
-      toneHit(ctx, { t, gain: 0.3 * v, decay: 0.09, from: 220, to: 170, type: "triangle" });
-      break;
-    case "hihat":
-      // 闭镲：极短高通噪声
-      noiseHit(ctx, { t, gain: 0.42 * v, decay: 0.045, type: "highpass", freq: 7200, q: 0.7 });
-      noiseHit(ctx, { t, gain: 0.2 * v, decay: 0.02, type: "bandpass", freq: 11000, q: 1.2 });
-      break;
-    case "pedalHat":
-      // 踩踏：更闷更短
-      noiseHit(ctx, { t, gain: 0.3 * v, decay: 0.035, type: "bandpass", freq: 5200, q: 0.9 });
-      break;
-    case "crash":
-      // 吊镲：长衰减亮噪声
-      noiseHit(ctx, { t, gain: 0.4 * v, decay: 1.5, type: "highpass", freq: 5200, attack: 0.004 });
-      noiseHit(ctx, { t, gain: 0.2 * v, decay: 0.5, type: "bandpass", freq: 9000, q: 0.6 });
-      break;
-    case "ride":
-      // 叮叮镲：明显的「叮」+ 较短的水声
-      noiseHit(ctx, { t, gain: 0.22 * v, decay: 0.9, type: "highpass", freq: 6800, attack: 0.003 });
-      toneHit(ctx, { t, gain: 0.16 * v, decay: 0.35, from: 3200, to: 2600, type: "triangle" });
-      break;
-    case "highTom":
-      toneHit(ctx, { t, gain: 0.7 * v, decay: 0.28, from: 320, to: 180 });
-      noiseHit(ctx, { t, gain: 0.14 * v, decay: 0.05, type: "bandpass", freq: 2600 });
-      break;
-    case "midTom":
-      toneHit(ctx, { t, gain: 0.7 * v, decay: 0.32, from: 250, to: 140 });
-      noiseHit(ctx, { t, gain: 0.13 * v, decay: 0.05, type: "bandpass", freq: 2200 });
-      break;
-    case "floorTom":
-      toneHit(ctx, { t, gain: 0.8 * v, decay: 0.42, from: 180, to: 95 });
-      noiseHit(ctx, { t, gain: 0.12 * v, decay: 0.06, type: "bandpass", freq: 1600 });
-      break;
-  }
+  playSample(ctx, kitId ?? loadKitId(), part, v);
 }
+
