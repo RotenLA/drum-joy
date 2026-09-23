@@ -125,6 +125,33 @@ export function saveKitId(id: number): number {
 const buffers = new Map<string, AudioBuffer>();
 const loading = new Set<number>();
 
+/**
+ * 把采样重采样到声卡原生采样率。
+ * 样本多为 44.1kHz，而安卓声卡通常跑 48kHz；两者不一致时浏览器会在
+ * **播放瞬间**做实时插值重采样，密集敲击叠加几路就会出现音频线程的突发
+ * 计算尖刺（听感就是"偶尔突然慢一下"）。这里在加载阶段一次性算好。
+ */
+async function alignSampleRate(buf: AudioBuffer, rate: number): Promise<AudioBuffer> {
+  if (Math.abs(buf.sampleRate - rate) < 1) return buf;
+  const w = globalThis as unknown as {
+    OfflineAudioContext?: new (ch: number, len: number, rate: number) => OfflineAudioContext;
+    webkitOfflineAudioContext?: new (ch: number, len: number, rate: number) => OfflineAudioContext;
+  };
+  const Off = w.OfflineAudioContext ?? w.webkitOfflineAudioContext;
+  if (!Off) return buf;
+  try {
+    const len = Math.max(1, Math.ceil((buf.duration * rate) | 0) || 1);
+    const off = new Off(buf.numberOfChannels, len, rate);
+    const src = off.createBufferSource();
+    src.buffer = buf;
+    src.connect(off.destination);
+    src.start(0);
+    return await off.startRendering();
+  } catch {
+    return buf;
+  }
+}
+
 /** 后台加载某套鼓组的全部样本；加载完成前继续用合成音兜底 */
 export async function ensureKitLoaded(kitId: number): Promise<void> {
   if (typeof window === "undefined") return;
@@ -141,7 +168,9 @@ export async function ensureKitLoaded(kitId: number): Promise<void> {
       try {
         const res = await fetch(urls.m4a);
         const raw = await res.arrayBuffer();
-        const buf = await ctx.decodeAudioData(raw);
+        const decoded = await ctx.decodeAudioData(raw);
+        // 提前对齐声卡采样率：播放时纯内存直读，免去任何实时重采样
+        const buf = await alignSampleRate(decoded, ctx.sampleRate);
         buffers.set(`${kitId}:${part}`, buf);
       } catch {
         // 单个样本失败就继续用合成音
@@ -179,8 +208,8 @@ const VOICE_LIMITS = isIOS()
 const MAX_VOICES_PER_PART = VOICE_LIMITS.perPart;
 /** 全局最多同时发声数（密集段防止音频线程被压满） */
 const MAX_VOICES_TOTAL = VOICE_LIMITS.total;
-/** 掐音淡出时长（秒），足够短听不出断口 */
-const CHOKE_SEC = 0.035;
+/** 掐音收尾时长（秒）：只用一个瞬时台阶，不排自动化曲线 */
+const CHOKE_SEC = 0.006;
 
 interface Voice {
   part: PartId;
@@ -192,13 +221,17 @@ interface Voice {
 
 const voices: Voice[] = [];
 
+/**
+ * 立即掐音：直接把增益写成 0 并停播。
+ * 过去的 35ms 线性渐变会往音频渲染线程塞一条自动化曲线，密集段多路叠加时
+ * 参数队列会和新采样的启动抢锁，正是"触发了但采样慢一下"的来源之一。
+ */
 function choke(ctx: AudioContext, v: Voice): void {
   const t = ctx.currentTime;
   try {
-    // 单段快速收尾：不再做多段曲线排程，密集段少给音频线程添活
     v.gain.gain.cancelScheduledValues(t);
-    v.gain.gain.linearRampToValueAtTime(0.0001, t + CHOKE_SEC);
-    v.src.stop(t + CHOKE_SEC + 0.01);
+    v.gain.gain.value = 0.0001;
+    v.src.stop(t + CHOKE_SEC);
   } catch {
     // 已停止
   }
@@ -262,6 +295,9 @@ function makeRoom(ctx: AudioContext, part: PartId): void {
   }
 }
 
+/**
+ * @param t 排程时刻（ctx 秒）；传 0 = **立即发声**（击打专用，零排程）
+ */
 function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v: number): boolean {
   const buf = buffers.get(`${kitId}:${part}`);
   if (!buf) {
@@ -273,8 +309,10 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, t: number, v
   src.buffer = buf;
   const g = takeGain(ctx, v);
   src.connect(g);
-  src.start(t);
-  const voice: Voice = { part, src, gain: g, at: t };
+  // start(0) 让声卡在最近的一个渲染块立刻出声；任何人为提前量都可能把这一声
+  // 推到下一个音频块，听感上就是突然被拖后 10~20ms。
+  src.start(t > 0 ? t : 0);
+  const voice: Voice = { part, src, gain: g, at: t > 0 ? t : ctx.currentTime };
   voices.push(voice);
   src.onended = () => {
     dropVoice(voice);
@@ -379,28 +417,12 @@ function toneHit(ctx: AudioContext, o: ToneOpts): void {
  * @param note 原始 MIDI 键位，用于逐键位响度衰减
  */
 /**
- * 敲击发声的提前量（秒）。
- * 过去会随密集程度在 10ms / 18ms 之间自己跳，密集段声音整体后移、
- * 松下来又弹回，听上去就是「偶尔突然不跟手」。现在改成**全程固定**，
- * 开演时按实际音频块长度（baseLatency）算一次即可。
+ * 敲击发声不再有任何提前量（零排程）。
+ * 移动端声卡按固定音频块（约 5~20ms）向硬件输出：只要人为把这一声排到
+ * 「当前时间 + 提前量」，一旦这个时刻跨过了当前块的边界，系统就会把它推到
+ * 下一个块播放，听感就是突然被拖后一下。击打统一走 start(0) 立即发声。
  */
-export const HIT_LOOKAHEAD_SEC = 0.01;
-const HIT_LOOKAHEAD_MIN = 0.008;
-const HIT_LOOKAHEAD_MAX = 0.02;
-
-let hitLookaheadSec = HIT_LOOKAHEAD_SEC;
-
-/** 开演时按输出缓冲长度定一次提前量（只算一次，之后恒定） */
-export function initHitLookahead(ctx: AudioContext): void {
-  const base = Number(ctx.baseLatency ?? 0);
-  const want = Number.isFinite(base) && base > 0 ? base + 0.004 : HIT_LOOKAHEAD_SEC;
-  hitLookaheadSec = Math.max(HIT_LOOKAHEAD_MIN, Math.min(HIT_LOOKAHEAD_MAX, want));
-}
-
-/** 当前提前量（毫秒，调试面板用） */
-export function currentLookaheadMs(): number {
-  return Math.round(hitLookaheadSec * 1000);
-}
+export const HIT_LOOKAHEAD_SEC = 0;
 
 // ---------------- 音频时钟抖动量表 ----------------
 
@@ -437,23 +459,25 @@ export function resetAudioJitter(): void {
 export async function warmUpDrums(kitId?: number): Promise<void> {
   const id = kitId ?? loadKitId();
   const ctx = getAudioContext();
-  initHitLookahead(ctx);
   primeGainPool(ctx);
   resetAudioJitter();
   await ensureKitLoaded(id);
   // 静音触发一次，让节点图与解码路径提前热起来
   for (const part of ["kick", "snare", "hihat"] as PartId[]) {
-    playSample(ctx, id, part, ctx.currentTime + hitLookaheadSec, 0.0001);
+    playSample(ctx, id, part, 0, 0.0001);
   }
 }
 
 export function playDrum(part: PartId, velocity = 100, kitId?: number, note?: number): void {
   const ctx = getAudioContext();
   recordClockSkew(ctx);
-  const t = ctx.currentTime + hitLookaheadSec;
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
 
-  if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
+  // 采样路径：零排程立即发声
+  if (playSample(ctx, kitId ?? loadKitId(), part, 0, v)) return;
+
+  // 合成音兜底路径必须给出具体时刻
+  const t = ctx.currentTime;
 
   switch (part) {
     case "kick":
