@@ -69,8 +69,8 @@ export function FpsBadge() {
           <div className="mt-0.5 text-[rgba(255,255,255,0.65)]" title="长帧：累计次数 / 最近一次耗时（>30ms视为长帧）">
             LF {jitter.longFrames} ({jitter.lastLong}ms)
           </div>
-          <div className="mt-0.5 text-[rgba(255,255,255,0.65)]" title="鼓声：当前同时发声数 / 当前发声提前量">
-            AU {jitter.voices} / {jitter.lookahead}ms
+          <div className="mt-0.5 text-[rgba(255,255,255,0.65)]" title="鼓声：当前同时发声数（击打为零排程立即发声）">
+            AU {jitter.voices}
           </div>
           <div
             className="mt-0.5 text-[rgba(255,255,255,0.65)]"
