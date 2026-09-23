@@ -1,0 +1,137 @@
+/**
+ * 角度触发击打（实验版，仅测试模式使用）
+ *
+ * 思路：宿主的姿态流（window.__pd2uSticks）比蓝牙 MIDI 更快更均匀，
+ * 所以手部七个鼓面的「敲到了」不再等 MIDI NoteOn，而是直接从俯仰角轨迹里
+ * 识别「快速下探 → 触底反弹」的拐点，拐点出现的那一帧立刻判定为一次击打。
+ *
+ * 落点鼓面沿用开发标定的角度分区（stickMapping），力度由下探角速度映射。
+ * 双脚踏板（kick / pedalHat）仍由 MIDI 负责，本模块不处理。
+ */
+import { PART_BY_ID, type PartId } from "./laneLayouts";
+import { partOfPose } from "./stickMapping";
+import { stickManager, type StickPose, type StickSide, type StickSnapshot } from "./stickInput";
+
+/** 进入下探状态的角速度阈值（度/秒，负向为往下） */
+const ARM_SPEED = 170;
+/** 下探结束（触底 / 反弹）判定：角速度回升到这个值以上 */
+const RELEASE_SPEED = 55;
+/** 同一根棒两次击打的最短间隔（毫秒） */
+const REFRACTORY_MS = 85;
+/** 一次下探的最小幅度（度），避免轻微抖动误触 */
+const MIN_TRAVEL_DEG = 6;
+
+export interface GestureHit {
+  side: StickSide;
+  part: PartId;
+  /** MIDI 力度 1-127（由下探速度映射） */
+  velocity: number;
+  /** 击打时刻（performance.now() 基准） */
+  atMs: number;
+  /** 峰值下探角速度（度/秒，调试用） */
+  speed: number;
+}
+
+interface SideState {
+  lastP: number | null;
+  lastAt: number;
+  armed: boolean;
+  armPose: StickPose | null;
+  peak: number;
+  travel: number;
+  lastHitAt: number;
+}
+
+const newSide = (): SideState => ({
+  lastP: null,
+  lastAt: 0,
+  armed: false,
+  armPose: null,
+  peak: 0,
+  travel: 0,
+  lastHitAt: 0,
+});
+
+/** 峰值角速度 → MIDI 力度 */
+function velocityOf(speed: number): number {
+  const t = Math.max(0, Math.min(1, (speed - ARM_SPEED) / 700));
+  return Math.round(52 + t * 75);
+}
+
+export function noteOfPart(part: PartId): number | undefined {
+  return PART_BY_ID[part]?.notes[0];
+}
+
+class GestureHitDetector {
+  private sides: Record<StickSide, SideState> = { l: newSide(), r: newSide() };
+  private off: (() => void) | null = null;
+  private emit: ((hit: GestureHit) => void) | null = null;
+
+  /** 开始监听姿态流并派发击打；返回停止函数 */
+  start(onHit: (hit: GestureHit) => void): () => void {
+    this.stop();
+    this.emit = onHit;
+    this.off = stickManager.onFrame((snap) => this.feed(snap));
+    return () => this.stop();
+  }
+
+  stop(): void {
+    this.off?.();
+    this.off = null;
+    this.emit = null;
+    this.sides = { l: newSide(), r: newSide() };
+  }
+
+  private feed(snap: StickSnapshot): void {
+    this.feedSide("l", snap.l, snap.at);
+    this.feedSide("r", snap.r, snap.at);
+  }
+
+  private feedSide(side: StickSide, pose: StickPose | null, at: number): void {
+    const s = this.sides[side];
+    if (!pose) {
+      this.sides[side] = newSide();
+      return;
+    }
+    const prevP = s.lastP;
+    const dt = (at - s.lastAt) / 1000;
+    s.lastP = pose.p;
+    s.lastAt = at;
+    if (prevP === null || dt <= 0 || dt > 0.25) return;
+
+    // 角速度：负值代表棒头正在往下挥
+    const v = (pose.p - prevP) / dt;
+
+    if (!s.armed) {
+      if (v <= -ARM_SPEED) {
+        s.armed = true;
+        s.armPose = { p: prevP, y: pose.y };
+        s.peak = -v;
+        s.travel = prevP - pose.p;
+      }
+      return;
+    }
+
+    s.peak = Math.max(s.peak, -v);
+    s.travel += Math.max(0, prevP - pose.p);
+
+    // 触底 / 反弹 → 立刻出这一下
+    if (v > -RELEASE_SPEED) {
+      const armed = s.armPose;
+      const peak = s.peak;
+      const travel = s.travel;
+      s.armed = false;
+      s.armPose = null;
+      s.peak = 0;
+      s.travel = 0;
+      if (!armed || travel < MIN_TRAVEL_DEG) return;
+      if (at - s.lastHitAt < REFRACTORY_MS) return;
+      s.lastHitAt = at;
+      // 落点用「下探开始时」的姿态：那一刻棒还指在目标鼓面上
+      const part = partOfPose(armed);
+      this.emit?.({ side, part, velocity: velocityOf(peak), atMs: at, speed: peak });
+    }
+  }
+}
+
+export const gestureHitDetector = new GestureHitDetector();

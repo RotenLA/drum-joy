@@ -8,6 +8,9 @@ import { DeviceToast } from "./DeviceToast";
 import { ensureKitLoaded, loadKitEnabled, loadKitId } from "./drumKit";
 import { Toaster } from "@/components/ui/sonner";
 import { debugLog } from "./debugLog";
+import { LabHub, type LabGame } from "./LabHub";
+import { useLanguage } from "./i18n";
+
 
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
@@ -42,6 +45,11 @@ export function TaikoShell() {
 
 function ShellInner() {
   const [settings, setSettings] = useState<TaikoSettings>(DEFAULT_SETTINGS);
+  /** null = 正式版本；"hub" = 测试主界面；其余 = 已进入的测试模式 */
+  const [lab, setLab] = useState<"hub" | LabGame | null>(null);
+  const { tr } = useLanguage();
+
+
 
   useEffect(() => {
     try { const raw = localStorage.getItem(SETTINGS_KEY); if (raw) setSettings((s) => ({ ...s, ...(JSON.parse(raw) as Partial<TaikoSettings>) })); } catch { /* 忽略损坏设置 */ }
@@ -64,12 +72,26 @@ function ShellInner() {
 
   return (
     <div className="taiko-root overflow-hidden bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
-      <main className="h-full min-h-0 min-w-0 overflow-hidden">
-        <FallScreen
-          speed={settings.speed}
-          onSpeedChange={(speed) => updateSettings({ speed })}
-          onExit={exitApp}
-        />
+      <main className="relative h-full min-h-0 min-w-0 overflow-hidden">
+        {lab === "rhythm" ? (
+          <FallScreen
+            key="lab-rhythm"
+            speed={settings.speed}
+            onSpeedChange={(speed) => updateSettings({ speed })}
+            onExit={() => setLab("hub")}
+            gestureHits
+            exitLabel={tr("返回", "Back")}
+          />
+        ) : (
+          <FallScreen
+            key="release"
+            speed={settings.speed}
+            onSpeedChange={(speed) => updateSettings({ speed })}
+            onExit={exitApp}
+            onSecretUnlock={() => setLab("hub")}
+          />
+        )}
+        {lab === "hub" && <LabHub onPick={(g) => setLab(g)} onBack={() => setLab(null)} />}
       </main>
       <DeviceToast />
       <Toaster position="top-center" />

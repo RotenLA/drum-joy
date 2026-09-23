@@ -6,6 +6,8 @@ import { songPlayer } from "./player";
 import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
+import { gestureHitDetector, noteOfPart } from "./gestureHit";
+
 import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick, getAudioContext, unlockAudio } from "./metronome";
 import { loadKitEnabled, playDrum, warmUpDrums } from "./drumKit";
@@ -55,12 +57,20 @@ export function FallScreen({
   suspended = false,
   onSpeedChange,
   onExit,
+  gestureHits = false,
+  exitLabel,
+  onSecretUnlock,
 }: {
   speed: number;
   suspended?: boolean;
   onSpeedChange?: ((s: number) => void) | undefined;
   onExit?: (() => void) | undefined;
+  /** 实验版：手部七个鼓面改由鼓棒角度判定，踏板仍走 MIDI */
+  gestureHits?: boolean;
+  exitLabel?: string | undefined;
+  onSecretUnlock?: (() => void) | undefined;
 }) {
+
   const { tr, language } = useLanguage();
   const song = useSong();
   const { stems } = song;
@@ -293,13 +303,16 @@ export function FallScreen({
   );
 
   // MIDI 击打（note-on 命中；左踏板另外跟踪按住 / 抬起）
+  // 实验版（gestureHits）里手部鼓面交给角度判定，MIDI 只负责两个踏板。
   useEffect(() => {
     void midiManager.init();
     unlockAudio(); // iOS/WKWebView：首次手势里接通音频输出，避免第一批敲击抖动
     const offNote = midiManager.onNote((note, vel, atMs) => {
       const part = partOfNote(note);
       if (!part) return;
+      const isPedal = part === "pedalHat" || part === "kick";
       if (part === "pedalHat") pedalHeldRef.current = true;
+      if (gestureHits && !isPedal) return;
       if (parts.includes(part)) {
         stickManager.switchLayerForHit(part, parts);
         hitPart(part, atMs, vel, note);
@@ -313,7 +326,18 @@ export function FallScreen({
       offNote();
       offUp();
     };
-  }, [hitPart, parts]);
+  }, [hitPart, parts, gestureHits]);
+
+  // 实验版：角度触发手部击打（快速下探 → 触底反弹的那一帧立刻出声判定）
+  useEffect(() => {
+    if (!gestureHits) return;
+    return gestureHitDetector.start((hit) => {
+      if (!parts.includes(hit.part)) return;
+      stickManager.switchLayerForHit(hit.part, parts);
+      hitPart(hit.part, hit.atMs, hit.velocity, noteOfPart(hit.part));
+    });
+  }, [gestureHits, hitPart, parts]);
+
 
   // 手动开始 → 4 拍倒计时（四分音符）→ 播放
   const start = useCallback(() => {
@@ -702,7 +726,10 @@ export function FallScreen({
             onOpenSettings={() => setSettingsOpen(true)}
             onExit={onExit}
             onStartTutorial={() => setTutorialOpen(true)}
+            exitLabel={exitLabel}
+            onSecretUnlock={onSecretUnlock}
           />
+
         )}
 
         {phase === "idle" && tutorialOpen && (
