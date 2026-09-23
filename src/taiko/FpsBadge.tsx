@@ -22,7 +22,6 @@ export function FpsBadge() {
     longFrames: number;
     lastLong: number;
     voices: number;
-    lookahead: number;
     audJitter: number;
     outLatency: number;
   }>({
@@ -32,7 +31,6 @@ export function FpsBadge() {
     longFrames: 0,
     lastLong: 0,
     voices: 0,
-    lookahead: 0,
     audJitter: 0,
     outLatency: 0,
   });
@@ -47,7 +45,6 @@ export function FpsBadge() {
         longFrames: latencyMeter.longFrameCount,
         lastLong: latencyMeter.lastLongFrame,
         voices: activeVoiceCount(),
-        lookahead: Math.round(currentLookaheadMs()),
         audJitter: audioJitterMs(),
         outLatency: outputLatencyMs(),
       });
