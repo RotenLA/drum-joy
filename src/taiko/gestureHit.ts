@@ -14,22 +14,20 @@ import { PART_BY_ID, type PartId } from "./laneLayouts";
 import { layerOfPitch, partOfPose } from "./stickMapping";
 import { stickManager, type StickPose, type StickSide, type StickSnapshot } from "./stickInput";
 
-/** 进入下探状态的角速度阈值（度/秒，负向为往下） */
+/** 起手门槛：一次挥击期间的峰值下探角速度（度/秒）需达到此值 */
 const ARM_SPEED = 200;
-/** 下探结束（触底 / 停住）判定：角速度回升到这个值以上 */
-const RELEASE_SPEED = 45;
-/** 同一根棒两次击打的最短间隔（毫秒） */
-const REFRACTORY_MS = 120;
-/** 一次下探的最小幅度（度），避免轻微抖动误触 */
-const MIN_TRAVEL_DEG = 7;
+/** 认定「开始往下挥」的角速度（度/秒） */
+const DOWN_MIN_SPEED = 55;
+/** 同一根棒两次击打的最短间隔（毫秒）：只滤传感器自身回弹震荡 */
+const REFRACTORY_MS = 65;
+/** 一次下探的最小累计幅度（度），避免轻微抖动误触 */
+const MIN_TRAVEL_DEG = 6;
 /**
- * 宿主姿态流只有 25~30Hz，一次挥击常被切成 3~4 帧，
- * 单帧瞬时速度到不了 ARM_SPEED。所以先把「持续往下」的帧串起来，
- * 在这个窗口（毫秒）内累计行程与峰值速度，再判断是否够一次击打。
+ * 停住判定：正在下挥时若这段时间内俯仰角没有继续变低，
+ * 视为已经触底（没有明显回弹的「按住不动」也能结算）。
  */
-const DOWN_WINDOW_MS = 160;
-/** 认定「还在往下挥」的最小角速度（度/秒）：低于此视为停住 */
-const DOWN_MIN_SPEED = 60;
+const STALL_MS = 55;
+
 
 
 export interface GestureHit {
