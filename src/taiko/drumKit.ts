@@ -208,8 +208,8 @@ const VOICE_LIMITS = isIOS()
 const MAX_VOICES_PER_PART = VOICE_LIMITS.perPart;
 /** 全局最多同时发声数（密集段防止音频线程被压满） */
 const MAX_VOICES_TOTAL = VOICE_LIMITS.total;
-/** 掐音淡出时长（秒），足够短听不出断口 */
-const CHOKE_SEC = 0.035;
+/** 掐音收尾时长（秒）：只用一个瞬时台阶，不排自动化曲线 */
+const CHOKE_SEC = 0.006;
 
 interface Voice {
   part: PartId;
@@ -221,13 +221,17 @@ interface Voice {
 
 const voices: Voice[] = [];
 
+/**
+ * 立即掐音：直接把增益写成 0 并停播。
+ * 过去的 35ms 线性渐变会往音频渲染线程塞一条自动化曲线，密集段多路叠加时
+ * 参数队列会和新采样的启动抢锁，正是"触发了但采样慢一下"的来源之一。
+ */
 function choke(ctx: AudioContext, v: Voice): void {
   const t = ctx.currentTime;
   try {
-    // 单段快速收尾：不再做多段曲线排程，密集段少给音频线程添活
     v.gain.gain.cancelScheduledValues(t);
-    v.gain.gain.linearRampToValueAtTime(0.0001, t + CHOKE_SEC);
-    v.src.stop(t + CHOKE_SEC + 0.01);
+    v.gain.gain.value = 0.0001;
+    v.src.stop(t + CHOKE_SEC);
   } catch {
     // 已停止
   }
