@@ -483,16 +483,26 @@ export async function warmUpDrums(kitId?: number): Promise<void> {
   }
 }
 
-export function playDrum(part: PartId, velocity = 100, kitId?: number, note?: number): void {
+/**
+ * @param atMs 击打真实发生时刻（performance.now() 基准）；传入后发声落点按
+ *   「击打时刻 + 固定微前瞻」对齐，抵掉桥接与主线程调度的随机耗时。
+ */
+export function playDrum(
+  part: PartId,
+  velocity = 100,
+  kitId?: number,
+  note?: number,
+  atMs?: number,
+): void {
   const ctx = getAudioContext();
   recordClockSkew(ctx);
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
+  // 固定微前瞻：由声卡按采样点精确落点，避免音频块边界带来的忽前忽后
+  const t = hitTime(ctx, atMs);
 
-  // 采样路径：零排程立即发声
-  if (playSample(ctx, kitId ?? loadKitId(), part, 0, v)) return;
+  // 采样路径
+  if (playSample(ctx, kitId ?? loadKitId(), part, t, v)) return;
 
-  // 合成音兜底路径必须给出具体时刻
-  const t = ctx.currentTime;
 
   switch (part) {
     case "kick":
