@@ -242,7 +242,7 @@ export function SongPicker({
           className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 py-2 text-sm text-[rgba(255,255,255,0.76)] backdrop-blur-[18px] transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
         >
           <LogOut size={15} />
-          {tr("退出", "Exit")}
+          {exitLabel ?? tr("退出", "Exit")}
         </button>
 
         <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
@@ -266,7 +266,20 @@ export function SongPicker({
           ).map(([id, label]) => (
           <button
             key={id}
-            onClick={() => setTab(id)}
+            onClick={() => {
+              setTab(id);
+              if (id !== "songs" || !onSecretUnlock) return;
+              // 隐藏入口：4 秒内连点 12 次「选择歌曲」进入测试版本
+              const t = tapRef.current;
+              const now = Date.now();
+              t.count = now - t.at > 4000 ? 1 : t.count + 1;
+              t.at = now;
+              if (t.count >= 12) {
+                t.count = 0;
+                onSecretUnlock();
+              }
+            }}
+
             className={`shrink-0 rounded-md px-2.5 py-2 text-xs tracking-wide transition-colors sm:px-4 sm:text-sm ${
               tab === id
                 ? "bg-[var(--taiko-accent)] text-[#12141a]"
