@@ -734,6 +734,7 @@ export function FallScreen({
 
         {phase === "idle" && tutorialOpen && (
           <TutorialOverlay
+            gestureHits={gestureHits}
             onLeave={() => {
               markTutorialSeen();
               setTutorialOpen(false);

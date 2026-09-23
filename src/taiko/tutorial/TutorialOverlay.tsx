@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { midiManager } from "../midiInput";
-import { partOfNote } from "../laneLayouts";
+import { partOfNote, type PartId } from "../laneLayouts";
+import { gestureHitDetector, noteOfPart } from "../gestureHit";
 import { loadKitEnabled, playDrum, saveKitEnabled, subscribeKitEnabled } from "../drumKit";
 import { useLanguage } from "../i18n";
 import { TutorialStage } from "./TutorialStage";
@@ -13,7 +14,7 @@ import { stickManager } from "../stickInput";
 export const TUTORIAL_SEEN_KEY = "taiko.tutorial.v3";
 export const markTutorialSeen = () => { try { localStorage.setItem(TUTORIAL_SEEN_KEY, "1"); } catch { /* memory-only environment */ } };
 
-export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
+export function TutorialOverlay({ onLeave, gestureHits = false }: { onLeave: () => void; gestureHits?: boolean }) {
   const { language } = useLanguage();
   const labels = tutorialLabels(language);
   const [index, setIndex] = useState(0);
@@ -38,21 +39,38 @@ export function TutorialOverlay({ onLeave }: { onLeave: () => void }) {
   const advance = useCallback(() => { if (index >= TUTORIAL_STEPS.length - 1) { markTutorialSeen(); onLeave(); return; } setIndex((v) => v + 1); reset(); }, [index, onLeave, reset]);
 
   useEffect(() => { void midiManager.init(); }, []);
+
+  /** 一次击打（MIDI 或角度判定共用）：出声、闪光、推进步骤进度 */
+  const onHit = useCallback((part: PartId, velocity: number, atMs?: number, note?: number) => {
+    stickManager.switchLayerForHit(part, VISIBLE_PARTS.nine);
+    flashes.current[part] = performance.now() + 200;
+    if (loadKitEnabled()) playDrum(part, velocity, undefined, note, atMs);
+
+    if (step.kind === "hold" && part === "pedalHat") { setHeld(true); return; }
+    if (!step.targets?.includes(part) || passed) return;
+    setProgress((value) => { const next = value + 1; if (next >= needed) setPassed(true); return Math.min(next, needed); });
+  }, [needed, passed, step.kind, step.targets]);
+
   useEffect(() => {
     const off = midiManager.onNote((note, velocity, atMs) => {
       const part = partOfNote(note);
       if (!part) return;
-      stickManager.switchLayerForHit(part, VISIBLE_PARTS.nine);
-      flashes.current[part] = performance.now() + 200;
-      if (loadKitEnabled()) playDrum(part, velocity, undefined, note, atMs);
-
-      if (step.kind === "hold" && part === "pedalHat") { setHeld(true); return; }
-      if (!step.targets?.includes(part) || passed) return;
-      setProgress((value) => { const next = value + 1; if (next >= needed) setPassed(true); return Math.min(next, needed); });
+      // 律动大师模式：手部鼓面只认角度判定，MIDI 只负责两个踏板
+      if (gestureHits && part !== "pedalHat" && part !== "kick") return;
+      onHit(part, velocity, atMs, note);
     });
     const offUp = midiManager.onNoteOff((note) => { if (step.kind === "hold" && partOfNote(note) === "pedalHat") { setHeld(false); if (!passed) setProgress(0); } });
     return () => { off(); offUp(); };
-  }, [held, needed, passed, step.kind, step.targets]);
+  }, [gestureHits, onHit, passed, step.kind]);
+
+  // 律动大师模式：手部击打由鼓棒角度轨迹判定，与进歌演奏完全一致
+  useEffect(() => {
+    if (!gestureHits) return;
+    return gestureHitDetector.start((hit) => {
+      onHit(hit.part, hit.velocity, hit.atMs, noteOfPart(hit.part));
+    });
+  }, [gestureHits, onHit]);
+
 
   // 100 BPM × 8 拍 = 4.8 秒；中途抬起会取消并归零。
   useEffect(() => {
