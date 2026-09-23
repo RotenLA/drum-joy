@@ -609,11 +609,9 @@ export function FallScreen({
       <div ref={wrapRef} className="relative h-full min-h-0 overflow-hidden bg-[var(--taiko-paper)]">
         <canvas ref={canvasRef} className="block h-full w-full" />
 
-        {/* 演奏区实测帧数 */}
-        {phase !== "idle" && <FpsBadge />}
-
-        {/* 可开关的调试打印小窗 */}
-        <DebugLogPanel />
+        {/* 帧数与调试日志默认隐藏，仅 ?debug=1 时出现 */}
+        {showDebug && phase !== "idle" && <FpsBadge />}
+        {showDebug && <DebugLogPanel />}
 
         {/* 顶部右侧：暂停按钮放在画布曲名/BPM 下方，避免重叠 */}
         {(phase === "playing" || phase === "countdown") && (
