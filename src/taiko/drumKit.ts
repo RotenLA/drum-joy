@@ -1,13 +1,13 @@
 /**
- * 本地鼓音色：优先播放真实采样（9 套鼓组，后台按需加载），
- * 采样未就绪或加载失败时自动退回 WebAudio 合成音，保证一定有声音。
+ * 本地鼓音色：只播放真实采样（9 套鼓组，后台按需加载）。
+ * 采样未就绪时保持静音，不做合成兜底，避免移动端 WebView 里的额外算力开销。
  *
- * 默认开启，可在谱面页全局参数里关闭；开关与鼓组选择都存 localStorage。
+ * 默认开启，可在全局设置里关闭；开关与鼓组选择都存 localStorage。
  */
 import { getAudioContext } from "./metronome";
-import { isAndroid, isIOS } from "./platform";
 import type { PartId } from "./laneLayouts";
 import { KIT_SAMPLES } from "./kitSamples";
+
 
 const KEY = "taiko.kit.v1";
 const KIT_ID_KEY = "taiko.kit.id.v1";
