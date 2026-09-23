@@ -1,13 +1,13 @@
 /**
- * 本地鼓音色：优先播放真实采样（9 套鼓组，后台按需加载），
- * 采样未就绪或加载失败时自动退回 WebAudio 合成音，保证一定有声音。
+ * 本地鼓音色：只播放真实采样（9 套鼓组，后台按需加载）。
+ * 采样未就绪时保持静音，不做合成兜底，避免移动端 WebView 里的额外算力开销。
  *
- * 默认开启，可在谱面页全局参数里关闭；开关与鼓组选择都存 localStorage。
+ * 默认开启，可在全局设置里关闭；开关与鼓组选择都存 localStorage。
  */
 import { getAudioContext } from "./metronome";
-import { isAndroid, isIOS } from "./platform";
 import type { PartId } from "./laneLayouts";
 import { KIT_SAMPLES } from "./kitSamples";
+
 
 const KEY = "taiko.kit.v1";
 const KIT_ID_KEY = "taiko.kit.id.v1";
@@ -166,17 +166,46 @@ export function releaseOtherKits(keepKitId: number): void {
   }
 }
 
-// ---------------- 采样回放（硬件采样器式直通） ----------------
+// ---------------- 采样回放（极轻量单音通道） ----------------
 
 /**
- * 返璞归真：像硬件鼓机一样，收到击打就建一个 BufferSource → 固定音量节点 →
- * 主输出，立刻 start(0)。
- * 不做排程换算、不做人为掐音、不做发声上限裁剪：
- *  - 同一帧内的多个鼓件必然被同一个声卡周期一起吐出，不会有先后错位；
- *  - 采样自己 0.2~1.5 秒就衰减完，浏览器自动回收，无需人工 stop()；
- *  - 不往音频渲染线程塞自动化曲线，不动态拆接节点图，杜绝突发卡顿与失谐。
+ * 路线 B：内嵌 WebView 里音频线程算力有限，因此按硬件鼓机的做法收敛：
+ *  - 同一个鼓件严格单音：再敲一下立刻掐掉自己上一声（真鼓敲击也会阻尼上一次震动）；
+ *  - 全局最多 6 声同时混音，超出时先掐最早那一声（FIFO）；
+ *  - 采样未就绪就静音，不再临时建振荡器/滤波器做合成兜底；
+ *  - 采样 → 固定音量节点 → 主输出，start(0) 立即出声，不做任何排程换算。
  */
-let voiceCount = 0;
+const MAX_TOTAL_VOICES = 6;
+/** 掐音用的极短淡出，避免硬切产生爆音 */
+const CHOKE_SEC = 0.006;
+
+interface Voice {
+  part: PartId;
+  src: AudioBufferSourceNode;
+  g: GainNode;
+  dead: boolean;
+}
+
+/** 按发声顺序排列的活动声音（长度极小，最多 6） */
+const voices: Voice[] = [];
+
+function killVoice(ctx: AudioContext, v: Voice): void {
+  if (v.dead) return;
+  v.dead = true;
+  const t = ctx.currentTime;
+  try {
+    v.g.gain.setValueAtTime(v.g.gain.value, t);
+    v.g.gain.linearRampToValueAtTime(0, t + CHOKE_SEC);
+    v.src.stop(t + CHOKE_SEC);
+  } catch {
+    // 已停止
+  }
+}
+
+function removeVoice(v: Voice): void {
+  const i = voices.indexOf(v);
+  if (i >= 0) voices.splice(i, 1);
+}
 
 function playSample(ctx: AudioContext, kitId: number, part: PartId, v: number): boolean {
   const buf = buffers.get(`${kitId}:${part}`);
@@ -184,6 +213,22 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, v: number): 
     void ensureKitLoaded(kitId);
     return false;
   }
+
+  // 同鼓件单音：先掐自己的上一声
+  for (let i = voices.length - 1; i >= 0; i--) {
+    const old = voices[i]!;
+    if (old.part === part) killVoice(ctx, old);
+  }
+  // 全局并发上限：掐最早的一声
+  let live = 0;
+  for (const x of voices) if (!x.dead) live++;
+  while (live >= MAX_TOTAL_VOICES) {
+    const oldest = voices.find((x) => !x.dead);
+    if (!oldest) break;
+    killVoice(ctx, oldest);
+    live--;
+  }
+
   const src = ctx.createBufferSource();
   src.buffer = buf;
   const g = ctx.createGain();
@@ -191,9 +236,11 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, v: number): 
   src.connect(g);
   g.connect(bus(ctx));
   src.start(0);
-  voiceCount++;
+  const voice: Voice = { part, src, g, dead: false };
+  voices.push(voice);
   src.onended = () => {
-    voiceCount--;
+    voice.dead = true;
+    removeVoice(voice);
     try {
       src.disconnect();
       g.disconnect();
@@ -206,15 +253,12 @@ function playSample(ctx: AudioContext, kitId: number, part: PartId, v: number): 
 
 /** 当前同时发声数（调试面板用） */
 export function activeVoiceCount(): number {
-  return voiceCount;
+  let n = 0;
+  for (const v of voices) if (!v.dead) n++;
+  return n;
 }
 
-
-
-
-
 let master: GainNode | null = null;
-let noiseBuf: AudioBuffer | null = null;
 
 function bus(ctx: AudioContext): GainNode {
   if (!master || master.context !== ctx) {
@@ -225,69 +269,7 @@ function bus(ctx: AudioContext): GainNode {
   return master;
 }
 
-/** 2 秒白噪声，全部音色共用（只生成一次） */
-function noise(ctx: AudioContext): AudioBuffer {
-  if (noiseBuf && noiseBuf.sampleRate === ctx.sampleRate) return noiseBuf;
-  const len = Math.floor(ctx.sampleRate * 2);
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-  noiseBuf = buf;
-  return buf;
-}
 
-interface NoiseOpts {
-  t: number;
-  gain: number;
-  decay: number;
-  type: BiquadFilterType;
-  freq: number;
-  q?: number;
-  attack?: number;
-}
-
-function noiseHit(ctx: AudioContext, o: NoiseOpts): void {
-  const src = ctx.createBufferSource();
-  src.buffer = noise(ctx);
-  src.playbackRate.value = 1;
-  const filt = ctx.createBiquadFilter();
-  filt.type = o.type;
-  filt.frequency.value = o.freq;
-  filt.Q.value = o.q ?? 1;
-  const g = ctx.createGain();
-  const a = o.attack ?? 0.001;
-  g.gain.setValueAtTime(0.0001, o.t);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, o.gain), o.t + a);
-  g.gain.exponentialRampToValueAtTime(0.0001, o.t + a + o.decay);
-  src.connect(filt);
-  filt.connect(g);
-  g.connect(bus(ctx));
-  src.start(o.t, Math.random() * 1.5);
-  src.stop(o.t + a + o.decay + 0.02);
-}
-
-interface ToneOpts {
-  t: number;
-  gain: number;
-  decay: number;
-  from: number;
-  to: number;
-  type?: OscillatorType;
-}
-
-function toneHit(ctx: AudioContext, o: ToneOpts): void {
-  const osc = ctx.createOscillator();
-  osc.type = o.type ?? "sine";
-  osc.frequency.setValueAtTime(o.from, o.t);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(20, o.to), o.t + o.decay);
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(Math.max(0.0002, o.gain), o.t);
-  g.gain.exponentialRampToValueAtTime(0.0001, o.t + o.decay);
-  osc.connect(g);
-  g.connect(bus(ctx));
-  osc.start(o.t);
-  osc.stop(o.t + o.decay + 0.02);
-}
 
 
 
@@ -337,6 +319,7 @@ export async function warmUpDrums(kitId?: number): Promise<void> {
 
 /**
  * 触发一次鼓音色。收到击打就立刻出声，不做任何排程换算。
+ * 采样未就绪时保持静音（不再临时建振荡器/滤波器合成，避免移动端算力开销与失谐）。
  * @param atMs 仅用于统计（不参与发声时刻计算）
  */
 export function playDrum(
@@ -350,58 +333,6 @@ export function playDrum(
   const ctx = getAudioContext();
   recordClockSkew(ctx);
   const v = Math.max(0.25, Math.min(1, velocity / 110)) * drumGainForNote(note);
-
-  // 采样路径：零排程立刻发声（同一帧内的多个鼓件必然落在同一个声卡周期）
-  if (playSample(ctx, kitId ?? loadKitId(), part, v)) return;
-
-  // 采样未就绪时的合成兜底
-  const t = ctx.currentTime;
-
-
-
-
-  switch (part) {
-    case "kick":
-      // 音高下滑的鼓体 + 一层短促点击，低端喇叭上也能听清
-      toneHit(ctx, { t, gain: 0.95 * v, decay: 0.26, from: 130, to: 45 });
-      noiseHit(ctx, { t, gain: 0.18 * v, decay: 0.03, type: "lowpass", freq: 1800 });
-      break;
-    case "snare":
-      // 噪声主体（带通）+ 一层音体，军鼓的「脆」来自 1.8kHz 附近
-      noiseHit(ctx, { t, gain: 0.6 * v, decay: 0.16, type: "bandpass", freq: 1800, q: 0.8 });
-      noiseHit(ctx, { t, gain: 0.28 * v, decay: 0.05, type: "highpass", freq: 4200 });
-      toneHit(ctx, { t, gain: 0.3 * v, decay: 0.09, from: 220, to: 170, type: "triangle" });
-      break;
-    case "hihat":
-      // 闭镲：极短高通噪声
-      noiseHit(ctx, { t, gain: 0.42 * v, decay: 0.045, type: "highpass", freq: 7200, q: 0.7 });
-      noiseHit(ctx, { t, gain: 0.2 * v, decay: 0.02, type: "bandpass", freq: 11000, q: 1.2 });
-      break;
-    case "pedalHat":
-      // 踩踏：更闷更短
-      noiseHit(ctx, { t, gain: 0.3 * v, decay: 0.035, type: "bandpass", freq: 5200, q: 0.9 });
-      break;
-    case "crash":
-      // 吊镲：长衰减亮噪声
-      noiseHit(ctx, { t, gain: 0.4 * v, decay: 1.5, type: "highpass", freq: 5200, attack: 0.004 });
-      noiseHit(ctx, { t, gain: 0.2 * v, decay: 0.5, type: "bandpass", freq: 9000, q: 0.6 });
-      break;
-    case "ride":
-      // 叮叮镲：明显的「叮」+ 较短的水声
-      noiseHit(ctx, { t, gain: 0.22 * v, decay: 0.9, type: "highpass", freq: 6800, attack: 0.003 });
-      toneHit(ctx, { t, gain: 0.16 * v, decay: 0.35, from: 3200, to: 2600, type: "triangle" });
-      break;
-    case "highTom":
-      toneHit(ctx, { t, gain: 0.7 * v, decay: 0.28, from: 320, to: 180 });
-      noiseHit(ctx, { t, gain: 0.14 * v, decay: 0.05, type: "bandpass", freq: 2600 });
-      break;
-    case "midTom":
-      toneHit(ctx, { t, gain: 0.7 * v, decay: 0.32, from: 250, to: 140 });
-      noiseHit(ctx, { t, gain: 0.13 * v, decay: 0.05, type: "bandpass", freq: 2200 });
-      break;
-    case "floorTom":
-      toneHit(ctx, { t, gain: 0.8 * v, decay: 0.42, from: 180, to: 95 });
-      noiseHit(ctx, { t, gain: 0.12 * v, decay: 0.06, type: "bandpass", freq: 1600 });
-      break;
-  }
+  playSample(ctx, kitId ?? loadKitId(), part, v);
 }
+
