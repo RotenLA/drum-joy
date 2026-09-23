@@ -37,6 +37,17 @@ const LATE_INPUT_LIMIT_MS = 400;
 /** 倒计时拍数（四分音符，无视拍号） */
 const COUNT_IN_BEATS = 4;
 
+/** 调试窗默认隐藏：URL 带 ?debug=1 或宿主设 window.__pd2uDebug=true 才显示 */
+function debugVisible(): boolean {
+  if (typeof window === "undefined") return false;
+  if ((window as unknown as { __pd2uDebug?: boolean }).__pd2uDebug === true) return true;
+  try {
+    return new URLSearchParams(window.location.search).get("debug") === "1";
+  } catch {
+    return false;
+  }
+}
+
 type Phase = "idle" | "countdown" | "playing" | "paused" | "ended";
 
 export function FallScreen({
@@ -596,8 +607,8 @@ export function FallScreen({
       <div ref={wrapRef} className="relative h-full min-h-0 overflow-hidden bg-[var(--taiko-paper)]">
         <canvas ref={canvasRef} className="block h-full w-full" />
 
-        {/* 帧数与调试日志默认隐藏，仅 ?debug=1 时出现 */}
-        <DebugLogPanel />
+        {/* 帧数与调试日志默认隐藏，仅 ?debug=1 或 __pd2uDebug 时出现 */}
+        {debugVisible() && <DebugLogPanel />}
 
         {/* 顶部右侧：暂停按钮放在画布曲名/BPM 下方，避免重叠 */}
         {(phase === "playing" || phase === "countdown") && (
