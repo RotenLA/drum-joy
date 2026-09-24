@@ -20,6 +20,7 @@ import type { BestMap } from "./history";
 import { ratingOfAccuracy } from "./rating";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
+import type { FallMode } from "./fallMode";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 
@@ -28,11 +29,15 @@ export function CardControls({
   bests,
   speed,
   onSpeedChange,
+  fallMode,
+  onFallModeChange,
 }: {
   songId: string;
   bests: BestMap;
   speed: number;
   onSpeedChange?: ((speed: number) => void) | undefined;
+  fallMode: FallMode;
+  onFallModeChange?: ((mode: FallMode) => void) | undefined;
 }) {
   const song = useSong();
   const { tr, language } = useLanguage();
@@ -161,6 +166,25 @@ export function CardControls({
             }`}
           >
             {value}x
+          </button>
+        ))}
+      </div>
+      <div className="flex w-full items-center justify-center gap-1.5">
+        <span className="mr-0.5 text-[10px] text-[rgba(255,255,255,0.6)]">
+          {tr("下落模式", "Fall mode")}
+        </span>
+        {(["stage", "columns"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onFallModeChange?.(mode)}
+            className={`rounded-md border px-3 py-1 text-xs transition-colors ${
+              fallMode === mode
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[#12141a]"
+                : "border-[rgba(255,255,255,0.2)] bg-[rgba(0,0,0,0.28)] text-[rgba(255,255,255,0.75)]"
+            }`}
+          >
+            {mode === "stage" ? tr("舞台下落", "Stage") : tr("横排下落", "Columns")}
           </button>
         ))}
       </div>

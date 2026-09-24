@@ -32,6 +32,7 @@ import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
 import { useSong } from "./songStore";
 import { DIFFICULTIES } from "./difficulty";
+import type { FallMode } from "./fallMode";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const CALIB_TARGET = 8;
@@ -39,9 +40,13 @@ const CALIB_TARGET = 8;
 export function GlobalSettings({
   speed,
   onSpeedChange,
+  fallMode,
+  onFallModeChange,
 }: {
   speed: number;
   onSpeedChange: (s: number) => void;
+  fallMode: FallMode;
+  onFallModeChange: (mode: FallMode) => void;
 }) {
   const { tr, language } = useLanguage();
   const song = useSong();
@@ -171,6 +176,26 @@ export function GlobalSettings({
         <span className="text-[10px] text-[var(--taiko-ink)]/45">
           {tr("所有歌曲通用，只需设置一次", "Applies to every song, set once")}
         </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">
+          {tr("下落模式", "Fall mode")}
+        </span>
+        {(["stage", "columns"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onFallModeChange(mode)}
+            className={`-ml-px rounded-sm border px-3 py-1 text-xs transition-colors first:ml-0 ${
+              fallMode === mode
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+            }`}
+          >
+            {mode === "stage" ? tr("舞台下落", "Stage") : tr("横排下落", "Columns")}
+          </button>
+        ))}
       </div>
 
       {/* 画质 */}

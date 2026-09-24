@@ -11,6 +11,8 @@ import { tutorialLabels, tutorialStepCopy, type TutorialStep } from "./steps";
 import { buildPracticeChart, PRACTICE_BPM } from "./practiceChart";
 import { Metronome, unlockAudio } from "../metronome";
 import { stickManager } from "../stickInput";
+import { renderColumns } from "../columnRenderer";
+import type { FallMode } from "../fallMode";
 
 export function TutorialStage({
   step,
@@ -20,6 +22,7 @@ export function TutorialStage({
   needed,
   hold,
   restartKey,
+  fallMode,
 }: {
   step: TutorialStep;
   index: number;
@@ -28,6 +31,7 @@ export function TutorialStage({
   needed: number;
   hold: boolean;
   restartKey: number;
+  fallMode: FallMode;
 }) {
   const { language } = useLanguage();
   const labels = tutorialLabels(language);
@@ -87,7 +91,7 @@ export function TutorialStage({
       const elapsed = now - t0;
       const timeMs = chart.durationMs > 0 ? elapsed % chart.durationMs : elapsed;
       timeRef.current = timeMs;
-      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, {
+      const frame = {
         chart,
         timeMs,
         speed: 1,
@@ -99,7 +103,9 @@ export function TutorialStage({
         showNotes,
         minimalHud: true,
         sticks: stickManager.latest(),
-      });
+      };
+      if (fallMode === "columns") renderColumns(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      else renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
     };
     raf = requestAnimationFrame(draw);
     return () => {
@@ -107,7 +113,7 @@ export function TutorialStage({
       ro?.disconnect();
       if (!ro) window.removeEventListener("resize", resize);
     };
-  }, [chart, flashes, parts, showNotes, restartKey]);
+  }, [chart, flashes, parts, showNotes, restartKey, fallMode]);
 
   return (
     <div ref={wrapRef} className="relative h-full min-h-[240px] w-full overflow-hidden bg-[var(--taiko-paper)]">
