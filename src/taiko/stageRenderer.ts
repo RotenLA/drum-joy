@@ -505,7 +505,7 @@ function noteItems(
       ctx.restore();
     };
 
-    // 长音符一次绘制成完整色带，不再逐段填充/描边，彻底消除内部接缝。
+    // 长音符绘制成单一流动圆柱：圆润两端与主体连成一体，不再叠加独立音符头。
     if (hold) {
       items.push({
         depth: TRANSIT_BAND_DEPTH,
@@ -515,8 +515,8 @@ function noteItems(
           ctx.shadowColor = color;
           const ux = Math.cos(faceAngle);
           const uy = Math.sin(faceAngle);
-          const tailW = tail.rx * 0.9;
-          const headW = head.rx * 0.9;
+          const tailW = tail.rx * 0.82;
+          const headW = head.rx * 0.82;
           ctx.shadowBlur = GLOW ? 14 * scale : 0;
           const flow = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
           const phase = (f.now % 900) / 900;
@@ -529,11 +529,27 @@ function noteItems(
           ctx.fillStyle = flow;
           ctx.strokeStyle = hexToRgba(color, 0.75);
           ctx.lineWidth = Math.max(1, rx * 0.08);
+          const vx = -uy;
+          const vy = ux;
           ctx.beginPath();
           ctx.moveTo(tail.x + ux * tailW, tail.y + uy * tailW);
-          ctx.lineTo(head.x + ux * headW, head.y + uy * headW);
+          ctx.bezierCurveTo(
+            tail.x + ux * tailW + vx * tailW * 0.7,
+            tail.y + uy * tailW + vy * tailW * 0.7,
+            tail.x - ux * tailW + vx * tailW * 0.7,
+            tail.y - uy * tailW + vy * tailW * 0.7,
+            tail.x - ux * tailW,
+            tail.y - uy * tailW,
+          );
           ctx.lineTo(head.x - ux * headW, head.y - uy * headW);
-          ctx.lineTo(tail.x - ux * tailW, tail.y - uy * tailW);
+          ctx.bezierCurveTo(
+            head.x - ux * headW - vx * headW * 0.7,
+            head.y - uy * headW - vy * headW * 0.7,
+            head.x + ux * headW - vx * headW * 0.7,
+            head.y + uy * headW - vy * headW * 0.7,
+            head.x + ux * headW,
+            head.y + uy * headW,
+          );
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
@@ -542,13 +558,15 @@ function noteItems(
       });
     }
 
-    items.push({
-      depth: TRANSIT_NOTE_DEPTH,
-      draw: () => drawHead(1),
-    });
+    if (!hold) {
+      items.push({
+        depth: TRANSIT_NOTE_DEPTH,
+        draw: () => drawHead(1),
+      });
+    }
 
     const arriving = arrivalBlend(pad, x, y, faceAngle);
-    if (arriving > 0) {
+    if (!hold && arriving > 0) {
       items.push({
         depth: ARRIVAL_DEPTH,
         draw: () => drawHead(arriving),

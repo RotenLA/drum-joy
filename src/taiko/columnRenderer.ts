@@ -133,10 +133,14 @@ function drawHold(
 ) {
   const top = Math.min(point.y, tailY);
   const bottom = Math.max(point.y, tailY);
-  const halfW = point.rx * 0.72;
+  const halfW = point.rx * 0.78;
   const gradient = ctx.createLinearGradient(point.x, top, point.x, bottom);
-  gradient.addColorStop(0, hexToRgba(point.color, 0.22));
-  gradient.addColorStop(0.5, hexToRgba(point.color, 0.5));
+  const phase = (performance.now() % 900) / 900;
+  const glowAt = 0.15 + phase * 0.7;
+  gradient.addColorStop(0, hexToRgba(point.color, 0.3));
+  gradient.addColorStop(Math.max(0.02, glowAt - 0.12), hexToRgba(point.color, 0.36));
+  gradient.addColorStop(glowAt, hexToRgba(point.color, 0.72));
+  gradient.addColorStop(Math.min(0.98, glowAt + 0.12), hexToRgba(point.color, 0.36));
   gradient.addColorStop(1, hexToRgba(point.color, 0.3));
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -146,7 +150,7 @@ function drawHold(
   ctx.shadowColor = point.color;
   ctx.shadowBlur = quality.params.glow ? 9 : 0;
   ctx.beginPath();
-  ctx.roundRect(point.x - halfW, top, halfW * 2, Math.max(point.ry * 2, bottom - top), halfW);
+  ctx.roundRect(point.x - halfW, top, halfW * 2, Math.max(halfW * 2, bottom - top), halfW);
   ctx.fill();
   ctx.stroke();
   ctx.restore();
@@ -205,7 +209,7 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
         const tailY = noteY(note.timeMs + hold, f.timeMs, f.speed, topY, hitY);
         drawHold(ctx, point, tailY, alpha);
       }
-      notePoints.push({ point, alpha });
+      if (hold <= 0) notePoints.push({ point, alpha });
     }
     for (const item of notePoints) drawNote(ctx, item.point, item.alpha);
   }

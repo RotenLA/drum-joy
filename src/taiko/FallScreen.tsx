@@ -15,10 +15,11 @@ import { latencyMeter } from "./latencyMeter";
 import { debugLog } from "./debugLog";
 import { useLanguage } from "./i18n";
 import { SongPicker } from "./SongPicker";
-import { SlidersHorizontal, X } from "lucide-react";
+import { Pause, Settings, SlidersHorizontal, X } from "lucide-react";
 import { GlobalSettings } from "./GlobalSettings";
 import { renderColumns } from "./columnRenderer";
 import type { FallMode } from "./fallMode";
+import { Button } from "@/components/ui/button";
 
 
 import { DIFFICULTIES, layoutOf } from "./difficulty";
@@ -387,8 +388,12 @@ export function FallScreen({
   const start = useCallback(() => beginCountdown(0, true), [beginCountdown]);
 
   const pause = useCallback(() => {
-    if (phaseRef.current === "playing") {
-      timeRef.current = readTimeMs(performance.now());
+    if (phaseRef.current === "playing" || phaseRef.current === "countdown") {
+      const current = readTimeMs(performance.now());
+      // 倒计时中暂停后，从目标位置重新按完整拍号倒数，避免恢复到半拍。
+      timeRef.current = phaseRef.current === "countdown"
+        ? Math.max(0, countdownTargetRef.current)
+        : current;
       if (hasAudio) songPlayer.pause();
       setPhaseBoth("paused");
     }
@@ -401,13 +406,13 @@ export function FallScreen({
 
   // 打开谱面、映射或位置捕捉覆盖窗时只负责暂停，不自动续播。
   useEffect(() => {
-    if (suspended && phaseRef.current === "playing") pause();
+    if (suspended && (phaseRef.current === "playing" || phaseRef.current === "countdown")) pause();
   }, [suspended, pause]);
 
   // Unity 把 H5 切后台/锁屏时自动暂停（rAF 后台本就不走，这里把音频也停下）
   useEffect(() => {
     const onVis = () => {
-      if (document.hidden && phaseRef.current === "playing") pause();
+      if (document.hidden && (phaseRef.current === "playing" || phaseRef.current === "countdown")) pause();
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
@@ -444,9 +449,9 @@ export function FallScreen({
   // 空格暂停/继续，回车开始
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === " " && (phaseRef.current === "playing" || phaseRef.current === "paused")) {
+      if (e.key === " " && (phaseRef.current === "playing" || phaseRef.current === "countdown" || phaseRef.current === "paused")) {
         e.preventDefault();
-        if (phaseRef.current === "playing") pause();
+        if (phaseRef.current === "playing" || phaseRef.current === "countdown") pause();
         else resume();
       } else if (
         e.key === "Enter" &&
@@ -669,8 +674,24 @@ export function FallScreen({
         {/* 帧数与调试日志默认隐藏，仅 ?debug=1 或 __pd2uDebug 时出现 */}
         {debugVisible() && <DebugLogPanel />}
 
-        {/* 顶部右侧：暂停按钮放在画布曲名/BPM 下方，避免重叠 */}
-        {phase === "playing" && (
+        {/* 全局设置始终固定左上角；演奏/倒计时中打开时先安全暂停。 */}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            if (phaseRef.current === "playing" || phaseRef.current === "countdown") pause();
+            setSettingsOpen(true);
+          }}
+          aria-label={tr("全局设置", "Global settings")}
+          title={tr("全局设置", "Global settings")}
+          className="absolute left-3 top-3 z-[60] h-9 w-9 rounded-md border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[rgba(255,255,255,0.76)] backdrop-blur-[18px] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+        >
+          <Settings size={16} />
+        </Button>
+
+        {/* 顶部右侧：从倒计时开始持续显示暂停按钮。 */}
+        {(phase === "playing" || phase === "countdown") && (
           <div className="absolute right-3 top-16 z-10 flex flex-col items-end gap-2">
             <span className="hidden text-right text-xs leading-tight text-[rgba(255,255,255,0.6)] lg:block">
               {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
@@ -680,12 +701,15 @@ export function FallScreen({
               })()}
             </span>
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                type="button"
+                variant="ghost"
                 onClick={pause}
-                className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
+                className="h-8 gap-1.5 rounded-md bg-[rgba(255,255,255,0.14)] px-3 text-xs text-[rgba(255,255,255,0.92)] hover:bg-[rgba(255,255,255,0.26)]"
               >
+                <Pause size={13} />
                 {tr("暂停", "Pause")}
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -757,7 +781,6 @@ export function FallScreen({
             speed={speed}
             onSpeedChange={onSpeedChange}
             onStart={start}
-            onOpenSettings={() => setSettingsOpen(true)}
             onExit={onExit}
             onStartTutorial={() => setTutorialOpen(true)}
             exitLabel={exitLabel}
@@ -777,9 +800,9 @@ export function FallScreen({
           />
         )}
 
-        {phase === "idle" && settingsOpen && (
+        {settingsOpen && (
           <div
-            className="absolute inset-0 z-50 flex items-center justify-center bg-[var(--taiko-modal-scrim)] p-4 backdrop-blur-[18px]"
+            className="absolute inset-0 z-[70] flex items-center justify-center bg-[var(--taiko-modal-scrim)] p-4 backdrop-blur-[18px]"
             role="dialog"
             aria-modal="true"
             aria-label={tr("全局设置", "Global settings")}
