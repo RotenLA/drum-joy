@@ -40,8 +40,8 @@ const CALIB_TARGET = 8;
 export function GlobalSettings({
   speed,
   onSpeedChange,
-  fallMode,
-  onFallModeChange,
+  fallMode: _fallMode,
+  onFallModeChange: _onFallModeChange,
 }: {
   speed: number;
   onSpeedChange: (s: number) => void;
