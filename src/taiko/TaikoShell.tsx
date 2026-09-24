@@ -5,7 +5,7 @@ import { midiManager, installExternalBridge } from "./midiInput";
 import { installStickBridge } from "./stickInput";
 import { installDeviceBridge, deviceState } from "./deviceState";
 import { DeviceToast } from "./DeviceToast";
-import { ensureKitLoaded, loadKitEnabled, loadKitId } from "./drumKit";
+import { ensureKitLoaded, loadKitEnabled, loadKitId, stopAllDrums } from "./drumKit";
 import { Toaster } from "@/components/ui/sonner";
 import { debugLog } from "./debugLog";
 import { LabHub, type LabGame } from "./LabHub";
@@ -49,6 +49,8 @@ function ShellInner() {
   /** null = 正式版本；"hub" = 测试主界面；其余 = 已进入的测试模式 */
   const [lab, setLab] = useState<"hub" | LabGame | null>(null);
   const { tr } = useLanguage();
+  // 每次切换玩法都清场：掐断残留鼓声
+  useEffect(() => { stopAllDrums(); }, [lab]);
 
 
 
@@ -83,7 +85,7 @@ function ShellInner() {
             gestureHits
             exitLabel={tr("返回", "Back")}
           />
-        ) : (
+        ) : lab === null ? (
           <FallScreen
             key="release"
             speed={settings.speed}
@@ -91,7 +93,7 @@ function ShellInner() {
             onExit={exitApp}
             onSecretUnlock={() => setLab("hub")}
           />
-        )}
+        ) : null}
         {lab === "theremin" && <ThereminScreen onExit={() => setLab("hub")} />}
         {lab === "hub" && <LabHub onPick={(g) => setLab(g)} onBack={() => setLab(null)} />}
       </main>

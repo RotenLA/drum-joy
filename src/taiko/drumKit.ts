@@ -336,3 +336,10 @@ export function playDrum(
   playSample(ctx, kitId ?? loadKitId(), part, v);
 }
 
+
+/** 切换玩法时清场：立即掐断所有正在发声的鼓声 */
+export function stopAllDrums(): void {
+  const ctx = getAudioContext();
+  for (const v of voices.slice()) killVoice(ctx, v);
+  voices.length = 0;
+}

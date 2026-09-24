@@ -88,15 +88,15 @@ export class ThereminEngine {
   setPitch(x: number): number {
     const hz = MIN_HZ * Math.pow(2, Math.max(0, Math.min(1, x)) * OCTAVES);
     if (this.sine && this.tri) {
-      this.sine.frequency.setTargetAtTime(hz, this.t, 0.025);
-      this.tri.frequency.setTargetAtTime(hz, this.t, 0.025);
+      this.sine.frequency.setTargetAtTime(hz, this.t, 0.003);
+      this.tri.frequency.setTargetAtTime(hz, this.t, 0.003);
     }
     return hz;
   }
 
   /** 音量 0..1 */
   setVolume(v: number): void {
-    this.volume?.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.7, this.t, 0.03);
+    this.volume?.gain.setTargetAtTime(Math.max(0, Math.min(1, v)) * 0.7, this.t, 0.004);
   }
 
   /** 颤音：depth 0..1（最多 ±60 音分），rate 0..1（3~8Hz） */
