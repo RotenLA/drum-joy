@@ -45,7 +45,7 @@ export interface GestureHit {
 }
 
 interface SideState {
-  lastP: number | null;
+  lastTrigger: number | null;
   lastAt: number;
   /** 是否正处于一次下挥中 */
   descending: boolean;
@@ -63,7 +63,7 @@ interface SideState {
 }
 
 const newSide = (): SideState => ({
-  lastP: null,
+  lastTrigger: null,
   lastAt: 0,
   descending: false,
   peak: 0,
@@ -142,34 +142,36 @@ class GestureHitDetector {
       this.sides[side] = newSide();
       return;
     }
-    const prevP = s.lastP;
+    // 舞台模式用俯仰识别下挥；横排模式把俯仰留给 Height 选列，改用 YAW 识别挥击。
+    const triggerAngle = this.pitchOnly ? pose.y : pose.p;
+    const prevTrigger = s.lastTrigger;
     const dt = (at - s.lastAt) / 1000;
-    s.lastP = pose.p;
+    s.lastTrigger = triggerAngle;
     s.lastAt = at;
     s.lastPose = pose;
     // 层资格逐帧跟随：抬棒进上层后就留在上层（滞回），落点只看停住时在哪个分区
     this.layers[side] = layerOfPitch(pose.p, this.layers[side]);
-    if (prevP === null || dt <= 0 || dt > 0.25) return;
+    if (prevTrigger === null || dt <= 0 || dt > 0.25) return;
 
     // 角速度：负值代表棒头正在往下挥
-    const v = (pose.p - prevP) / dt;
+    const v = (triggerAngle - prevTrigger) / dt;
 
     if (!s.descending) {
       // 起手：出现明确下挥才开始追踪一次挥击
       if (v <= -DOWN_MIN_SPEED) {
         s.descending = true;
         s.peak = -v;
-        s.travel = Math.max(0, prevP - pose.p);
-        s.minP = pose.p;
+        s.travel = Math.max(0, prevTrigger - triggerAngle);
+        s.minP = triggerAngle;
         s.lastProgressAt = at;
       }
       return;
     }
 
     // 正在下挥：只要角度还在继续变低就一路累计，不做任何时间截断
-    if (pose.p < s.minP - 0.05) {
-      s.travel += s.minP - pose.p;
-      s.minP = pose.p;
+    if (triggerAngle < s.minP - 0.05) {
+      s.travel += s.minP - triggerAngle;
+      s.minP = triggerAngle;
       s.lastProgressAt = at;
       // 急刹 = 棒头撞到鼓面：不等回弹那一帧，立刻结算
       const braking = -v < s.peak * BRAKE_RATIO;
@@ -177,7 +179,7 @@ class GestureHitDetector {
       if (!braking || s.peak < ARM_SPEED - 0.5 || s.travel < MIN_TRAVEL_DEG) return;
     } else {
       // 角度不再变低 = 触底拐点；短暂持平先等一小会儿（STALL_MS）再结算
-      const rebounding = pose.p > s.minP + 0.05;
+      const rebounding = triggerAngle > s.minP + 0.05;
       if (!rebounding && at - s.lastProgressAt < STALL_MS) return;
     }
 

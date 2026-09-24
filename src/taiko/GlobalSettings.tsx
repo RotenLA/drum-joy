@@ -22,6 +22,7 @@ import { midiManager } from "./midiInput";
 import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
 import type { FallMode } from "./fallMode";
+import { Button } from "@/components/ui/button";
 
 const CALIB_TARGET = 8;
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
@@ -156,18 +157,20 @@ export function GlobalSettings({
           {tr("下落速度", "Fall speed")}
         </span>
         {SPEEDS.map((value) => (
-          <button
+          <Button
             key={value}
+            variant="outline"
+            size="sm"
             type="button"
             onClick={() => onSpeedChange(value)}
-            className={`rounded-sm border px-3 py-1 text-xs tabular-nums transition-colors ${
+            className={`h-8 min-w-14 rounded-md px-3 text-xs tabular-nums ${
               speed === value
                 ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                 : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-accent)]"
             }`}
           >
             {value}x
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -176,18 +179,20 @@ export function GlobalSettings({
           {tr("下落模式", "Fall mode")}
         </span>
         {(["stage", "columns"] as const).map((mode) => (
-          <button
+          <Button
             key={mode}
+            variant="outline"
+            size="sm"
             type="button"
             onClick={() => onFallModeChange(mode)}
-            className={`rounded-sm border px-3 py-1 text-xs transition-colors ${
+            className={`h-8 min-w-24 rounded-md px-3 text-xs ${
               fallMode === mode
                 ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                 : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-accent)]"
             }`}
           >
             {mode === "stage" ? tr("舞台下落", "Stage") : tr("横排下落", "Columns")}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -198,17 +203,19 @@ export function GlobalSettings({
           <HelpDot label={tr("画质", "Quality")} text={helpText("quality", language)} />
         </span>
         {(["auto", "high", "medium", "low"] as QualityMode[]).map((m) => (
-          <button
+          <Button
             key={m}
+            variant="outline"
+            size="sm"
             onClick={() => quality.setMode(m)}
-            className={`-ml-px rounded-sm border border-[var(--taiko-line)] px-3 py-1 text-xs transition-colors first:ml-0 ${
+            className={`h-8 min-w-16 rounded-md border-[var(--taiko-line)] px-3 text-xs ${
               qualityMode === m
                 ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
                 : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
             }`}
           >
             {tr(TIER_LABEL[m], TIER_LABEL_EN[m])}
-          </button>
+          </Button>
         ))}
         <span className="text-[10px] text-[var(--taiko-ink)]/45">
           {(() => {
@@ -255,9 +262,11 @@ export function GlobalSettings({
 
       {/* 自动校准 */}
       <div className="flex flex-wrap items-center gap-3">
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={calibrating ? finish : startCalibration}
-          className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
+          className={`h-8 min-w-28 rounded-md px-3 text-xs ${
             calibrating
               ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
               : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/80 hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
@@ -266,7 +275,7 @@ export function GlobalSettings({
           {calibrating
             ? tr(`停止校准（${taps}/${CALIB_TARGET}）`, `Stop calibrating (${taps}/${CALIB_TARGET})`)
             : tr("自动校准", "Auto calibrate")}
-        </button>
+        </Button>
         <HelpDot label={tr("自动校准", "Auto calibrate")} text={helpText("calibrate", language)} />
       </div>
     </section>

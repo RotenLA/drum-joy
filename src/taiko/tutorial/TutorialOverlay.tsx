@@ -140,12 +140,12 @@ export function TutorialOverlay({ onLeave, gestureHits = false, fallMode = "stag
     <section className="relative min-h-0 min-w-0 flex-[2.1]"><TutorialStage step={step} index={index} flashes={flashes} progress={progress} needed={needed} hold={held} restartKey={restartKey} fallMode={fallMode} clockRef={clockRef} />{passed && <div className="absolute inset-0 flex items-center justify-center bg-[rgba(8,7,9,0.34)]"><div className="rounded-lg border border-[var(--taiko-accent)] bg-[var(--taiko-glass-strong)] px-8 py-5 text-center text-xl text-[var(--taiko-accent)]">{labels.complete}</div></div>}</section>
     <aside className="taiko-scroll relative min-h-0 min-w-[260px] flex-1 overflow-y-auto border-l border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] px-5 pb-5 pt-16 backdrop-blur-[18px]">
       <div className="absolute right-3 top-3 flex flex-wrap items-center justify-end gap-2">
-        <Button variant="outline" size="sm" onClick={() => setKitOn(saveKitEnabled(!kitOn))} className={kitOn
-          ? "border-[var(--taiko-accent)] bg-[var(--taiko-glass)] text-[var(--taiko-accent)]"
-          : "border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[rgba(255,255,255,0.6)]"}>
+        <Button variant="outline" onClick={() => setKitOn(saveKitEnabled(!kitOn))} className={kitOn
+          ? "h-9 min-w-32 border-[var(--taiko-accent)] bg-[var(--taiko-glass)] px-4 text-sm text-[var(--taiko-accent)]"
+          : "h-9 min-w-32 border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-4 text-sm text-[rgba(255,255,255,0.6)]"}>
           {kitOn ? <Volume2 size={15} /> : <VolumeX size={15} />}{kitOn ? (labels.kitOn ?? "Mobile sound on") : (labels.kitOff ?? "Mobile sound off")}
         </Button>
-        <Button variant="outline" size="sm" onClick={() => { markTutorialSeen(); onLeave(); }} className="border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[var(--taiko-ink)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"><X size={15} />{labels.leave}</Button>
+        <Button variant="outline" onClick={() => { markTutorialSeen(); onLeave(); }} className="h-9 min-w-24 border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-4 text-sm text-[var(--taiko-ink)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"><X size={15} />{labels.leave}</Button>
       </div>
       <p className="text-xs tabular-nums text-[var(--taiko-accent)]">{labels.tutorial} {index + 1} / {TUTORIAL_STEPS.length}</p>
       <h2 className="mt-2 text-2xl font-semibold text-[var(--taiko-ink)]">{copy.title}</h2>
@@ -153,10 +153,10 @@ export function TutorialOverlay({ onLeave, gestureHits = false, fallMode = "stag
       {step.targets && <p className="mt-5 text-sm text-[rgba(255,255,255,0.62)]">{labels.progress}: {progress} / {needed}</p>}
       {step.kind === "parts" && <p className="mt-5 text-sm text-[rgba(255,255,255,0.62)]">{labels.progress}: {touched.size} / {VISIBLE_PARTS.nine.length}</p>}
       <div className="mt-7 flex flex-wrap gap-2">
-        {index > 0 && <Button variant="outline" onClick={goBack} className="border-[var(--taiko-glass-line)] bg-transparent text-[var(--taiko-ink)]">{language.startsWith("zh") ? (language === "zh-TW" ? "上一步" : "上一步") : "Back"}</Button>}
-        <Button onClick={advance} disabled={!canNext} className="bg-[var(--taiko-accent)] text-[var(--taiko-paper)] hover:bg-[var(--taiko-accent-2)]">{step.kind === "done" ? labels.finish : labels.next}</Button>
-        {step.targets && <Button variant="outline" onClick={reset} className="border-[var(--taiko-glass-line)] bg-transparent text-[var(--taiko-ink)]">{labels.retry}</Button>}
-        {step.targets && !passed && <Button variant="ghost" onClick={advance} className="text-[rgba(255,255,255,0.58)]">{labels.skip}</Button>}
+        {index > 0 && <Button variant="outline" onClick={goBack} className="h-9 min-w-24 border-[var(--taiko-glass-line)] bg-transparent px-4 text-sm text-[var(--taiko-ink)]">{language.startsWith("zh") ? (language === "zh-TW" ? "上一步" : "上一步") : "Back"}</Button>}
+        <Button onClick={advance} disabled={!canNext} className="h-9 min-w-24 bg-[var(--taiko-accent)] px-4 text-sm text-[var(--taiko-paper)] hover:bg-[var(--taiko-accent-2)]">{step.kind === "done" ? labels.finish : labels.next}</Button>
+        {step.targets && <Button variant="outline" onClick={reset} className="h-9 min-w-24 border-[var(--taiko-glass-line)] bg-transparent px-4 text-sm text-[var(--taiko-ink)]">{labels.retry}</Button>}
+        {step.targets && !passed && <Button variant="ghost" onClick={advance} className="h-9 min-w-24 px-4 text-sm text-[rgba(255,255,255,0.58)]">{labels.skip}</Button>}
       </div>
     </aside>
   </div>;

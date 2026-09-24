@@ -810,13 +810,13 @@ export function FallScreen({
               if (event.currentTarget === event.target) setSettingsOpen(false);
             }}
           >
-            <div className="taiko-scroll max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] p-3 shadow-2xl backdrop-blur-[24px]">
+            <div className="taiko-scroll max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] p-4 shadow-2xl backdrop-blur-[24px]">
               <div className="mb-2 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={() => setSettingsOpen(false)}
                   aria-label={tr("关闭设置", "Close settings")}
-                  className="grid h-8 w-8 place-items-center rounded-md border border-[var(--taiko-line)] text-[var(--taiko-ink)]/75 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+                  className="grid h-9 w-9 place-items-center rounded-md border border-[var(--taiko-line)] text-[var(--taiko-ink)]/75 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
                 >
                   <X size={16} />
                 </button>
@@ -833,26 +833,29 @@ export function FallScreen({
 
         {phase === "paused" && (
           <Overlay>
-            <p className="text-lg tracking-[0.3em] text-white">{tr("已暂停", "PAUSED")}</p>
-            <div className="flex gap-3">
-              <button
+            <p className="text-lg tracking-[0.3em] text-[var(--taiko-ink)]">{tr("已暂停", "PAUSED")}</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Button
+                variant="outline"
                 onClick={resume}
-                className="border border-white/70 px-6 py-2 text-sm text-white transition-colors hover:bg-white hover:text-black"
+                className="h-12 min-w-28 border-[var(--taiko-glass-line-strong)] bg-transparent px-5 text-sm text-[var(--taiko-ink)] hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
               >
                 {tr("继续", "Resume")}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
                 onClick={start}
-                className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
+                className="h-12 min-w-28 border-[var(--taiko-glass-line)] bg-transparent px-5 text-sm text-[var(--taiko-ink)]/75 hover:border-[var(--taiko-glass-line-strong)] hover:text-[var(--taiko-ink)]"
               >
                 {tr("重新开始", "Restart")}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="outline"
                 onClick={backToPicker}
-                className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
+                className="h-12 min-w-28 border-[var(--taiko-glass-line)] bg-transparent px-5 text-sm text-[var(--taiko-ink)]/75 hover:border-[var(--taiko-glass-line-strong)] hover:text-[var(--taiko-ink)]"
               >
                 {tr("退出", "Exit")}
-              </button>
+              </Button>
             </div>
           </Overlay>
         )}
@@ -897,7 +900,7 @@ export function FallScreen({
 
 function Overlay({ children }: { children: React.ReactNode }) {
   return (
-    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/55">
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-[var(--taiko-modal-scrim)]">
       {children}
     </div>
   );

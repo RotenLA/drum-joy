@@ -296,14 +296,15 @@ export function SongPicker({
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-picker-glass)] backdrop-blur-[16px]">
       {/* 顶部：退出常驻左侧，标签与搜索统一靠右；全局设置由演奏页统一承载 */}
       <div className="flex shrink-0 items-center gap-2 py-3 pl-14 pr-3 sm:pr-4">
-        <button
+        <Button
+          variant="outline"
           type="button"
           onClick={onExit}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 py-2 text-sm text-[rgba(255,255,255,0.76)] backdrop-blur-[18px] transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+          className="h-9 shrink-0 gap-1.5 rounded-md border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 text-sm text-[rgba(255,255,255,0.76)] backdrop-blur-[18px] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
         >
           <LogOut size={15} />
           {exitLabel ?? tr("退出", "Exit")}
-        </button>
+        </Button>
         <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
           <Button
             type="button"
@@ -323,8 +324,10 @@ export function SongPicker({
               ["history", tr("历史演奏", "History")],
             ] as const
           ).map(([id, label]) => (
-          <button
+          <Button
             key={id}
+            variant="ghost"
+            size="sm"
             onClick={() => {
               setTab(id);
               if (id !== "songs" || !onSecretUnlock) return;
@@ -339,14 +342,14 @@ export function SongPicker({
               }
             }}
 
-            className={`shrink-0 rounded-md px-2.5 py-2 text-xs tracking-wide transition-colors sm:px-4 sm:text-sm ${
+            className={`h-9 min-w-24 shrink-0 rounded-md px-3 text-sm tracking-wide sm:px-4 ${
               tab === id
                 ? "bg-[var(--taiko-accent)] text-[#12141a]"
                 : "bg-[rgba(255,255,255,0.08)] text-[rgba(255,255,255,0.7)] hover:bg-[rgba(255,255,255,0.16)]"
             }`}
           >
             {label}
-          </button>
+          </Button>
           ))}
 
           <label className="flex min-w-0 items-center gap-2 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-2.5 py-1.5 backdrop-blur-[18px] sm:px-3">
