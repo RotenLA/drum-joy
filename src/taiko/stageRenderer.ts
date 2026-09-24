@@ -1102,7 +1102,7 @@ function cueItems(
 /** 同刻音符的分组容差（毫秒） */
 const CHORD_TOL_MS = 15;
 
-/** 同刻音符的动态收腰包裹：两端贴合音符，中段自然收拢成细线。 */
+/** 同刻音符的混色光柱：单线连接，带轻柔外辉光与清晰亮芯。 */
 function chordItems(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -1164,7 +1164,6 @@ function chordItems(
     i = j;
     if (group.length < 2) continue;
     group.sort((a, b) => a.x - b.x);
-    const pulse = QUALITY_TIER === "low" ? 0 : (Math.sin(f.now / 150 + t0 * 0.01) + 1) * 0.7;
     const alpha = (0.46 + 0.3 * progress) * Math.min(1, progress * 8);
     const pts = group;
     items.push({
@@ -1173,48 +1172,32 @@ function chordItems(
       draw: () => {
         ctx.save();
         ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        // 每一对相邻音符使用单条闭合贝塞尔轮廓：两端张开，中段收束。
+        // 三颗以上按相邻音符连续连接，每段均从两端鼓件色自然混合。
         for (let k = 1; k < pts.length; k++) {
-          const a = pts[k - 1]!;
-          const b = pts[k]!;
-          const marginA = Math.max(2.5, a.rx * 0.15) + pulse;
-          const marginB = Math.max(2.5, b.rx * 0.15) + pulse;
-          const waist = Math.max(2.2, Math.min(a.ry, b.ry) * 0.24);
-          const midX = (a.x + b.x) / 2;
-          const midY = (a.y + b.y) / 2;
+          const a = pts[k - 1];
+          const b = pts[k];
+          if (!a || !b) continue;
           const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
           gradient.addColorStop(0, hexToRgba(a.color, alpha));
           gradient.addColorStop(1, hexToRgba(b.color, alpha));
           ctx.strokeStyle = gradient;
-          ctx.lineWidth = Math.max(1.4, h * 0.002);
+          ctx.lineWidth = Math.max(4, h * 0.007);
           ctx.shadowColor = a.color;
-          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 5 : 0;
+          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 12 : 0;
           ctx.beginPath();
-          ctx.moveTo(a.x - a.rx - marginA, a.y);
-          ctx.bezierCurveTo(
-            a.x - a.rx, a.y - a.ry - marginA,
-            a.x + a.rx, a.y - a.ry - marginA,
-            midX, midY - waist,
-          );
-          ctx.bezierCurveTo(
-            b.x - b.rx, b.y - b.ry - marginB,
-            b.x + b.rx, b.y - b.ry - marginB,
-            b.x + b.rx + marginB, b.y,
-          );
-          ctx.bezierCurveTo(
-            b.x + b.rx, b.y + b.ry + marginB,
-            b.x - b.rx, b.y + b.ry + marginB,
-            midX, midY + waist,
-          );
-          ctx.bezierCurveTo(
-            a.x + a.rx, a.y + a.ry + marginA,
-            a.x - a.rx, a.y + a.ry + marginA,
-            a.x - a.rx - marginA, a.y,
-          );
-          ctx.closePath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
           ctx.stroke();
+
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = gradient;
+          ctx.globalAlpha = 0.9;
+          ctx.lineWidth = Math.max(1.5, h * 0.0025);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
         }
         ctx.restore();
       },

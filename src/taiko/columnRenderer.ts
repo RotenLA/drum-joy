@@ -5,8 +5,10 @@ import { quality } from "./perf";
 import { drawBackground, drawHud, drawVignette, hexToRgba, stageViewport, type StageFrame } from "./stageRenderer";
 
 const LEAD_MS = 2400;
-const CHORD_TOL_MS = 15;
 const HIT_Y = 0.69;
+const YAW_MIN = -90;
+const YAW_MAX = 92;
+const STICK_Y_SHIFT = 0.035;
 
 interface ColumnGeom {
   part: PartId;
@@ -110,41 +112,44 @@ function drawNote(ctx: CanvasRenderingContext2D, point: NotePoint, alpha: number
   ctx.restore();
 }
 
-function drawEnvelope(ctx: CanvasRenderingContext2D, points: readonly NotePoint[], now: number, seed: number) {
-  if (points.length < 2) return;
-  const sorted = [...points].sort((a, b) => a.x - b.x);
-  const pulse = quality.tier === "low" ? 0 : (Math.sin(now / 150 + seed * 0.01) + 1) * 0.7;
-  for (let i = 1; i < sorted.length; i++) {
-    const a = sorted[i - 1];
-    const b = sorted[i];
-    if (!a || !b) continue;
-    const margin = 4 + pulse;
-    const waist = Math.max(2.5, Math.min(a.ry, b.ry) * 0.28);
-    const midX = (a.x + b.x) / 2;
-    const midY = (a.y + b.y) / 2;
-    const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-    gradient.addColorStop(0, a.color);
-    gradient.addColorStop(1, b.color);
-    ctx.save();
-    ctx.strokeStyle = gradient;
-    ctx.lineWidth = 1.8;
-    ctx.shadowColor = a.color;
-    ctx.shadowBlur = quality.params.glow && quality.tier !== "low" ? 7 : 0;
-    ctx.beginPath();
-    ctx.moveTo(a.x - a.rx - margin, a.y);
-    ctx.bezierCurveTo(a.x - a.rx, a.y - a.ry - margin, a.x + a.rx, a.y - a.ry - margin, midX, midY - waist);
-    ctx.bezierCurveTo(b.x - b.rx, b.y - b.ry - margin, b.x + b.rx, b.y - b.ry - margin, b.x + b.rx + margin, b.y);
-    ctx.bezierCurveTo(b.x + b.rx, b.y + b.ry + margin, b.x - b.rx, b.y + b.ry + margin, midX, midY + waist);
-    ctx.bezierCurveTo(a.x + a.rx, a.y + a.ry + margin, a.x - a.rx, a.y + a.ry + margin, a.x - a.rx - margin, a.y);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
-  }
-}
-
 function visibleNotes(chart: TaikoChart, timeMs: number, speed: number) {
   const span = LEAD_MS / Math.max(0.1, speed);
-  return chart.notes.filter((note) => note.timeMs >= timeMs - 100 && note.timeMs <= timeMs + span);
+  return chart.notes.filter((note) => {
+    const end = note.timeMs + Math.max(0, note.holdMs ?? 0);
+    return end >= timeMs - 100 && note.timeMs <= timeMs + span;
+  });
+}
+
+function noteY(timeMs: number, nowMs: number, speed: number, topY: number, hitY: number): number {
+  const travel = 1 - ((timeMs - nowMs) * speed) / LEAD_MS;
+  return topY + (hitY - topY) * Math.max(0, Math.min(1, travel));
+}
+
+function drawHold(
+  ctx: CanvasRenderingContext2D,
+  point: NotePoint,
+  tailY: number,
+  alpha: number,
+) {
+  const top = Math.min(point.y, tailY);
+  const bottom = Math.max(point.y, tailY);
+  const halfW = point.rx * 0.72;
+  const gradient = ctx.createLinearGradient(point.x, top, point.x, bottom);
+  gradient.addColorStop(0, hexToRgba(point.color, 0.22));
+  gradient.addColorStop(0.5, hexToRgba(point.color, 0.5));
+  gradient.addColorStop(1, hexToRgba(point.color, 0.3));
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = gradient;
+  ctx.strokeStyle = hexToRgba(point.color, 0.82);
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = point.color;
+  ctx.shadowBlur = quality.params.glow ? 9 : 0;
+  ctx.beginPath();
+  ctx.roundRect(point.x - halfW, top, halfW * 2, Math.max(point.ry * 2, bottom - top), halfW);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
@@ -182,7 +187,6 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  const groups: { time: number; points: NotePoint[] }[] = [];
   const notePoints: { point: NotePoint; alpha: number }[] = [];
   if (f.showNotes !== false) {
     for (const note of visibleNotes(f.chart, f.timeMs, f.speed)) {
@@ -191,15 +195,18 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
       const column = part ? byPart.get(part) : undefined;
       if (!column) continue;
       const travel = 1 - ((note.timeMs - f.timeMs) * f.speed) / LEAD_MS;
-      if (travel <= 0 || travel >= 1) continue;
-      const y = viewport.h * 0.1 + (hitY - viewport.h * 0.1) * travel;
+      const hold = Math.max(0, note.holdMs ?? 0);
+      if ((!hold && (travel <= 0 || travel >= 1)) || (hold && note.timeMs + hold < f.timeMs - 100)) continue;
+      const topY = viewport.h * 0.1;
+      const y = noteY(note.timeMs, f.timeMs, f.speed, topY, hitY);
       const point = notePoint(column, y, note.big === true);
-      notePoints.push({ point, alpha: Math.min(1, travel * 5) });
-      const group = groups.find((entry) => Math.abs(entry.time - note.timeMs) <= CHORD_TOL_MS);
-      if (group) group.points.push(point);
-      else groups.push({ time: note.timeMs, points: [point] });
+      const alpha = Math.min(1, Math.max(0.15, travel * 5));
+      if (hold > 0) {
+        const tailY = noteY(note.timeMs + hold, f.timeMs, f.speed, topY, hitY);
+        drawHold(ctx, point, tailY, alpha);
+      }
+      notePoints.push({ point, alpha });
     }
-    for (const group of groups) drawEnvelope(ctx, group.points, f.now, group.time);
     for (const item of notePoints) drawNote(ctx, item.point, item.alpha);
   }
 
@@ -221,13 +228,16 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
       const column = columns[index];
       if (!column) continue;
       const color = side === "l" ? "#7DE2FF" : "#FFC46B";
+      const yaw = Math.max(YAW_MIN, Math.min(YAW_MAX, Number.isFinite(pose.y) ? pose.y : 0));
+      const yawT = (yaw - YAW_MIN) / (YAW_MAX - YAW_MIN);
+      const tipY = hitY + viewport.h * (STICK_Y_SHIFT * (yawT - 0.5) * 2);
       ctx.strokeStyle = hexToRgba(color, 0.78);
       ctx.lineWidth = Math.max(2, viewport.h * 0.005);
       ctx.shadowColor = color;
       ctx.shadowBlur = quality.params.glow ? 10 : 0;
       ctx.beginPath();
       ctx.moveTo(column.x + (side === "l" ? -1 : 1) * column.width * 0.18, viewport.h * 1.02);
-      ctx.lineTo(column.x, hitY + viewport.h * 0.08);
+      ctx.lineTo(column.x, tipY + viewport.h * 0.08);
       ctx.stroke();
     }
   }
