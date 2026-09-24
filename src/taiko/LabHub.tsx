@@ -49,8 +49,8 @@ export function LabHub({ onPick, onBack }: { onPick: (game: LabGame) => void; on
       icon: Radio,
       title: tr("特雷门", "Theremin"),
       tag: tr("连续手势乐器", "Continuous gesture instrument"),
-      body: tr("左右决定音高，上下决定音量。", "Sweep for pitch, raise for volume."),
-      ready: false,
+      body: tr("右踏板发声，右手左右定音高、上下定音量；左踏板切三角波，左手控制颤音。", "Right pedal sounds; right stick sets pitch and volume; left pedal morphs to triangle; left stick adds vibrato."),
+      ready: true,
     },
   ];
 
