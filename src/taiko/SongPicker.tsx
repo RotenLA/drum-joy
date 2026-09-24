@@ -386,24 +386,17 @@ export function SongPicker({
                       className="relative z-10 flex h-full flex-col justify-end gap-1 p-5"
                       style={{ transform: "skewX(9deg)" }}
                     >
-                      {ready && (
-                        <span className="mb-auto mt-10 block pr-2">
-                          <CardControls songId={item.id} bests={bests} />
-                        </span>
-                      )}
                       <span className="truncate text-2xl font-semibold text-[rgba(255,255,255,0.96)]">
                         {item.title}
                       </span>
                       <span className="truncate text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
-                        {item.artist ? `${item.artist} · ` : ""}
-                        {fmtTime(item.durationMs)} · BPM {item.bpm} · {item.timeSignature[0]}/
-                        {item.timeSignature[1]}
+                        {fmtTime(item.durationMs)} · {speed}x · BPM {item.bpm}
                       </span>
-                      <span className="text-[11px] tabular-nums text-[var(--taiko-accent)]">
-                        {busyThis
-                          ? `${percent}%`
-                          : `${curDiff} · ${speed}x · ${tr("已就绪", "Ready")}`}
-                      </span>
+                      {busyThis && (
+                        <span className="text-[11px] tabular-nums text-[var(--taiko-accent)]">
+                          {percent}%
+                        </span>
+                      )}
                     </span>
                   ) : (
                     <span className="relative z-10 block h-full w-full">
@@ -411,6 +404,17 @@ export function SongPicker({
                     </span>
                   )}
                 </button>
+
+                {ready && (
+                  <div className="absolute inset-x-8 top-1/2 z-20 -translate-y-1/2">
+                    <CardControls
+                      songId={item.id}
+                      bests={bests}
+                      speed={speed}
+                      onSpeedChange={onSpeedChange}
+                    />
+                  </div>
+                )}
 
                 {ready && (
                   <button
