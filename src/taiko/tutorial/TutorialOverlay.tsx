@@ -22,7 +22,7 @@ export function TutorialOverlay({ onLeave, gestureHits = false }: { onLeave: () 
   const [held, setHeld] = useState(false);
   const [passed, setPassed] = useState(false);
   const [restartKey, setRestartKey] = useState(0);
-  /** 鼓音色开关（与全局设置同一份，双向同步） */
+  /** 手机音色开关（与全局设置同一份，双向同步） */
   const [kitOn, setKitOn] = useState(true);
   useEffect(() => {
     setKitOn(loadKitEnabled());
@@ -93,7 +93,7 @@ export function TutorialOverlay({ onLeave, gestureHits = false }: { onLeave: () 
         <Button variant="outline" size="sm" onClick={() => setKitOn(saveKitEnabled(!kitOn))} className={kitOn
           ? "border-[var(--taiko-accent)] bg-[var(--taiko-glass)] text-[var(--taiko-accent)]"
           : "border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[rgba(255,255,255,0.6)]"}>
-          {kitOn ? <Volume2 size={15} /> : <VolumeX size={15} />}{kitOn ? (labels.kitOn ?? "Drum sound on") : (labels.kitOff ?? "Drum sound off")}
+          {kitOn ? <Volume2 size={15} /> : <VolumeX size={15} />}{kitOn ? (labels.kitOn ?? "Mobile sound on") : (labels.kitOff ?? "Mobile sound off")}
         </Button>
         <Button variant="outline" size="sm" onClick={() => { markTutorialSeen(); onLeave(); }} className="border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[var(--taiko-ink)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"><X size={15} />{labels.leave}</Button>
       </div>
