@@ -13,7 +13,7 @@
 import { PART_BY_ID, type PartId } from "./laneLayouts";
 import { layerOfPitch, partOfPose } from "./stickMapping";
 import { stickManager, type StickPose, type StickSide, type StickSnapshot } from "./stickInput";
-import { columnPartOfHeight } from "./fallMode";
+import { columnPartOfYaw } from "./fallMode";
 
 /** 起手门槛：一次挥击期间的峰值下探角速度（度/秒）需达到此值 */
 const ARM_SPEED = 170;
@@ -142,8 +142,8 @@ class GestureHitDetector {
       this.sides[side] = newSide();
       return;
     }
-    // 舞台模式用俯仰识别下挥；横排模式把俯仰留给 Height 选列，改用 YAW 识别挥击。
-    const triggerAngle = this.pitchOnly ? pose.y : pose.p;
+    // 两种模式都沿用舞台轴定义：p / Height 负责上下挥击，y / YAW 负责左右落点。
+    const triggerAngle = pose.p;
     const prevTrigger = s.lastTrigger;
     const dt = (at - s.lastAt) / 1000;
     s.lastTrigger = triggerAngle;
@@ -200,7 +200,7 @@ class GestureHitDetector {
     // 途中经过的分区一律不算；上下层用滞回判定，防止分界附近串层。
     const landing = s.lastPose ?? pose;
     const part = this.pitchOnly
-      ? columnPartOfHeight(landing.p, this.visibleParts, false)
+      ? columnPartOfYaw(landing.y, this.visibleParts, false)
       : partOfPose(landing, this.layers[side]);
     if (!part) return;
     glog(`${side} 命中 ${part} p=${landing.p.toFixed(1)} y=${landing.y.toFixed(1)} peak=${Math.round(peak)}`);
