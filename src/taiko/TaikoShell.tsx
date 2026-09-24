@@ -96,13 +96,7 @@ function ShellInner() {
     };
   }, []);
   useEffect(() => {
-    const host = window as unknown as {
-      __pd2uBooted?: boolean;
-      __pd2uBootTimer?: ReturnType<typeof setTimeout>;
-    };
-    host.__pd2uBooted = true;
-    if (host.__pd2uBootTimer !== undefined) window.clearTimeout(host.__pd2uBootTimer);
-    document.getElementById("pd2u-boot-failure")?.remove();
+    (window as unknown as { __pd2uBooted?: boolean }).__pd2uBooted = true;
     installExternalBridge();
     installStickBridge();
     installDeviceBridge();

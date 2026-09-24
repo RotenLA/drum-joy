@@ -13,6 +13,8 @@ import { click as metronomeClick, getAudioContext, unlockAudio } from "./metrono
 import { loadKitEnabled, playDrum, subscribeKitEnabled, warmUpDrums } from "./drumKit";
 import { latencyMeter } from "./latencyMeter";
 import { debugLog } from "./debugLog";
+import { HelpDot } from "@/components/HelpDot";
+import { helpText } from "./helpTexts";
 import { useLanguage } from "./i18n";
 import { SongPicker } from "./SongPicker";
 import { SlidersHorizontal, X } from "lucide-react";
@@ -37,6 +39,9 @@ const PERFECT_MS = 100;
 const GOOD_MS = 200;
 /** 击打迟到超过这个毫秒数就只出声不参与判定 */
 const LATE_INPUT_LIMIT_MS = 400;
+/** 倒计时拍数（四分音符，无视拍号） */
+const COUNT_IN_BEATS = 4;
+
 /** 调试窗默认隐藏：URL 带 ?debug=1 或宿主设 window.__pd2uDebug=true 才显示 */
 function debugVisible(): boolean {
   if (typeof window === "undefined") return false;
@@ -73,7 +78,7 @@ export function FallScreen({
   onSecretUnlock?: (() => void) | undefined;
 }) {
 
-  const { tr } = useLanguage();
+  const { tr, language } = useLanguage();
   const song = useSong();
   const { stems } = song;
   const hasAudio = hasAnyStem(stems);
@@ -105,8 +110,6 @@ export function FallScreen({
   const timersRef = useRef<number[]>([]);
   const countdownStartRef = useRef(0);
   const countdownMsRef = useRef(0);
-  const countdownBeatsRef = useRef(4);
-  const countdownTargetMsRef = useRef(0);
   const beatMsRef = useRef(500);
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
@@ -234,10 +237,10 @@ export function FallScreen({
   const readTimeMs = useCallback(
     (now: number) => {
       const ph = phaseRef.current;
-      if (ph === "playing") {
+      // 倒计时与播放共用同一个时钟（音频时钟为准），从负数连续走到 0
+      if (ph === "playing" || ph === "countdown") {
         return hasAudio ? songPlayer.timeMs() : now - silentStartRef.current;
       }
-      if (ph === "countdown") return countdownTargetMsRef.current;
       if (ph === "idle") return 0;
       return timeRef.current;
     },
@@ -349,52 +352,46 @@ export function FallScreen({
   }, [gestureHits, parts, fallMode]);
 
 
-  const beginCountdown = useCallback((fromMs: number, reset: boolean) => {
+  // 手动开始 → 4 拍倒计时（四分音符）→ 播放
+  const start = useCallback(() => {
     if (!playChart || playChart.notes.length === 0) return;
     timersRef.current.forEach((t) => window.clearTimeout(t));
     timersRef.current = [];
-    if (reset) resetRun();
+    resetRun();
     playedRef.current = true;
     latencyMeter.reset();
     stickManager.resetLayers();
+    // 倒计时那 4 拍里把鼓组样本与音频节点热起来，避免首次敲某个鼓时才解码
     if (kitOnRef.current) void warmUpDrums();
     const beatMs = 60000 / playChart.bpm;
     beatMsRef.current = beatMs;
-    const [numerator, denominator] = playChart.timeSignature;
-    const countdownBeats = Math.max(1, Math.round(numerator * (4 / denominator)));
-    countdownBeatsRef.current = countdownBeats;
-    const countdownMs = countdownBeats * beatMs;
+    const countdownMs = COUNT_IN_BEATS * beatMs;
     countdownMsRef.current = countdownMs;
-    countdownTargetMsRef.current = Math.max(0, fromMs);
+    // 一次算好歌曲的绝对起播时刻，倒计时由同一时钟倒推 → 切换时不跳位
     const ctx = getAudioContext();
     const LEAD_SEC = 0.15;
     const songStartSec = ctx.currentTime + LEAD_SEC + countdownMs / 1000;
     countdownStartRef.current = performance.now();
-    timeRef.current = countdownTargetMsRef.current;
-    if (hasAudio) songPlayer.play(countdownTargetMsRef.current, songStartSec);
-    else {
-      silentStartRef.current =
-        performance.now() + LEAD_SEC * 1000 + countdownMs - countdownTargetMsRef.current;
-    }
+    timeRef.current = -countdownMs;
+    if (hasAudio) songPlayer.play(0, songStartSec);
+    else silentStartRef.current = performance.now() + LEAD_SEC * 1000 + countdownMs;
     setPhaseBoth("countdown");
-    for (let i = 0; i < countdownBeats; i++) {
+    // 倒计时滴答挂在同一条音频时间轴上
+    for (let i = 0; i < COUNT_IN_BEATS; i++) {
       metronomeClick(i === 0, songStartSec - countdownMs / 1000 + (i * beatMs) / 1000);
     }
   }, [hasAudio, playChart, resetRun, setPhaseBoth]);
-
-  const start = useCallback(() => beginCountdown(0, true), [beginCountdown]);
-
-  const resume = useCallback(() => {
-    if (phaseRef.current !== "paused") return;
-    beginCountdown(timeRef.current, false);
-  }, [beginCountdown]);
 
   const togglePause = useCallback(() => {
     if (phaseRef.current === "playing") {
       if (hasAudio) songPlayer.pause();
       setPhaseBoth("paused");
+    } else if (phaseRef.current === "paused") {
+      if (hasAudio) songPlayer.play();
+      else silentStartRef.current = performance.now() - timeRef.current;
+      setPhaseBoth("playing");
     }
-  }, [hasAudio, setPhaseBoth]);
+  }, [stems, setPhaseBoth]);
 
   // 打开谱面、映射或位置捕捉覆盖窗时只负责暂停，不自动续播。
   useEffect(() => {
@@ -438,13 +435,12 @@ export function FallScreen({
     };
   }, [phase]);
 
-  // 空格暂停；暂停后按空格同样先倒数一小节再继续。
+  // 空格暂停/继续，回车开始
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === " " && (phaseRef.current === "playing" || phaseRef.current === "paused")) {
         e.preventDefault();
-        if (phaseRef.current === "paused") resume();
-        else togglePause();
+        togglePause();
       } else if (
         e.key === "Enter" &&
         (phaseRef.current === "idle" || phaseRef.current === "ended")
@@ -454,7 +450,7 @@ export function FallScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePause, resume, start]);
+  }, [togglePause, start]);
 
   // 渲染循环
   useEffect(() => {
@@ -497,10 +493,8 @@ export function FallScreen({
 
       let ph = phaseRef.current;
       const t = readTimeMs(now);
-      if (
-        ph === "countdown" &&
-        now >= countdownStartRef.current + countdownMsRef.current + 150
-      ) {
+      // 倒计时走到 0 → 直接进入演奏（时钟不重设，音符不跳位）
+      if (ph === "countdown" && t >= 0) {
         ph = "playing";
         phaseRef.current = "playing";
         setPhase("playing");
@@ -560,30 +554,13 @@ export function FallScreen({
       };
       const countText =
         ph === "countdown"
-          ? String(
-              Math.min(
-                countdownBeatsRef.current,
-                Math.max(
-                  1,
-                  Math.ceil(
-                    (countdownStartRef.current + countdownMsRef.current + 150 - now) /
-                      beatMsRef.current,
-                  ),
-                ),
-              ),
-            )
+          ? String(Math.min(COUNT_IN_BEATS, Math.max(1, Math.ceil(-t / beatMsRef.current))))
           : null;
-      const countdownRemainingMs =
-        ph === "countdown"
-          ? Math.max(0, countdownStartRef.current + countdownMsRef.current + 150 - now)
-          : 0;
-      const visualTimeMs =
-        ph === "countdown" ? countdownTargetMsRef.current - countdownRemainingMs : t;
 
       const frame = {
         chart: frameChart,
         // 视觉偏移：只影响画面，不影响判定
-        timeMs: visualTimeMs + calibRef.current.visualMs,
+        timeMs: t + calibRef.current.visualMs,
         speed,
         now,
         flashes: flashesRef.current,
@@ -680,8 +657,8 @@ export function FallScreen({
         {/* 帧数与调试日志默认隐藏，仅 ?debug=1 或 __pd2uDebug 时出现 */}
         {debugVisible() && <DebugLogPanel />}
 
-        {/* 顶部右侧：演奏中只保留暂停 */}
-        {phase === "playing" && (
+        {/* 顶部右侧：暂停按钮放在画布曲名/BPM 下方，避免重叠 */}
+        {(phase === "playing" || phase === "countdown") && (
           <div className="absolute right-3 top-16 z-10 flex flex-col items-end gap-2">
             <span className="hidden text-right text-xs leading-tight text-[rgba(255,255,255,0.6)] lg:block">
               {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
@@ -690,12 +667,21 @@ export function FallScreen({
                 return d ? tr(d.label, d.labelEn) : "";
               })()}
             </span>
-            <button
-              onClick={togglePause}
-              className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
-            >
-              {tr("暂停", "Pause")}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={togglePause}
+                className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
+              >
+                {tr("暂停", "Pause")}
+              </button>
+              <button
+                onClick={backToPicker}
+                className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
+              >
+                {tr("返回", "Back")}
+              </button>
+              <HelpDot label={tr("游玩", "Play")} text={helpText("play", language)} />
+            </div>
           </div>
         )}
 
@@ -819,7 +805,7 @@ export function FallScreen({
             <p className="text-lg tracking-[0.3em] text-white">{tr("已暂停", "PAUSED")}</p>
             <div className="flex gap-3">
               <button
-                onClick={resume}
+                onClick={togglePause}
                 className="border border-white/70 px-6 py-2 text-sm text-white transition-colors hover:bg-white hover:text-black"
               >
                 {tr("继续", "Resume")}
@@ -834,7 +820,7 @@ export function FallScreen({
                 onClick={backToPicker}
                 className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
               >
-                {tr("退出", "Exit")}
+                {tr("选择歌曲", "Songs")}
               </button>
             </div>
           </Overlay>

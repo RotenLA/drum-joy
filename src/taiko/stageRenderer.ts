@@ -457,13 +457,10 @@ function noteItems(
     const g0 = { x: pad.gx, y: pad.gy };
     const at = (tt: number) => {
       const p = Math.pow(Math.max(0.02, Math.min(1, tt)), EASE);
-      // 左踏板长音符与开/闭镲共享同一条视觉时间轴：相同时刻的头尾同高，
-      // 横向仍沿左踏板车道前进，判定与实际鼓件归属不变。
-      const timePad = hold && part === "pedalHat" ? geomOf("hihat", w, h) : pad;
       return {
         p,
         x: g0.x + (pad.cx - g0.x) * p,
-        y: timePad.gy + (timePad.cy - timePad.gy) * p,
+        y: g0.y + (pad.cy - g0.y) * p,
         // 落到鼓面时 = 鼓面的 70%；远端约 13%，重击额外放大
         rx: Math.max(3, pad.rx * (0.18 + 0.82 * p) * 0.7 * (n.big ? 1.3 : 1)),
       };
@@ -508,7 +505,7 @@ function noteItems(
       ctx.restore();
     };
 
-    // 长音符一次绘制成笔直的连续柱体，不分段、不画圆弧端帽。
+    // 长音符一次绘制成完整色带，不再逐段填充/描边，彻底消除内部接缝。
     if (hold) {
       items.push({
         depth: TRANSIT_BAND_DEPTH,
@@ -516,11 +513,8 @@ function noteItems(
           ctx.save();
           ctx.globalAlpha = alpha;
           ctx.shadowColor = color;
-           const dx = head.x - tail.x;
-           const dy = head.y - tail.y;
-           const length = Math.max(1, Math.hypot(dx, dy));
-           const ux = -dy / length;
-           const uy = dx / length;
+          const ux = Math.cos(faceAngle);
+          const uy = Math.sin(faceAngle);
           const tailW = tail.rx * 0.9;
           const headW = head.rx * 0.9;
           ctx.shadowBlur = GLOW ? 14 * scale : 0;
@@ -1109,7 +1103,7 @@ function cueItems(
 /** 同刻音符的分组容差（毫秒） */
 const CHORD_TOL_MS = 15;
 
-/** 同刻音符的动态包裹：两端环抱音符，中段收腰为混色发光连接体。 */
+/** 同刻音符的混色光柱：单线连接，带轻柔外辉光与清晰亮芯。 */
 function chordItems(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -1178,61 +1172,33 @@ function chordItems(
       depth: TRANSIT_BAND_DEPTH + 0.1,
       draw: () => {
         ctx.save();
-        ctx.lineJoin = "round";
-        // 三颗以上按相邻音符连续包裹，每段均从两端鼓件色自然混合。
+        ctx.lineCap = "round";
+        // 三颗以上按相邻音符连续连接，每段均从两端鼓件色自然混合。
         for (let k = 1; k < pts.length; k++) {
           const a = pts[k - 1];
           const b = pts[k];
           if (!a || !b) continue;
           const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-          gradient.addColorStop(0, hexToRgba(a.color, alpha * 0.72));
-          gradient.addColorStop(0.5, hexToRgba(a.color, alpha * 0.48));
-          gradient.addColorStop(0.501, hexToRgba(b.color, alpha * 0.48));
-          gradient.addColorStop(1, hexToRgba(b.color, alpha * 0.72));
-
-          const dirX = b.x - a.x;
-          const dirY = b.y - a.y;
-          const distance = Math.max(1, Math.hypot(dirX, dirY));
-          const nx = -dirY / distance;
-          const ny = dirX / distance;
-          const aRadius = Math.max(a.ry, a.rx * 0.62) * 1.18;
-          const bRadius = Math.max(b.ry, b.rx * 0.62) * 1.18;
-          const waist = Math.max(1.5, Math.min(a.ry, b.ry) * 0.2);
-          const aInnerX = a.x + (dirX / distance) * a.rx * 0.82;
-          const aInnerY = a.y + (dirY / distance) * a.rx * 0.82;
-          const bInnerX = b.x - (dirX / distance) * b.rx * 0.82;
-          const bInnerY = b.y - (dirY / distance) * b.rx * 0.82;
-          const midX = (aInnerX + bInnerX) * 0.5;
-          const midY = (aInnerY + bInnerY) * 0.5;
-
-          ctx.fillStyle = gradient;
+          gradient.addColorStop(0, hexToRgba(a.color, alpha));
+          gradient.addColorStop(1, hexToRgba(b.color, alpha));
           ctx.strokeStyle = gradient;
-          ctx.lineWidth = Math.max(1.2, h * 0.0018);
+          ctx.lineWidth = Math.max(4, h * 0.007);
           ctx.shadowColor = a.color;
-          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 10 : 0;
+          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 12 : 0;
           ctx.beginPath();
-          ctx.moveTo(aInnerX + nx * aRadius, aInnerY + ny * aRadius);
-          ctx.bezierCurveTo(
-            aInnerX + nx * aRadius * 0.88,
-            aInnerY + ny * aRadius * 0.88,
-            midX + nx * waist,
-            midY + ny * waist,
-            bInnerX + nx * bRadius,
-            bInnerY + ny * bRadius,
-          );
-          ctx.arc(b.x, b.y, bRadius, Math.atan2(ny, nx), Math.atan2(-ny, -nx), false);
-          ctx.bezierCurveTo(
-            bInnerX - nx * bRadius,
-            bInnerY - ny * bRadius,
-            midX - nx * waist,
-            midY - ny * waist,
-            aInnerX - nx * aRadius,
-            aInnerY - ny * aRadius,
-          );
-          ctx.arc(a.x, a.y, aRadius, Math.atan2(-ny, -nx), Math.atan2(ny, nx), false);
-          ctx.closePath();
-          ctx.fill();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
           ctx.stroke();
+
+          ctx.shadowBlur = 0;
+          ctx.strokeStyle = gradient;
+          ctx.globalAlpha = 0.9;
+          ctx.lineWidth = Math.max(1.5, h * 0.0025);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
         }
         ctx.restore();
       },
