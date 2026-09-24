@@ -795,12 +795,7 @@ export function FallScreen({
                   <X size={16} />
                 </button>
               </div>
-              <GlobalSettings
-                speed={speed}
-                onSpeedChange={(next) => onSpeedChange?.(next)}
-                fallMode={fallMode}
-                onFallModeChange={(next) => onFallModeChange?.(next)}
-              />
+              <GlobalSettings />
             </div>
           </div>
         )}
