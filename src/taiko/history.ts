@@ -1,10 +1,19 @@
 /**
- * 历史演奏：只记本机（localStorage），最多 100 条。
+ * 历史演奏：有玩家 id（window.__pd2uGetUser）时同步到云端，否则只存本机。
  */
 import type { Difficulty } from "./difficulty";
+import {
+  getPlayData,
+  importLocalHistory,
+  submitPlay,
+  type PlayBest,
+} from "@/lib/plays.functions";
 
 const KEY = "taiko.history.v1";
+const IMPORTED_KEY = "taiko.history.imported.v1";
 const MAX = 100;
+
+export type { PlayBest };
 
 export interface HistoryEntry {
   songId: string;
@@ -12,15 +21,28 @@ export interface HistoryEntry {
   artist?: string | null;
   difficulty: Difficulty;
   speed: number;
-  /** 准确率 0~100，可缺 */
+  /** 0~1,000,000 */
+  score?: number;
   accuracy?: number;
   maxCombo?: number;
   notes?: number;
-  /** 是否完整打完；缺省视为完成（兼容旧记录） */
   completed?: boolean;
-  /** 未完成时的进度 0~100 */
   progress?: number;
   playedAt: number;
+}
+
+/** 宿主玩家 id；未登录/浏览器直开返回 null */
+export function getHostUserId(): string | null {
+  try {
+    const fn = (window as unknown as { __pd2uGetUser?: () => unknown }).__pd2uGetUser;
+    if (typeof fn !== "function") return null;
+    let r = fn();
+    if (typeof r === "string") r = JSON.parse(r);
+    const id = (r as { id?: unknown } | null)?.id;
+    return typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
 }
 
 export function readHistory(): HistoryEntry[] {
@@ -34,6 +56,20 @@ export function readHistory(): HistoryEntry[] {
   }
 }
 
+const toInput = (e: HistoryEntry) => ({
+  songId: e.songId,
+  title: (e.title ?? "").slice(0, 200),
+  difficulty: e.difficulty,
+  speed: e.speed || 1,
+  score: Math.round(e.score ?? (e.accuracy ?? 0) * 10000),
+  accuracy: Math.max(0, Math.min(100, e.accuracy ?? 0)),
+  maxCombo: e.maxCombo ?? 0,
+  notes: e.notes ?? 0,
+  progress: Math.round(e.completed === false ? (e.progress ?? 0) : 100),
+  completed: e.completed !== false,
+  playedAt: Math.round(e.playedAt),
+});
+
 export function addHistory(entry: HistoryEntry): void {
   if (typeof localStorage === "undefined") return;
   try {
@@ -42,6 +78,12 @@ export function addHistory(entry: HistoryEntry): void {
   } catch {
     // 存储不可用时忽略
   }
+  const uid = getHostUserId();
+  if (uid && entry.songId) {
+    void submitPlay({ data: { userId: uid, record: toInput(entry) } }).catch((e) =>
+      console.warn("[history] 云端写入失败", e),
+    );
+  }
 }
 
 export function clearHistory(): void {
@@ -49,5 +91,65 @@ export function clearHistory(): void {
     localStorage.removeItem(KEY);
   } catch {
     // ignore
+  }
+}
+
+/** 最佳成绩按「songId|difficulty」索引 */
+export type BestMap = Record<string, PlayBest>;
+
+function localBests(list: HistoryEntry[]): BestMap {
+  const m: BestMap = {};
+  for (const e of list) {
+    if (!e.songId) continue;
+    const r = toInput(e);
+    const k = `${r.songId}|${r.difficulty}`;
+    const b = m[k] ?? {
+      songId: r.songId,
+      difficulty: r.difficulty,
+      score: 0,
+      accuracy: 0,
+      maxCombo: 0,
+      progress: 0,
+      completed: false,
+      plays: 0,
+    };
+    b.score = Math.max(b.score, r.score);
+    b.accuracy = Math.max(b.accuracy, r.accuracy);
+    b.maxCombo = Math.max(b.maxCombo, r.maxCombo);
+    b.progress = Math.max(b.progress, r.progress);
+    b.completed = b.completed || r.completed;
+    b.plays += 1;
+    m[k] = b;
+  }
+  return m;
+}
+
+/** 读取历史与最佳成绩：有账号走云端（首次合并本机记录），否则本机 */
+export async function loadPlayData(): Promise<{
+  history: HistoryEntry[];
+  bests: BestMap;
+  synced: boolean;
+}> {
+  const local = readHistory();
+  const uid = getHostUserId();
+  if (!uid) return { history: local, bests: localBests(local), synced: false };
+  try {
+    const flag = `${IMPORTED_KEY}:${uid}`;
+    if (!localStorage.getItem(flag)) {
+      const recs = local.filter((e) => e.songId).map(toInput);
+      if (recs.length) await importLocalHistory({ data: { userId: uid, records: recs } });
+      localStorage.setItem(flag, "1");
+    }
+    const res = await getPlayData({ data: { userId: uid } });
+    const bests: BestMap = {};
+    for (const b of res.bests) bests[`${b.songId}|${b.difficulty}`] = b;
+    return {
+      history: res.history.map((h) => ({ ...h, difficulty: h.difficulty as Difficulty })),
+      bests,
+      synced: true,
+    };
+  } catch (e) {
+    console.warn("[history] 云端读取失败，使用本机", e);
+    return { history: local, bests: localBests(local), synced: false };
   }
 }

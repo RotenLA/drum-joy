@@ -9,7 +9,8 @@ import { fetchLibrarySongs, loadLibrarySong, type LibrarySong } from "./songLibr
 import { songPlayer } from "./player";
 import { STEM_KINDS, hasAnyStem, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
-import { clearHistory, readHistory, type HistoryEntry } from "./history";
+import { clearHistory, loadPlayData, type BestMap, type HistoryEntry } from "./history";
+import { CardControls } from "./CardControls";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
 import { BookOpen, LogOut, Play, Search, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -115,6 +116,8 @@ export function SongPicker({
   const [listing, setListing] = useState(true);
   const [query, setQuery] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [bests, setBests] = useState<BestMap>({});
+  const [synced, setSynced] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [percent, setPercent] = useState(0);
   const [warn, setWarn] = useState<string | null>(null);
@@ -135,7 +138,11 @@ export function SongPicker({
         setListing(false);
       }
     })();
-    setHistory(readHistory());
+    void loadPlayData().then((r) => {
+      setHistory(r.history);
+      setBests(r.bests);
+      setSynced(r.synced);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -379,6 +386,11 @@ export function SongPicker({
                       className="relative z-10 flex h-full flex-col justify-end gap-1 p-5"
                       style={{ transform: "skewX(9deg)" }}
                     >
+                      {ready && (
+                        <span className="mb-auto mt-10 block pr-2">
+                          <CardControls songId={item.id} bests={bests} />
+                        </span>
+                      )}
                       <span className="truncate text-2xl font-semibold text-[rgba(255,255,255,0.96)]">
                         {item.title}
                       </span>
@@ -427,7 +439,7 @@ export function SongPicker({
         </div>
       ) : (
         <div className="taiko-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-5">
-          {history.length > 0 && (
+          {history.length > 0 && !synced && (
             <button
               onClick={() => {
                 clearHistory();

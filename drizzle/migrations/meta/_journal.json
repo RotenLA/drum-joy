@@ -15,6 +15,13 @@
       "when": 1790067634964,
       "tag": "0001_secure_songs_storage_bucket",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790212280458,
+      "tag": "0002_play_records",
+      "breakpoints": true
     }
   ]
 }
