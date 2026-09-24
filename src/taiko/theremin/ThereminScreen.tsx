@@ -1,5 +1,5 @@
 /**
- * 实验室·特雷门：右踏板(36)踩住发声，左踏板(44)踩住渐变为三角波；
+ * 实验室·特雷门：左踏板(44)踩住发声、松开关闭；右踏板(36)点按切换正弦/三角波（忽略抬脚）；
  * 右手左右=音高、上下=音量；左手上下=颤音深度、左右=颤音快慢。
  */
 import { useEffect, useRef, useState } from "react";
@@ -27,12 +27,17 @@ export function ThereminScreen({ onExit }: { onExit: () => void }) {
     const e = engine.current;
     e.start();
     const offOn = midiManager.onNote((note) => {
-      if (note === KICK) { e.setGate(true); setGate(true); }
-      else if (note === HAT) { e.setTriangle(true); triRef.current = true; setTri(true); }
+      if (note === HAT) { e.setGate(true); setGate(true); }
+      else if (note === KICK) {
+        const next = !triRef.current;
+        triRef.current = next;
+        e.setTriangle(next);
+        setTri(next);
+      }
     });
     const offOff = midiManager.onNoteOff((note) => {
-      if (note === KICK) { e.setGate(false); setGate(false); }
-      else if (note === HAT) { e.setTriangle(false); triRef.current = false; setTri(false); }
+      if (note === HAT) { e.setGate(false); setGate(false); }
+      // 右踏板抬脚忽略：波形由踩下时点按切换
     });
     let lastUi = 0;
     const offFrame = stickManager.onFrame((snap) => {
@@ -92,8 +97,8 @@ export function ThereminScreen({ onExit }: { onExit: () => void }) {
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-paper)] text-[var(--taiko-ink)]">
       <div className="flex items-start justify-between p-4">
         <div className="max-w-[60%] space-y-1 text-xs leading-5 text-[rgba(255,255,255,0.7)]">
-          <div>{tr("右踏板踩住：发声", "Right pedal hold: sound on")}</div>
-          <div>{tr("左踏板踩住：正弦波 → 三角波", "Left pedal hold: sine → triangle")}</div>
+          <div>{tr("左踏板踩住：发声；松开：关闭", "Left pedal hold: sound on; release: off")}</div>
+          <div>{tr("右踏板点按：切换 正弦 ↔ 三角", "Right pedal tap: toggle sine ↔ triangle")}</div>
           <div>{tr("右手左右：音高；上下：音量", "Right stick sweep: pitch; raise: volume")}</div>
           <div>{tr("左手上下：颤音深度；左右：颤音快慢", "Left stick raise: vibrato depth; sweep: vibrato rate")}</div>
         </div>
