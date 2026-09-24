@@ -462,7 +462,8 @@ function noteItems(
         x: g0.x + (pad.cx - g0.x) * p,
         y: g0.y + (pad.cy - g0.y) * p,
         // 落到鼓面时 = 鼓面的 70%；远端约 13%，重击额外放大
-        rx: Math.max(3, pad.rx * (0.18 + 0.82 * p) * 0.7 * (n.big ? 1.3 : 1)),
+        // 所有鼓件统一基准尺寸，不随鼓面大小/重击变化
+        rx: Math.max(3, Math.min(w, h) * 0.05 * (0.18 + 0.82 * p)),
       };
     };
     const head = at(Math.min(t, 1));
@@ -498,7 +499,7 @@ function noteItems(
         ctx.roundRect(-rx, -rx, rx * 2, rx * 2, rx * 0.28);
         ctx.restore();
       } else {
-        ctx.ellipse(0, 0, rx, rx * (pad.ry / pad.rx), faceAngle, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, rx, rx * 0.5, faceAngle, 0, Math.PI * 2);
       }
       ctx.fill();
       ctx.stroke();
@@ -531,25 +532,13 @@ function noteItems(
           ctx.lineWidth = Math.max(1, rx * 0.08);
           const vx = -uy;
           const vy = ux;
+          void vx; void vy;
+          ctx.lineJoin = "miter";
           ctx.beginPath();
           ctx.moveTo(tail.x + ux * tailW, tail.y + uy * tailW);
-          ctx.bezierCurveTo(
-            tail.x + ux * tailW + vx * tailW * 0.7,
-            tail.y + uy * tailW + vy * tailW * 0.7,
-            tail.x - ux * tailW + vx * tailW * 0.7,
-            tail.y - uy * tailW + vy * tailW * 0.7,
-            tail.x - ux * tailW,
-            tail.y - uy * tailW,
-          );
+          ctx.lineTo(tail.x - ux * tailW, tail.y - uy * tailW);
           ctx.lineTo(head.x - ux * headW, head.y - uy * headW);
-          ctx.bezierCurveTo(
-            head.x - ux * headW - vx * headW * 0.7,
-            head.y - uy * headW - vy * headW * 0.7,
-            head.x + ux * headW - vx * headW * 0.7,
-            head.y + uy * headW - vy * headW * 0.7,
-            head.x + ux * headW,
-            head.y + uy * headW,
-          );
+          ctx.lineTo(head.x + ux * headW, head.y + uy * headW);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
