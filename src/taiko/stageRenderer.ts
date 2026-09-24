@@ -1102,10 +1102,7 @@ function cueItems(
 /** 同刻音符的分组容差（毫秒） */
 const CHORD_TOL_MS = 15;
 
-/**
- * 同刻音符之间的混色能量线：提示「要一起敲」。
- * 每段由两端鼓件颜色连续过渡，接近判定位置时更亮、更粗。
- */
+/** 同刻音符的哑铃外框：两端包住音符，中间以两条细边相连。 */
 function chordItems(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -1128,7 +1125,15 @@ function chordItems(
   let i = lo;
   while (i < notes.length && notes[i]!.timeMs <= until) {
     const t0 = notes[i]!.timeMs;
-    const group: { x: number; y: number; color: string }[] = [];
+    const group: {
+      x: number;
+      y: number;
+      rx: number;
+      ry: number;
+      angle: number;
+      square: boolean;
+      color: string;
+    }[] = [];
     let progress = 0;
     let j = i;
     while (j < notes.length && notes[j]!.timeMs - t0 <= CHORD_TOL_MS) {
@@ -1141,17 +1146,25 @@ function chordItems(
       const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
       if (t <= 0.02 || t >= 1) continue;
       const p = Math.pow(Math.max(0.02, Math.min(1, t)), EASE);
+      const rx = Math.max(3, pad.rx * (0.18 + 0.82 * p) * 0.7 * (n.big ? 1.3 : 1));
+      const anchor = PAD_ANCHORS[part];
       progress = p;
       group.push({
         x: pad.gx + (pad.cx - pad.gx) * p,
         y: pad.gy + (pad.cy - pad.gy) * p,
+        rx,
+        ry: anchor.square ? rx * 0.42 : rx * (pad.ry / pad.rx),
+        angle: anchor.square
+          ? part === "kick" ? -PEDAL_TILT : PEDAL_TILT
+          : noteAngle(part, pad),
+        square: anchor.square === true,
         color: PART_BY_ID[part].color,
       });
     }
     i = j;
     if (group.length < 2) continue;
     group.sort((a, b) => a.x - b.x);
-    const alpha = (0.34 + 0.4 * progress) * Math.min(1, progress * 8);
+    const alpha = (0.4 + 0.32 * progress) * Math.min(1, progress * 8);
     const pts = group;
     items.push({
       // 连线与在途音符同处固定后景，不再因端点跨越鼓面边缘而跳层。
@@ -1160,40 +1173,62 @@ function chordItems(
         ctx.save();
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
+
+        // 先画每颗音符略微外扩的包围圈。音符稍后绘制在它上面，形成包裹感。
+        for (const point of pts) {
+          const margin = Math.max(2.2, point.rx * 0.16);
+          ctx.save();
+          ctx.translate(point.x, point.y);
+          ctx.strokeStyle = hexToRgba(point.color, alpha);
+          ctx.lineWidth = Math.max(1.25, h * 0.0018);
+          ctx.shadowColor = point.color;
+          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 5 : 0;
+          ctx.beginPath();
+          if (point.square) {
+            ctx.scale(1, 0.42);
+            ctx.rotate(point.angle);
+            const radius = point.rx + margin;
+            ctx.roundRect(-radius, -radius, radius * 2, radius * 2, radius * 0.28);
+          } else {
+            ctx.ellipse(
+              0,
+              0,
+              point.rx + margin,
+              point.ry + margin * (point.ry / point.rx),
+              point.angle,
+              0,
+              Math.PI * 2,
+            );
+          }
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        // 相邻外圈由上下两条切边连接，整体读起来像连续的哑铃外框。
         for (let k = 1; k < pts.length; k++) {
           const a = pts[k - 1]!;
           const b = pts[k]!;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const distance = Math.hypot(dx, dy);
+          if (distance < 1) continue;
+          const nx = -dy / distance;
+          const ny = dx / distance;
+          const aThickness = a.ry + Math.max(2.2, a.rx * 0.16);
+          const bThickness = b.ry + Math.max(2.2, b.rx * 0.16);
           const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
           gradient.addColorStop(0, hexToRgba(a.color, alpha));
           gradient.addColorStop(1, hexToRgba(b.color, alpha));
-
-          // 外层能量带。
           ctx.strokeStyle = gradient;
-          ctx.lineWidth = Math.max(3, h * (0.005 + progress * 0.002));
+          ctx.lineWidth = Math.max(1.25, h * 0.0018);
           ctx.shadowColor = a.color;
-          ctx.shadowBlur = GLOW ? 13 + 8 * progress : 0;
+          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 5 : 0;
           ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
+          ctx.moveTo(a.x + nx * aThickness, a.y + ny * aThickness);
+          ctx.lineTo(b.x + nx * bThickness, b.y + ny * bThickness);
+          ctx.moveTo(a.x - nx * aThickness, a.y - ny * aThickness);
+          ctx.lineTo(b.x - nx * bThickness, b.y - ny * bThickness);
           ctx.stroke();
-
-          // 内层亮芯，保证在压暗背景和低画质下仍清楚。
-          ctx.shadowBlur = 0;
-          ctx.globalAlpha = 0.9;
-          ctx.lineWidth = Math.max(1.2, h * 0.0021);
-          ctx.stroke();
-
-          // 中高画质沿线流光；只移动虚线偏移，不增加对象和粒子。
-          if (QUALITY_TIER !== "low") {
-            ctx.globalAlpha = 0.72;
-            ctx.strokeStyle = "rgba(255,255,255,0.92)";
-            ctx.lineWidth = Math.max(1, h * 0.0014);
-            ctx.setLineDash([Math.max(8, h * 0.018), Math.max(18, h * 0.045)]);
-            ctx.lineDashOffset = -((f.now * 0.08) % Math.max(26, h * 0.063));
-            ctx.stroke();
-            ctx.setLineDash([]);
-          }
-          ctx.globalAlpha = 1;
         }
         ctx.restore();
       },
