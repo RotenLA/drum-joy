@@ -82,16 +82,20 @@ function drawPartGlyph(
   ctx.restore();
 }
 
-function drawNote(
-  ctx: CanvasRenderingContext2D,
+function notePoint(
   column: ColumnGeom,
   y: number,
-  alpha: number,
   big: boolean,
 ) {
   const color = PART_BY_ID[column.part].color;
   const width = column.noteW * (big ? 1.22 : 1);
   const height = Math.max(8, width * 0.28);
+  return { x: column.x, y, rx: width / 2, ry: height / 2, color };
+}
+
+type NotePoint = ReturnType<typeof notePoint>;
+
+function drawNote(ctx: CanvasRenderingContext2D, point: NotePoint, alpha: number) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.shadowColor = color;
@@ -100,14 +104,11 @@ function drawNote(
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.roundRect(column.x - width / 2, y - height / 2, width, height, height / 2);
+  ctx.roundRect(point.x - point.rx, point.y - point.ry, point.rx * 2, point.ry * 2, point.ry);
   ctx.fill();
   ctx.stroke();
   ctx.restore();
-  return { x: column.x, y, rx: width / 2, ry: height / 2, color };
 }
-
-type NotePoint = ReturnType<typeof drawNote>;
 
 function drawEnvelope(ctx: CanvasRenderingContext2D, points: readonly NotePoint[], now: number, seed: number) {
   if (points.length < 2) return;
@@ -182,6 +183,7 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
   ctx.shadowBlur = 0;
 
   const groups: { time: number; points: NotePoint[] }[] = [];
+  const notePoints: { point: NotePoint; alpha: number }[] = [];
   if (f.showNotes !== false) {
     for (const note of visibleNotes(f.chart, f.timeMs, f.speed)) {
       if (note.note === undefined) continue;
@@ -191,12 +193,14 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
       const travel = 1 - ((note.timeMs - f.timeMs) * f.speed) / LEAD_MS;
       if (travel <= 0 || travel >= 1) continue;
       const y = viewport.h * 0.1 + (hitY - viewport.h * 0.1) * travel;
-      const point = drawNote(ctx, column, y, Math.min(1, travel * 5), note.big === true);
+      const point = notePoint(column, y, note.big === true);
+      notePoints.push({ point, alpha: Math.min(1, travel * 5) });
       const group = groups.find((entry) => Math.abs(entry.time - note.timeMs) <= CHORD_TOL_MS);
       if (group) group.points.push(point);
       else groups.push({ time: note.timeMs, points: [point] });
     }
     for (const group of groups) drawEnvelope(ctx, group.points, f.now, group.time);
+    for (const item of notePoints) drawNote(ctx, item.point, item.alpha);
   }
 
   const glyphY = viewport.h * 0.82;

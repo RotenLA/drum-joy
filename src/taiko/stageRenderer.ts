@@ -1102,7 +1102,7 @@ function cueItems(
 /** 同刻音符的分组容差（毫秒） */
 const CHORD_TOL_MS = 15;
 
-/** 同刻音符的哑铃外框：两端包住音符，中间以两条细边相连。 */
+/** 同刻音符的动态收腰包裹：两端贴合音符，中段自然收拢成细线。 */
 function chordItems(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -1164,7 +1164,8 @@ function chordItems(
     i = j;
     if (group.length < 2) continue;
     group.sort((a, b) => a.x - b.x);
-    const alpha = (0.4 + 0.32 * progress) * Math.min(1, progress * 8);
+    const pulse = QUALITY_TIER === "low" ? 0 : (Math.sin(f.now / 150 + t0 * 0.01) + 1) * 0.7;
+    const alpha = (0.46 + 0.3 * progress) * Math.min(1, progress * 8);
     const pts = group;
     items.push({
       // 连线与在途音符同处固定后景，不再因端点跨越鼓面边缘而跳层。
@@ -1174,60 +1175,45 @@ function chordItems(
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
 
-        // 先画每颗音符略微外扩的包围圈。音符稍后绘制在它上面，形成包裹感。
-        for (const point of pts) {
-          const margin = Math.max(2.2, point.rx * 0.16);
-          ctx.save();
-          ctx.translate(point.x, point.y);
-          ctx.strokeStyle = hexToRgba(point.color, alpha);
-          ctx.lineWidth = Math.max(1.25, h * 0.0018);
-          ctx.shadowColor = point.color;
-          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 5 : 0;
-          ctx.beginPath();
-          if (point.square) {
-            ctx.scale(1, 0.42);
-            ctx.rotate(point.angle);
-            const radius = point.rx + margin;
-            ctx.roundRect(-radius, -radius, radius * 2, radius * 2, radius * 0.28);
-          } else {
-            ctx.ellipse(
-              0,
-              0,
-              point.rx + margin,
-              point.ry + margin * (point.ry / point.rx),
-              point.angle,
-              0,
-              Math.PI * 2,
-            );
-          }
-          ctx.stroke();
-          ctx.restore();
-        }
-
-        // 相邻外圈由上下两条切边连接，整体读起来像连续的哑铃外框。
+        // 每一对相邻音符使用单条闭合贝塞尔轮廓：两端张开，中段收束。
         for (let k = 1; k < pts.length; k++) {
           const a = pts[k - 1]!;
           const b = pts[k]!;
-          const dx = b.x - a.x;
-          const dy = b.y - a.y;
-          const distance = Math.hypot(dx, dy);
-          if (distance < 1) continue;
-          const nx = -dy / distance;
-          const ny = dx / distance;
-          const aThickness = a.ry + Math.max(2.2, a.rx * 0.16);
-          const bThickness = b.ry + Math.max(2.2, b.rx * 0.16);
+          const marginA = Math.max(2.5, a.rx * 0.15) + pulse;
+          const marginB = Math.max(2.5, b.rx * 0.15) + pulse;
+          const waist = Math.max(2.2, Math.min(a.ry, b.ry) * 0.24);
+          const midX = (a.x + b.x) / 2;
+          const midY = (a.y + b.y) / 2;
           const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
           gradient.addColorStop(0, hexToRgba(a.color, alpha));
           gradient.addColorStop(1, hexToRgba(b.color, alpha));
           ctx.strokeStyle = gradient;
-          ctx.lineWidth = Math.max(1.25, h * 0.0018);
+          ctx.lineWidth = Math.max(1.4, h * 0.002);
           ctx.shadowColor = a.color;
           ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 5 : 0;
           ctx.beginPath();
-          ctx.moveTo(a.x + nx * aThickness, a.y + ny * aThickness);
-          ctx.lineTo(b.x + nx * bThickness, b.y + ny * bThickness);
-          ctx.moveTo(a.x - nx * aThickness, a.y - ny * aThickness);
-          ctx.lineTo(b.x - nx * bThickness, b.y - ny * bThickness);
+          ctx.moveTo(a.x - a.rx - marginA, a.y);
+          ctx.bezierCurveTo(
+            a.x - a.rx, a.y - a.ry - marginA,
+            a.x + a.rx, a.y - a.ry - marginA,
+            midX, midY - waist,
+          );
+          ctx.bezierCurveTo(
+            b.x - b.rx, b.y - b.ry - marginB,
+            b.x + b.rx, b.y - b.ry - marginB,
+            b.x + b.rx + marginB, b.y,
+          );
+          ctx.bezierCurveTo(
+            b.x + b.rx, b.y + b.ry + marginB,
+            b.x - b.rx, b.y + b.ry + marginB,
+            midX, midY + waist,
+          );
+          ctx.bezierCurveTo(
+            a.x + a.rx, a.y + a.ry + marginA,
+            a.x - a.rx, a.y + a.ry + marginA,
+            a.x - a.rx - marginA, a.y,
+          );
+          ctx.closePath();
           ctx.stroke();
         }
         ctx.restore();
