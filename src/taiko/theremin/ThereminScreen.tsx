@@ -44,8 +44,8 @@ export function ThereminScreen({ onExit }: { onExit: () => void }) {
       const sm = smooth.current;
       let hz = 0;
       if (snap.r) {
-        sm.x += (norm(snap.r.y, -60, 60) - sm.x) * 0.5;
-        sm.vol += (norm(snap.r.p, -20, 50) - sm.vol) * 0.5;
+        sm.x = norm(snap.r.y, -60, 60);
+        sm.vol = norm(snap.r.p, -20, 50);
         hz = e.setPitch(sm.x);
         e.setVolume(0.15 + sm.vol * 0.85);
       }
@@ -113,7 +113,7 @@ export function ThereminScreen({ onExit }: { onExit: () => void }) {
           {Array.from({ length: 25 }, (_, i) => (
             <div key={i} className="absolute top-0 h-3 w-px bg-[rgba(255,255,255,0.25)]" style={{ left: `${(i / 24) * 100}%` }} />
           ))}
-          <div className="absolute -top-2 h-7 w-3 -translate-x-1/2 rounded-full bg-[var(--taiko-accent)] transition-[left] duration-75" style={{ left: `${view.x * 100}%`, opacity: view.has ? 1 : 0.3 }} />
+          <div className="absolute -top-2 h-7 w-3 -translate-x-1/2 rounded-full bg-[var(--taiko-accent)]" style={{ left: `${view.x * 100}%`, opacity: view.has ? 1 : 0.3 }} />
         </div>
         <canvas ref={canvas} width={720} height={140} className="w-[min(80vw,720px)]" style={{ opacity: gate ? 1 : 0.35 }} />
         <div className="flex gap-6 text-xs text-[rgba(255,255,255,0.6)]">
