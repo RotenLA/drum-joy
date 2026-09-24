@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type Context, type ReactNode } from "react";
 
 import { debugLog } from "./debugLog";
 
@@ -63,7 +63,13 @@ interface LanguageValue {
   tr: (zh: string, en: string) => string;
 }
 
-const LanguageContext = createContext<LanguageValue | null>(null);
+// 热更新时保持同一个 Context 实例，避免 Provider/消费者拿到不同副本
+const ctxHolder = globalThis as unknown as {
+  __pd2uLangCtx?: Context<LanguageValue | null>;
+};
+const LanguageContext =
+  ctxHolder.__pd2uLangCtx ??
+  (ctxHolder.__pd2uLangCtx = createContext<LanguageValue | null>(null));
 
 const TITLES: Partial<Record<Language, string>> = {
   "zh-CN": "PD2U AeroGame 空气鼓游玩台",
