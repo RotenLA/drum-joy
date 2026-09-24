@@ -96,6 +96,7 @@ function ShellInner() {
     };
   }, []);
   useEffect(() => {
+    (window as unknown as { __pd2uBooted?: boolean }).__pd2uBooted = true;
     installExternalBridge();
     installStickBridge();
     installDeviceBridge();

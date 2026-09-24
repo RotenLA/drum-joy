@@ -118,6 +118,11 @@ function RootShell({ children }: { children: ReactNode }) {
             __html: `(function(){try{var u=navigator.userAgent||'';if(!/android/i.test(u))return;var m=/(?:chrome|crios)\\/(\\d+)/i.exec(u)||/version\\/(\\d+)/i.exec(u);var v=m?parseInt(m[1],10):0;var c=document.createElement('canvas');var a=window.AudioContext||window.webkitAudioContext;var bad=(v>0&&v<90)||!c.getContext||!a;if(bad)document.documentElement.setAttribute('data-pd2u-unsupported',String(v||0));}catch(e){}})();`,
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var errs=[];function rec(m){try{errs.push(String(m).slice(0,300));if(errs.length>6)errs.shift();}catch(e){}}window.addEventListener('error',function(e){rec((e&&e.message)||'error')});window.addEventListener('unhandledrejection',function(e){rec('promise: '+((e&&e.reason&&(e.reason.message||e.reason))||''))});setTimeout(function(){if(window.__pd2uBooted)return;try{var d=document.createElement('div');d.style.cssText='position:fixed;inset:0;z-index:99999;background:#100c0a;color:#f4f1ed;font:14px/1.6 sans-serif;padding:24px;overflow:auto';d.innerHTML='<h2 style="margin:0 0 8px">页面启动失败 / Failed to start</h2><p>请截图反馈给开发，或尝试更新系统 WebView / Chrome 后重试。</p><pre style="white-space:pre-wrap;font-size:12px;opacity:.75"></pre><button style="margin-top:12px;padding:8px 16px">重新加载 / Reload</button>';d.querySelector('pre').textContent='UA: '+navigator.userAgent+'\\n\\n'+(errs.join('\\n')||'no error captured');d.querySelector('button').onclick=function(){location.reload()};document.body.appendChild(d);}catch(e){}},12000);})();`,
+          }}
+        />
         <HeadContent />
       </head>
       <body style={{ backgroundColor: "#100c0a", color: "#f4f1ed", margin: 0 }}>
