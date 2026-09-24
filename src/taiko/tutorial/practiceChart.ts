@@ -25,8 +25,8 @@ function laneOf(note: number): TaikoNote["lane"] {
   return note === 36 || note === 44 ? "don" : "ka";
 }
 
-function push(notes: TaikoNote[], part: PartId, timeMs: number, holdMs?: number) {
-  const note = noteOf(part);
+function push(notes: TaikoNote[], part: PartId, timeMs: number, holdMs?: number, midiNote?: number) {
+  const note = midiNote ?? noteOf(part);
   notes.push({ timeMs, lane: laneOf(note), note, ...(holdMs ? { holdMs } : {}) });
 }
 
@@ -56,7 +56,10 @@ export function buildPracticeChart(step: TutorialStep, title: string): TaikoChar
     const total = LOOPS * per * 2;
     for (let i = 0; i < total; i++) {
       const t = lead + i * step2;
-      push(notes, seq[i % seq.length]!, t);
+      const part = seq[i % seq.length]!;
+      // 踩镲组合课交替展示闭镲(42)与开镲(46)，两者都与左踏板严格同刻配对。
+      const hatNote = syncPedal && part === "hihat" ? (i % 2 === 0 ? 42 : 46) : undefined;
+      push(notes, part, t, undefined, hatNote);
       // 同一时刻补一个左踏板短音符，与手部音符同时触发
       if (syncPedal) push(notes, "pedalHat", t);
     }

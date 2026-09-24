@@ -12,7 +12,7 @@ import { useLanguage } from "./i18n";
 import { clearHistory, loadPlayData, type BestMap, type HistoryEntry } from "./history";
 import { CardControls } from "./CardControls";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
-import { BookOpen, LogOut, Play, Search, Settings } from "lucide-react";
+import { BookOpen, LogOut, Play, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const fmtTime = (ms: number) => {
@@ -132,7 +132,6 @@ export function SongPicker({
   speed,
   onSpeedChange,
   onStart,
-  onOpenSettings,
   onExit,
   onStartTutorial,
   exitLabel,
@@ -141,7 +140,6 @@ export function SongPicker({
   speed: number;
   onSpeedChange?: ((s: number) => void) | undefined;
   onStart: () => void;
-  onOpenSettings: () => void;
   onExit?: (() => void) | undefined;
   onStartTutorial: () => void;
   /** 退出按钮文字（实验室里改成「返回」） */
@@ -296,8 +294,8 @@ export function SongPicker({
   };
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-picker-glass)] backdrop-blur-[16px]">
-      {/* 顶部：退出和设置常驻左侧，标签与搜索统一靠右 */}
-      <div className="flex shrink-0 items-center gap-2 px-3 py-3 sm:px-4">
+      {/* 顶部：退出常驻左侧，标签与搜索统一靠右；全局设置由演奏页统一承载 */}
+      <div className="flex shrink-0 items-center gap-2 py-3 pl-14 pr-3 sm:pr-4">
         <button
           type="button"
           onClick={onExit}
@@ -306,18 +304,6 @@ export function SongPicker({
           <LogOut size={15} />
           {exitLabel ?? tr("退出", "Exit")}
         </button>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={onOpenSettings}
-          aria-label={tr("全局设置", "Global settings")}
-          title={tr("全局设置", "Global settings")}
-          className="h-9 w-9 shrink-0 rounded-md border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[rgba(255,255,255,0.76)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
-        >
-          <Settings size={16} />
-        </Button>
-
         <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
           <Button
             type="button"
