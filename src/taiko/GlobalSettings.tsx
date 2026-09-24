@@ -1,7 +1,7 @@
 /**
- * 全局参数（谱面屏顶部）：画质、视觉/判定偏移、自动校准。
+ * 全局参数：下落速度、下落模式、画质、视觉/判定偏移、自动校准。
  * 一次设置对所有歌曲生效，不随歌曲变化。
- * 难度、下落速度、手机音色、鼓组、下落模式都在展开的歌曲卡片里设置，此处不再重复。
+ * 难度、手机音色、鼓组在展开的歌曲卡片里设置，此处不重复。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HelpDot } from "@/components/HelpDot";
@@ -21,10 +21,22 @@ import { loadKitEnabled, playDrum, subscribeKitEnabled } from "./drumKit";
 import { midiManager } from "./midiInput";
 import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
+import type { FallMode } from "./fallMode";
 
 const CALIB_TARGET = 8;
+const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 
-export function GlobalSettings() {
+export function GlobalSettings({
+  speed,
+  onSpeedChange,
+  fallMode,
+  onFallModeChange,
+}: {
+  speed: number;
+  onSpeedChange: (speed: number) => void;
+  fallMode: FallMode;
+  onFallModeChange: (mode: FallMode) => void;
+}) {
   const { tr, language } = useLanguage();
 
   // ---- 画质 ----
@@ -137,6 +149,46 @@ export function GlobalSettings() {
         <span className="text-[10px] text-[var(--taiko-ink)]/45">
           {tr("所有歌曲通用，只需设置一次", "Applies to every song, set once")}
         </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">
+          {tr("下落速度", "Fall speed")}
+        </span>
+        {SPEEDS.map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onSpeedChange(value)}
+            className={`rounded-sm border px-3 py-1 text-xs tabular-nums transition-colors ${
+              speed === value
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-accent)]"
+            }`}
+          >
+            {value}x
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">
+          {tr("下落模式", "Fall mode")}
+        </span>
+        {(["stage", "columns"] as const).map((mode) => (
+          <button
+            key={mode}
+            type="button"
+            onClick={() => onFallModeChange(mode)}
+            className={`rounded-sm border px-3 py-1 text-xs transition-colors ${
+              fallMode === mode
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-accent)]"
+            }`}
+          >
+            {mode === "stage" ? tr("舞台下落", "Stage") : tr("横排下落", "Columns")}
+          </button>
+        ))}
       </div>
 
       {/* 画质 */}

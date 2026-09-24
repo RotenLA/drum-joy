@@ -301,7 +301,7 @@ export function SongPicker({
   };
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-picker-glass)] backdrop-blur-[16px]">
-      {/* 顶部：退出独立在左，标签与搜索统一靠右 */}
+      {/* 顶部：退出和设置常驻左侧，标签与搜索统一靠右 */}
       <div className="flex shrink-0 items-center gap-2 px-3 py-3 sm:px-4">
         <button
           type="button"
@@ -311,6 +311,17 @@ export function SongPicker({
           <LogOut size={15} />
           {exitLabel ?? tr("退出", "Exit")}
         </button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={onOpenSettings}
+          aria-label={tr("全局设置", "Global settings")}
+          title={tr("全局设置", "Global settings")}
+          className="h-9 w-9 shrink-0 rounded-md border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[rgba(255,255,255,0.76)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+        >
+          <Settings size={16} />
+        </Button>
 
         <div className="ml-auto flex min-w-0 items-center justify-end gap-1.5 sm:gap-2">
           <Button
@@ -474,23 +485,8 @@ export function SongPicker({
                     <CardControls
                       songId={item.id}
                       bests={bests}
-                      speed={speed}
-                      onSpeedChange={onSpeedChange}
-                      fallMode={fallMode}
-                      onFallModeChange={onFallModeChange}
                     />
                   </div>
-                )}
-
-                {ready && (
-                  <button
-                    type="button"
-                    onClick={guardClick(onOpenSettings)}
-                    aria-label={tr("全局设置", "Global settings")}
-                    className="absolute right-4 top-4 z-20 grid h-9 w-9 place-items-center rounded-md border border-[var(--taiko-glass-line-strong)] bg-[var(--taiko-glass-strong)] text-[var(--taiko-ink)]/80 backdrop-blur-[18px] transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
-                  >
-                    <Settings size={17} />
-                  </button>
                 )}
 
                 {ready && (
