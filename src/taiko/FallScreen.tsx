@@ -810,13 +810,13 @@ export function FallScreen({
               if (event.currentTarget === event.target) setSettingsOpen(false);
             }}
           >
-            <div className="taiko-scroll max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] p-3 shadow-2xl backdrop-blur-[24px]">
+            <div className="taiko-scroll max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass-strong)] p-4 shadow-2xl backdrop-blur-[24px]">
               <div className="mb-2 flex items-center justify-end">
                 <button
                   type="button"
                   onClick={() => setSettingsOpen(false)}
                   aria-label={tr("关闭设置", "Close settings")}
-                  className="grid h-8 w-8 place-items-center rounded-md border border-[var(--taiko-line)] text-[var(--taiko-ink)]/75 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+                  className="grid h-9 w-9 place-items-center rounded-md border border-[var(--taiko-line)] text-[var(--taiko-ink)]/75 transition-colors hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
                 >
                   <X size={16} />
                 </button>
@@ -834,7 +834,7 @@ export function FallScreen({
         {phase === "paused" && (
           <Overlay>
             <p className="text-lg tracking-[0.3em] text-[var(--taiko-ink)]">{tr("已暂停", "PAUSED")}</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <Button
                 variant="outline"
                 onClick={resume}
