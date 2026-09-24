@@ -237,8 +237,6 @@ export function SongPicker({
     const item = DIFFICULTIES.find((x) => x.id === d);
     return item ? tr(item.label, item.labelEn) : d;
   };
-  const curDiff = diffLabel(song.difficulty);
-
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-picker-glass)] backdrop-blur-[16px]">
       {/* 顶部：退出独立在左，标签与搜索统一靠右 */}
