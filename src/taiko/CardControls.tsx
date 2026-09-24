@@ -19,6 +19,7 @@ import type { BestMap } from "./history";
 import { ratingOfAccuracy } from "./rating";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
+import { Button } from "@/components/ui/button";
 
 export function CardControls({
   songId,
@@ -85,11 +86,12 @@ export function CardControls({
         {DIFFICULTIES.map((d) => {
           const on = song.difficulty === d.id;
           return (
-            <button
+            <Button
               key={d.id}
+              variant="outline"
               type="button"
               onClick={() => song.setSong({ difficulty: d.id })}
-              className={`flex min-w-0 items-center justify-center rounded-md border px-1.5 py-2 text-center transition-colors ${
+              className={`h-9 min-w-0 rounded-md px-1.5 text-center ${
                 on
                   ? "border-[var(--taiko-accent)] bg-[rgba(255,140,0,0.18)]"
                   : "border-[rgba(255,255,255,0.14)] bg-[rgba(0,0,0,0.28)] hover:border-[rgba(255,255,255,0.3)]"
@@ -100,23 +102,25 @@ export function CardControls({
               >
                 {tr(d.label, d.labelEn)}
               </span>
-            </button>
+            </Button>
           );
         })}
       </div>
       <div className="flex w-full flex-wrap items-center justify-center gap-2">
         <span className="flex items-center gap-1.5">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             type="button"
             onClick={() => saveKitEnabled(!kitOn)}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+            className={`h-8 min-w-28 rounded-md px-3 text-xs font-semibold ${
               kitOn
                 ? "bg-[var(--taiko-accent)] text-[#12141a]"
                 : "border border-[rgba(255,255,255,0.2)] bg-[rgba(0,0,0,0.28)] text-[rgba(255,255,255,0.75)]"
             }`}
           >
             {tr("手机音色", "Mobile sound")} {kitOn ? tr("开", "On") : tr("关", "Off")}
-          </button>
+          </Button>
           <HelpDot
             label={tr("手机音色", "Mobile sound")}
             text={helpText("kit", language)}
@@ -129,7 +133,7 @@ export function CardControls({
             saveKitId(id);
             if (loadKitEnabled()) void ensureKitLoaded(id);
           }}
-          className="rounded-md border border-[var(--taiko-accent)] bg-[#1a1c22] px-2 py-1.5 text-xs text-[rgba(255,255,255,0.9)]"
+          className="h-8 min-w-28 rounded-md border border-[var(--taiko-accent)] bg-[#1a1c22] px-2 text-xs text-[rgba(255,255,255,0.9)]"
         >
           {KIT_NAMES.map((k) => (
             <option key={k.id} value={k.id} className="bg-[#1a1c22] text-[rgba(255,255,255,0.9)]">

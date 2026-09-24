@@ -10,6 +10,25 @@ const YAW_MIN = -90;
 const YAW_MAX = 92;
 const STICK_Y_SHIFT = 0.035;
 
+function addWrappedFlowBand(
+  gradient: CanvasGradient,
+  center: number,
+  halfWidth: number,
+  color: string,
+  dimAlpha: number,
+  brightAlpha: number,
+) {
+  for (const offset of [-1, 0, 1]) {
+    const c = center + offset;
+    const lo = Math.max(0, c - halfWidth);
+    const hi = Math.min(1, c + halfWidth);
+    if (lo >= hi) continue;
+    gradient.addColorStop(lo, hexToRgba(color, dimAlpha));
+    if (c >= 0 && c <= 1) gradient.addColorStop(c, hexToRgba(color, brightAlpha));
+    gradient.addColorStop(hi, hexToRgba(color, dimAlpha));
+  }
+}
+
 interface ColumnGeom {
   part: PartId;
   x: number;
@@ -135,13 +154,13 @@ function drawHold(
   const bottom = Math.max(point.y, tailY);
   const halfW = point.rx * 0.78;
   const gradient = ctx.createLinearGradient(point.x, top, point.x, bottom);
-  const phase = (performance.now() % 900) / 900;
-  const glowAt = 0.15 + phase * 0.7;
-  gradient.addColorStop(0, hexToRgba(point.color, 0.3));
-  gradient.addColorStop(Math.max(0.02, glowAt - 0.12), hexToRgba(point.color, 0.36));
-  gradient.addColorStop(glowAt, hexToRgba(point.color, 0.72));
-  gradient.addColorStop(Math.min(0.98, glowAt + 0.12), hexToRgba(point.color, 0.36));
-  gradient.addColorStop(1, hexToRgba(point.color, 0.3));
+  const phase = (performance.now() % 1400) / 1400;
+  gradient.addColorStop(0, hexToRgba(point.color, 0.28));
+  if (quality.tier !== "low") {
+    addWrappedFlowBand(gradient, phase, 0.1, point.color, 0.3, 0.66);
+    addWrappedFlowBand(gradient, (phase + 0.5) % 1, 0.075, point.color, 0.3, 0.5);
+  }
+  gradient.addColorStop(1, hexToRgba(point.color, 0.28));
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = gradient;
@@ -150,7 +169,7 @@ function drawHold(
   ctx.shadowColor = point.color;
   ctx.shadowBlur = quality.params.glow ? 9 : 0;
   ctx.beginPath();
-  ctx.roundRect(point.x - halfW, top, halfW * 2, Math.max(halfW * 2, bottom - top), halfW);
+  ctx.rect(point.x - halfW, top, halfW * 2, Math.max(2, bottom - top));
   ctx.fill();
   ctx.stroke();
   ctx.restore();

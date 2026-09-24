@@ -408,6 +408,26 @@ const TRANSIT_NOTE_DEPTH = -1;
 const ARRIVAL_DEPTH = 2;
 const CUE_DEPTH = 3;
 
+/** 在已有底色上叠两道首尾连续的流光，避免单亮斑走到末端后突然跳回。 */
+function addWrappedFlowBand(
+  gradient: CanvasGradient,
+  center: number,
+  halfWidth: number,
+  color: string,
+  dimAlpha: number,
+  brightAlpha: number,
+) {
+  for (const offset of [-1, 0, 1]) {
+    const c = center + offset;
+    const lo = Math.max(0, c - halfWidth);
+    const hi = Math.min(1, c + halfWidth);
+    if (lo >= hi) continue;
+    gradient.addColorStop(lo, hexToRgba(color, dimAlpha));
+    if (c >= 0 && c <= 1) gradient.addColorStop(c, hexToRgba(color, brightAlpha));
+    gradient.addColorStop(hi, hexToRgba(color, dimAlpha));
+  }
+}
+
 /** 音符进入自身鼓面的程度（0~1），严格在旋转后的鼓面轮廓内平滑显现。 */
 function arrivalBlend(pad: PadGeom, x: number, y: number, angle: number): number {
   const cos = Math.cos(-angle);
@@ -506,7 +526,7 @@ function noteItems(
       ctx.restore();
     };
 
-    // 长音符绘制成单一流动圆柱：圆润两端与主体连成一体，不再叠加独立音符头。
+    // 长音符为平直切边的透视色带；两道连续流光避免机械地单点扫动。
     if (hold) {
       items.push({
         depth: TRANSIT_BAND_DEPTH,
@@ -514,25 +534,25 @@ function noteItems(
           ctx.save();
           ctx.globalAlpha = alpha;
           ctx.shadowColor = color;
-          const ux = Math.cos(faceAngle);
-          const uy = Math.sin(faceAngle);
+           const pathX = head.x - tail.x;
+           const pathY = head.y - tail.y;
+           const pathLen = Math.max(0.001, Math.hypot(pathX, pathY));
+           const ux = -pathY / pathLen;
+           const uy = pathX / pathLen;
           const tailW = tail.rx * 0.82;
           const headW = head.rx * 0.82;
           ctx.shadowBlur = GLOW ? 14 * scale : 0;
           const flow = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
-          const phase = (f.now % 900) / 900;
-          const glowAt = 0.18 + phase * 0.64;
-          flow.addColorStop(0, hexToRgba(color, 0.2));
-          flow.addColorStop(Math.max(0.02, glowAt - 0.12), hexToRgba(color, 0.27));
-          flow.addColorStop(glowAt, hexToRgba(color, 0.48));
-          flow.addColorStop(Math.min(0.98, glowAt + 0.12), hexToRgba(color, 0.27));
-          flow.addColorStop(1, hexToRgba(color, 0.34));
+           const phase = (f.now % 1400) / 1400;
+           flow.addColorStop(0, hexToRgba(color, 0.25));
+           if (QUALITY_TIER !== "low") {
+             addWrappedFlowBand(flow, phase, 0.1, color, 0.27, 0.58);
+             addWrappedFlowBand(flow, (phase + 0.5) % 1, 0.075, color, 0.27, 0.44);
+           }
+           flow.addColorStop(1, hexToRgba(color, 0.25));
           ctx.fillStyle = flow;
           ctx.strokeStyle = hexToRgba(color, 0.75);
           ctx.lineWidth = Math.max(1, rx * 0.08);
-          const vx = -uy;
-          const vy = ux;
-          void vx; void vy;
           ctx.lineJoin = "miter";
           ctx.beginPath();
           ctx.moveTo(tail.x + ux * tailW, tail.y + uy * tailW);
@@ -1154,7 +1174,7 @@ function chordItems(
       const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
       if (t <= 0.02 || t >= 1) continue;
       const p = Math.pow(Math.max(0.02, Math.min(1, t)), EASE);
-      const rx = Math.max(3, pad.rx * (0.18 + 0.82 * p) * 0.7 * (n.big ? 1.3 : 1));
+      const rx = Math.max(3, Math.min(w, h) * 0.05 * (0.18 + 0.82 * p));
       const anchor = PAD_ANCHORS[part];
       progress = p;
       group.push({
@@ -1174,6 +1194,26 @@ function chordItems(
     group.sort((a, b) => a.x - b.x);
     const alpha = (0.46 + 0.3 * progress) * Math.min(1, progress * 8);
     const pts = group;
+
+    const edgeDistance = (
+      point: (typeof pts)[number],
+      dx: number,
+      dy: number,
+    ) => {
+      const cos = Math.cos(-point.angle);
+      const sin = Math.sin(-point.angle);
+      if (point.square) {
+        // 与绘制时 scale(1,.42) → rotate(angle) 的逆变换一致。
+        const scaledX = dx;
+        const scaledY = dy / 0.42;
+        const lx = scaledX * cos - scaledY * sin;
+        const ly = scaledX * sin + scaledY * cos;
+        return point.rx / Math.max(Math.abs(lx), Math.abs(ly), 0.001);
+      }
+      const lx = dx * cos - dy * sin;
+      const ly = dx * sin + dy * cos;
+      return 1 / Math.sqrt((lx * lx) / (point.rx * point.rx) + (ly * ly) / (point.ry * point.ry));
+    };
     items.push({
       // 连线与在途音符同处固定后景，不再因端点跨越鼓面边缘而跳层。
       depth: TRANSIT_BAND_DEPTH + 0.1,
@@ -1189,21 +1229,33 @@ function chordItems(
           gradient.addColorStop(0, hexToRgba(a.color, alpha));
           gradient.addColorStop(1, hexToRgba(b.color, alpha));
           ctx.strokeStyle = gradient;
-          ctx.lineWidth = Math.max(4, h * 0.007);
+          ctx.lineWidth = Math.max(6, h * 0.009);
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const distance = Math.max(0.001, Math.hypot(dx, dy));
+          const nx = dx / distance;
+          const ny = dy / distance;
+          const gap = Math.max(1.5, h * 0.002);
+          const startOffset = Math.min(distance * 0.45, edgeDistance(a, nx, ny) + gap);
+          const endOffset = Math.min(distance * 0.45, edgeDistance(b, -nx, -ny) + gap);
+          const ax = a.x + nx * startOffset;
+          const ay = a.y + ny * startOffset;
+          const bx = b.x - nx * endOffset;
+          const by = b.y - ny * endOffset;
           ctx.shadowColor = a.color;
-          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 12 : 0;
+          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 15 : 0;
           ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
           ctx.stroke();
 
           ctx.shadowBlur = 0;
           ctx.strokeStyle = gradient;
           ctx.globalAlpha = 0.9;
-          ctx.lineWidth = Math.max(1.5, h * 0.0025);
+          ctx.lineWidth = Math.max(2, h * 0.0032);
           ctx.beginPath();
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
           ctx.stroke();
           ctx.globalAlpha = 1;
         }
