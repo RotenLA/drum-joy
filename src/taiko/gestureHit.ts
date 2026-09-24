@@ -160,14 +160,16 @@ class GestureHitDetector {
     if (pose.p < s.minP - 0.05) {
       s.travel += s.minP - pose.p;
       s.minP = pose.p;
-      s.peak = Math.max(s.peak, -v);
       s.lastProgressAt = at;
-      return;
+      // 急刹 = 棒头撞到鼓面：不等回弹那一帧，立刻结算
+      const braking = -v < s.peak * BRAKE_RATIO;
+      s.peak = Math.max(s.peak, -v);
+      if (!braking || s.peak < ARM_SPEED - 0.5 || s.travel < MIN_TRAVEL_DEG) return;
+    } else {
+      // 角度不再变低 = 触底拐点；短暂持平先等一小会儿（STALL_MS）再结算
+      const rebounding = pose.p > s.minP + 0.05;
+      if (!rebounding && at - s.lastProgressAt < STALL_MS) return;
     }
-
-    // 角度不再变低 = 触底拐点；短暂持平先等一小会儿（STALL_MS）再结算
-    const rebounding = pose.p > s.minP + 0.05;
-    if (!rebounding && at - s.lastProgressAt < STALL_MS) return;
 
     const peak = s.peak;
     const travel = s.travel;
