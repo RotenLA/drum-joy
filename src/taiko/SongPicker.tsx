@@ -242,12 +242,15 @@ export function SongPicker({
   );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const norm = (v: string) => v.normalize("NFKC").toLowerCase().replace(/[\s·\-_'"’.,，。]/g, "");
+    const q = norm(query);
     if (!q) return library;
-    return library.filter(
-      (s) => s.title.toLowerCase().includes(q) || (s.artist ?? "").toLowerCase().includes(q),
-    );
+    return library.filter((s) => norm(`${s.title}${s.artist ?? ""}`).includes(q));
   }, [library, query]);
+  // 搜索结果变化时把列表滚回开头，避免结果落在视野外看起来“搜索没反应”
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [query]);
 
   // 选中的卡片自动滚入视野
   useEffect(() => {
@@ -355,6 +358,10 @@ export function SongPicker({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+              onPointerDown={(e) => e.stopPropagation()}
+              type="search"
+              enterKeyHint="search"
               placeholder={tr("搜索歌名或艺人", "Search title or artist")}
               className="w-28 min-w-0 bg-transparent text-base text-[rgba(255,255,255,0.9)] outline-none placeholder:text-[rgba(255,255,255,0.35)] sm:w-56"
             />
