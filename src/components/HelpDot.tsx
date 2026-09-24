@@ -7,6 +7,16 @@ import { useLanguage } from "@/taiko/i18n";
 export function HelpDot({ text, label }: { text: string; label?: string }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLSpanElement | null>(null);
+  const popRef = useRef<HTMLSpanElement | null>(null);
+  // 打开后让说明完整进入视野（底部参数不必手动上滑）
+  useEffect(() => {
+    if (!open) return;
+    const id = requestAnimationFrame(() => {
+      try { popRef.current?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" }); }
+      catch { popRef.current?.scrollIntoView(false); }
+    });
+    return () => cancelAnimationFrame(id);
+  }, [open]);
   const { tr } = useLanguage();
 
   useEffect(() => {
@@ -33,7 +43,7 @@ export function HelpDot({ text, label }: { text: string; label?: string }) {
         ?
       </button>
       {open && (
-        <span className="absolute left-1/2 top-6 z-30 w-64 -translate-x-1/2 border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-3 py-2 text-[11px] leading-relaxed text-[var(--taiko-ink)]/80 shadow-lg">
+        <span ref={popRef} className="absolute left-1/2 top-6 z-30 w-64 -translate-x-1/2 border border-[var(--taiko-line)] bg-[var(--taiko-surface)] px-3 py-2 text-[11px] leading-relaxed text-[var(--taiko-ink)]/80 shadow-lg">
           {label && <span className="mb-1 block font-medium text-[var(--taiko-ink)]">{label}</span>}
           {text}
         </span>

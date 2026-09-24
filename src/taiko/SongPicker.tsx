@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
 import { fetchLibrarySongs, loadLibrarySong, type LibrarySong } from "./songLibrary";
 import { songPlayer } from "./player";
-import { STEM_KINDS, hasAnyStem, stemsLeadMs } from "./stems";
+import { STEM_KINDS, emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
 import { clearHistory, loadPlayData, type BestMap, type HistoryEntry } from "./history";
 import { CardControls } from "./CardControls";
@@ -198,10 +198,20 @@ export function SongPicker({
   const pickSong = useCallback(
     async (item: LibrarySong, diff?: Difficulty, spd?: number) => {
       if (loadingId) return;
+      if (item.id === loadedSongId) {
+        if (spd) onSpeedChange?.(spd);
+        if (diff) song.setSong({ difficulty: diff });
+        setTab("songs");
+        return;
+      }
       setWarn(null);
       setPercent(0);
       setLoadingId(item.id);
       songPlayer.stop();
+      // 先释放上一首的解码音频再解码新歌：避免两首歌同时占内存，
+      // 低内存手机长时间切歌时 WebView 更不易被系统回收
+      songPlayer.load(emptyStems());
+      song.setSong({ stems: emptyStems(), songId: "" });
       try {
         const loaded = await loadLibrarySong(item, (p) => setPercent(Math.round(p)));
         const leadMs = stemsLeadMs(loaded.stems);
@@ -232,16 +242,19 @@ export function SongPicker({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loadingId, song, onSpeedChange, tr],
+    [loadingId, loadedSongId, song, onSpeedChange, tr],
   );
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const norm = (v: string) => v.normalize("NFKC").toLowerCase().replace(/[\s·\-_'"’.,，。]/g, "");
+    const q = norm(query);
     if (!q) return library;
-    return library.filter(
-      (s) => s.title.toLowerCase().includes(q) || (s.artist ?? "").toLowerCase().includes(q),
-    );
+    return library.filter((s) => norm(`${s.title}${s.artist ?? ""}`).includes(q));
   }, [library, query]);
+  // 搜索结果变化时把列表滚回开头，避免结果落在视野外看起来“搜索没反应”
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollLeft = 0;
+  }, [query]);
 
   // 选中的卡片自动滚入视野
   useEffect(() => {
@@ -349,6 +362,10 @@ export function SongPicker({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+              onPointerDown={(e) => e.stopPropagation()}
+              type="search"
+              enterKeyHint="search"
               placeholder={tr("搜索歌名或艺人", "Search title or artist")}
               className="w-28 min-w-0 bg-transparent text-base text-[rgba(255,255,255,0.9)] outline-none placeholder:text-[rgba(255,255,255,0.35)] sm:w-56"
             />

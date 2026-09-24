@@ -143,6 +143,8 @@
 
 /* 铺满宿主窗口（Unity WebView 进入即全屏），不再锁定 17:7 留黑边 */
 .taiko-root {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
   --safe-top: max(0.5rem, env(safe-area-inset-top));
   --safe-right: max(0.5rem, env(safe-area-inset-right));
   --safe-bottom: max(0.5rem, env(safe-area-inset-bottom));
