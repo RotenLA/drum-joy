@@ -15,18 +15,20 @@ import { layerOfPitch, partOfPose } from "./stickMapping";
 import { stickManager, type StickPose, type StickSide, type StickSnapshot } from "./stickInput";
 
 /** 起手门槛：一次挥击期间的峰值下探角速度（度/秒）需达到此值 */
-const ARM_SPEED = 200;
+const ARM_SPEED = 170;
 /** 认定「开始往下挥」的角速度（度/秒） */
 const DOWN_MIN_SPEED = 55;
 /** 同一根棒两次击打的最短间隔（毫秒）：只滤传感器自身回弹震荡 */
 const REFRACTORY_MS = 65;
 /** 一次下探的最小累计幅度（度），避免轻微抖动误触 */
-const MIN_TRAVEL_DEG = 6;
+const MIN_TRAVEL_DEG = 5;
 /**
  * 停住判定：正在下挥时若这段时间内俯仰角没有继续变低，
  * 视为已经触底（没有明显回弹的「按住不动」也能结算）。
  */
-const STALL_MS = 55;
+const STALL_MS = 35;
+/** 提前触发：下挥速度跌到峰值的该比例以下即视为已撞击鼓面 */
+const BRAKE_RATIO = 0.35;
 
 
 
@@ -160,14 +162,16 @@ class GestureHitDetector {
     if (pose.p < s.minP - 0.05) {
       s.travel += s.minP - pose.p;
       s.minP = pose.p;
-      s.peak = Math.max(s.peak, -v);
       s.lastProgressAt = at;
-      return;
+      // 急刹 = 棒头撞到鼓面：不等回弹那一帧，立刻结算
+      const braking = -v < s.peak * BRAKE_RATIO;
+      s.peak = Math.max(s.peak, -v);
+      if (!braking || s.peak < ARM_SPEED - 0.5 || s.travel < MIN_TRAVEL_DEG) return;
+    } else {
+      // 角度不再变低 = 触底拐点；短暂持平先等一小会儿（STALL_MS）再结算
+      const rebounding = pose.p > s.minP + 0.05;
+      if (!rebounding && at - s.lastProgressAt < STALL_MS) return;
     }
-
-    // 角度不再变低 = 触底拐点；短暂持平先等一小会儿（STALL_MS）再结算
-    const rebounding = pose.p > s.minP + 0.05;
-    if (!rebounding && at - s.lastProgressAt < STALL_MS) return;
 
     const peak = s.peak;
     const travel = s.travel;

@@ -9,6 +9,7 @@ import { ensureKitLoaded, loadKitEnabled, loadKitId } from "./drumKit";
 import { Toaster } from "@/components/ui/sonner";
 import { debugLog } from "./debugLog";
 import { LabHub, type LabGame } from "./LabHub";
+import { ThereminScreen } from "./theremin/ThereminScreen";
 import { useLanguage } from "./i18n";
 
 
@@ -91,6 +92,7 @@ function ShellInner() {
             onSecretUnlock={() => setLab("hub")}
           />
         )}
+        {lab === "theremin" && <ThereminScreen onExit={() => setLab("hub")} />}
         {lab === "hub" && <LabHub onPick={(g) => setLab(g)} onBack={() => setLab(null)} />}
       </main>
       <DeviceToast />
