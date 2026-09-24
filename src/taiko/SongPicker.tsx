@@ -200,7 +200,7 @@ export function SongPicker({
       if (loadingId) return;
       if (item.id === loadedSongId) {
         if (spd) onSpeedChange?.(spd);
-        if (diff) song.setSong({ difficulty: diff } as Parameters<typeof song.setSong>[0]);
+        if (diff) song.setSong({ difficulty: diff });
         setTab("songs");
         return;
       }
@@ -211,7 +211,7 @@ export function SongPicker({
       // 先释放上一首的解码音频再解码新歌：避免两首歌同时占内存，
       // 低内存手机长时间切歌时 WebView 更不易被系统回收
       songPlayer.load(emptyStems());
-      song.setSong({ stems: emptyStems(), songId: null } as Parameters<typeof song.setSong>[0]);
+      song.setSong({ stems: emptyStems(), songId: "" });
       try {
         const loaded = await loadLibrarySong(item, (p) => setPercent(Math.round(p)));
         const leadMs = stemsLeadMs(loaded.stems);
