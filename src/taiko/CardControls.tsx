@@ -18,7 +18,19 @@ import { useSong } from "./songStore";
 import { useLanguage } from "./i18n";
 import type { BestMap } from "./history";
 
-export function CardControls({ songId, bests }: { songId: string; bests: BestMap }) {
+const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
+
+export function CardControls({
+  songId,
+  bests,
+  speed,
+  onSpeedChange,
+}: {
+  songId: string;
+  bests: BestMap;
+  speed: number;
+  onSpeedChange?: ((speed: number) => void) | undefined;
+}) {
   const song = useSong();
   const { tr } = useLanguage();
   const [kitOn, setKitOn] = useState(true);
@@ -38,11 +50,11 @@ export function CardControls({ songId, bests }: { songId: string; bests: BestMap
 
   return (
     <div
-      className="flex flex-col gap-2 sm:gap-3"
+      className="mx-auto flex w-full max-w-[360px] flex-col items-center gap-2 sm:gap-3"
       onClick={stop}
       onPointerDown={stop}
     >
-      <div className="grid grid-cols-4 gap-1.5">
+      <div className="grid w-full grid-cols-4 gap-1.5">
         {DIFFICULTIES.map((d) => {
           const b = bests[`${songId}|${d.id}`];
           const on = song.difficulty === d.id;
@@ -76,7 +88,7 @@ export function CardControls({ songId, bests }: { songId: string; bests: BestMap
           );
         })}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex w-full flex-wrap items-center justify-center gap-2">
         <button
           type="button"
           onClick={() => saveKitEnabled(!kitOn)}
@@ -103,6 +115,25 @@ export function CardControls({ songId, bests }: { songId: string; bests: BestMap
             </option>
           ))}
         </select>
+      </div>
+      <div className="flex w-full items-center justify-center gap-1.5">
+        <span className="mr-0.5 text-[10px] text-[rgba(255,255,255,0.6)]">
+          {tr("速度", "Speed")}
+        </span>
+        {SPEEDS.map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onSpeedChange?.(value)}
+            className={`min-w-10 rounded-md border px-2 py-1 text-xs tabular-nums transition-colors ${
+              speed === value
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[#12141a]"
+                : "border-[rgba(255,255,255,0.2)] bg-[rgba(0,0,0,0.28)] text-[rgba(255,255,255,0.75)] hover:border-[rgba(255,255,255,0.35)]"
+            }`}
+          >
+            {value}x
+          </button>
+        ))}
       </div>
     </div>
   );
