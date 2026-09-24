@@ -84,6 +84,50 @@ function VerticalTitle({ title }: { title: string }) {
   );
 }
 
+/** 展开卡片歌名：短标题静止，超出可用宽度时横向往返滚动。 */
+function HorizontalTitle({ title }: { title: string }) {
+  const boxRef = useRef<HTMLSpanElement | null>(null);
+  const textRef = useRef<HTMLSpanElement | null>(null);
+  const [shift, setShift] = useState(0);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    const text = textRef.current;
+    if (!box || !text) return;
+    const measure = () => setShift(Math.max(0, text.scrollWidth - box.clientWidth));
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    ro.observe(text);
+    return () => ro.disconnect();
+  }, [title]);
+
+  return (
+    <span ref={boxRef} className="block overflow-hidden">
+      <span
+        ref={textRef}
+        className={`block w-max whitespace-nowrap text-2xl font-semibold text-[rgba(255,255,255,0.96)] ${
+          shift > 4 ? "taiko-title-marquee" : ""
+        }`}
+        style={
+          shift > 4
+            ? ({
+                "--taiko-marquee-shift": `${-shift}px`,
+                "--taiko-marquee-dur": `${Math.max(7, shift / 22)}s`,
+              } as React.CSSProperties)
+            : undefined
+        }
+      >
+        {title}
+      </span>
+    </span>
+  );
+}
+
 export function SongPicker({
   speed,
   onSpeedChange,
@@ -384,11 +428,10 @@ export function SongPicker({
                       className="relative z-10 flex h-full flex-col justify-end gap-1 p-5"
                       style={{ transform: "skewX(9deg)" }}
                     >
-                      <span className="truncate text-2xl font-semibold text-[rgba(255,255,255,0.96)]">
-                        {item.title}
-                      </span>
+                      <HorizontalTitle title={item.title} />
                       <span className="truncate text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
-                        {fmtTime(item.durationMs)} · {speed}x · BPM {item.bpm}
+                        {fmtTime(item.durationMs)} · BPM {item.bpm} · {item.timeSignature[0]}/
+                        {item.timeSignature[1]}
                       </span>
                       {busyThis && (
                         <span className="text-[11px] tabular-nums text-[var(--taiko-accent)]">
