@@ -35,8 +35,8 @@ export function TutorialOverlay({ onLeave, gestureHits = false, fallMode = "stag
   const step = TUTORIAL_STEPS[index] ?? TUTORIAL_STEPS[0];
   /** 练习时钟：由舞台写入，用来判断敲击是否对上了正确音符 */
   const clockRef = useRef<{ timeMs: number; chart: TaikoChart | null }>({ timeMs: 0, chart: null });
-  /** 已被命中的音符（按时间），避免一个音符重复计数 */
-  const consumedRef = useRef<Set<number>>(new Set());
+  /** 已被命中的音符（按 时间:音高 键），避免一个音符重复计数 */
+  const consumedRef = useRef<Set<string>>(new Set());
   /** 认识鼓件：已敲过的部件 */
   const [touched, setTouched] = useState<ReadonlySet<PartId>>(new Set());
   const needed = step.needed ?? 1;
