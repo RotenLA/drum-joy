@@ -35,8 +35,8 @@ export function TutorialOverlay({ onLeave, gestureHits = false, fallMode = "stag
   const step = TUTORIAL_STEPS[index] ?? TUTORIAL_STEPS[0];
   /** 练习时钟：由舞台写入，用来判断敲击是否对上了正确音符 */
   const clockRef = useRef<{ timeMs: number; chart: TaikoChart | null }>({ timeMs: 0, chart: null });
-  /** 已被命中的音符（按 时间:音高 键），避免一个音符重复计数 */
-  const consumedRef = useRef<Set<string>>(new Set());
+  /** 已被命中的音符（按时间），避免一个音符重复计数 */
+  const consumedRef = useRef<Set<number>>(new Set());
   /** 认识鼓件：已敲过的部件 */
   const [touched, setTouched] = useState<ReadonlySet<PartId>>(new Set());
   const needed = step.needed ?? 1;
@@ -72,25 +72,14 @@ export function TutorialOverlay({ onLeave, gestureHits = false, fallMode = "stag
     if (!chart) return;
     const WINDOW = 200;
     const dur = chart.durationMs || 0;
-    const keyOf = (n: { timeMs: number; note?: number }) => `${n.timeMs}:${n.note ?? ""}`;
     const hit = chart.notes.find((n) => {
-      if (n.note === undefined || partOfNote(n.note) !== part || consumedRef.current.has(keyOf(n))) return false;
+      if (n.note === undefined || partOfNote(n.note) !== part || consumedRef.current.has(n.timeMs)) return false;
       let d = Math.abs(n.timeMs - timeMs);
       if (dur > 0) d = Math.min(d, dur - d);
       return d <= WINDOW;
     });
     if (!hit) return;
-    consumedRef.current.add(keyOf(hit));
-    // 同一时刻的配对音符（如闭镲 + 左踏板同时触发课）：两个都命中才计 1 次
-    const partner = chart.notes.find(
-      (n) =>
-        n !== hit &&
-        n.timeMs === hit.timeMs &&
-        n.note !== undefined &&
-        partOfNote(n.note) !== part &&
-        step.targets?.includes(partOfNote(n.note) as PartId),
-    );
-    if (partner && !consumedRef.current.has(keyOf(partner))) return;
+    consumedRef.current.add(hit.timeMs);
     setProgress((value) => { const next = value + 1; if (next >= needed) setPassed(true); return Math.min(next, needed); });
   }, [needed, passed, step.kind, step.targets]);
 

@@ -1,7 +1,6 @@
 /**
- * 全局参数（谱面屏顶部）：画质、视觉/判定偏移、自动校准。
+ * 全局参数（谱面屏顶部）：画质、视觉/判定偏移、自动校准、手机音色、下落速度。
  * 一次设置对所有歌曲生效，不随歌曲变化。
- * 难度、下落速度、手机音色、鼓组、下落模式都在展开的歌曲卡片里设置，此处不再重复。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { HelpDot } from "@/components/HelpDot";
@@ -17,15 +16,41 @@ import {
   type Calibration,
 } from "./calibration";
 import { click as metronomeClick } from "./metronome";
-import { loadKitEnabled, playDrum, subscribeKitEnabled } from "./drumKit";
+import {
+  KIT_NAMES,
+  ensureKitLoaded,
+  loadKitEnabled,
+  loadKitId,
+  playDrum,
+  saveKitEnabled,
+  saveKitId,
+  subscribeKitEnabled,
+  subscribeKitId,
+} from "./drumKit";
 import { midiManager } from "./midiInput";
 import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
+import { useSong } from "./songStore";
+import { DIFFICULTIES } from "./difficulty";
+import type { FallMode } from "./fallMode";
 
+const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 const CALIB_TARGET = 8;
 
-export function GlobalSettings() {
+export function GlobalSettings({
+  speed,
+  onSpeedChange,
+  fallMode: _fallMode,
+  onFallModeChange: _onFallModeChange,
+}: {
+  speed: number;
+  onSpeedChange: (s: number) => void;
+  fallMode?: FallMode;
+  onFallModeChange?: (mode: FallMode) => void;
+}) {
   const { tr, language } = useLanguage();
+  const song = useSong();
+
 
   // ---- 画质 ----
   const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
@@ -48,14 +73,30 @@ export function GlobalSettings() {
   const updateCalib = (patch: Partial<Calibration>) =>
     setCalib((c) => saveCalibration({ ...c, ...patch }));
 
-  // ---- 校准期间是否出鼓声（跟随手机音色开关，开关本身在歌曲卡片里） ----
+  // ---- 手机音色 ----
+  const [kitOn, setKitOn] = useState(true);
   const kitOnRef = useRef(true);
   useEffect(() => {
-    kitOnRef.current = loadKitEnabled();
+    const on = loadKitEnabled();
+    setKitOn(on);
+    kitOnRef.current = on;
+    // 教学里的同一个开关切换时立刻同步
     return subscribeKitEnabled((next) => {
       kitOnRef.current = next;
+      setKitOn(next);
     });
   }, []);
+  const toggleKit = () => saveKitEnabled(!kitOnRef.current);
+
+  // ---- 鼓组选择 ----
+  const [kitId, setKitId] = useState(0);
+  useEffect(() => {
+    const id = loadKitId();
+    setKitId(id);
+    if (loadKitEnabled()) void ensureKitLoaded(id);
+    return subscribeKitId((next) => setKitId(next));
+  }, []);
+  const handleKitChange = (id: number) => saveKitId(id);
 
   // ---- 自动校准（节拍器一直响，敲满 8 下自动结算） ----
   const runRef = useRef<{ startMs: number; beatMs: number; taps: number[] } | null>(null);
@@ -139,6 +180,7 @@ export function GlobalSettings() {
         </span>
       </div>
 
+
       {/* 画质 */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-1 flex items-center gap-1 text-xs text-[var(--taiko-ink)]/70">
@@ -167,6 +209,25 @@ export function GlobalSettings() {
             );
           })()}
         </span>
+
+        <span className="mx-2 h-5 w-px bg-[var(--taiko-line)]" />
+        <span className="mr-1 flex items-center gap-1 text-xs text-[var(--taiko-ink)]/70">
+          {tr("下落速度", "Fall speed")}
+          <HelpDot label={tr("下落速度", "Fall speed")} text={helpText("speed", language)} />
+        </span>
+        {SPEEDS.map((s) => (
+          <button
+            key={s}
+            onClick={() => onSpeedChange(s)}
+            className={`-ml-px rounded-sm border border-[var(--taiko-line)] px-3 py-1 text-xs tabular-nums transition-colors first:ml-0 ${
+              speed === s
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+                : "text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+            }`}
+          >
+            {s}x
+          </button>
+        ))}
       </div>
 
       {/* 偏移 */}
@@ -201,7 +262,28 @@ export function GlobalSettings() {
         ))}
       </div>
 
-      {/* 自动校准 */}
+      {/* 难度（全局，紧跟偏移设置） */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 flex items-center gap-1 text-xs text-[var(--taiko-ink)]/70">
+          {tr("难度", "Difficulty")}
+          <HelpDot label={tr("难度", "Difficulty")} text={helpText("difficulty", language)} />
+        </span>
+        {DIFFICULTIES.map((d) => (
+          <button
+            key={d.id}
+            onClick={() => song.setSong({ difficulty: d.id })}
+            className={`-ml-px rounded-sm border px-3 py-1 text-xs transition-colors first:ml-0 ${
+              song.difficulty === d.id
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+            }`}
+          >
+            {tr(d.label, d.labelEn)}
+          </button>
+        ))}
+      </div>
+
+
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={calibrating ? finish : startCalibration}
@@ -216,6 +298,40 @@ export function GlobalSettings() {
             : tr("自动校准", "Auto calibrate")}
         </button>
         <HelpDot label={tr("自动校准", "Auto calibrate")} text={helpText("calibrate", language)} />
+
+        <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
+        <button
+          onClick={toggleKit}
+          className={`rounded-md border px-3 py-1.5 text-xs transition-colors ${
+            kitOn
+              ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+              : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
+          }`}
+        >
+          {tr("手机音色", "Mobile sound")} {kitOn ? tr("开", "On") : tr("关", "Off")}
+        </button>
+        <HelpDot label={tr("手机音色", "Mobile sound")} text={helpText("kit", language)} />
+
+        <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
+        <label className="flex items-center gap-2 text-xs text-[var(--taiko-ink)]/70">
+          {tr("鼓组", "Drum kit")}
+          <select
+            value={kitId}
+            onChange={(e) => handleKitChange(Number(e.target.value))}
+            className="rounded-md border border-[var(--taiko-accent)] bg-[var(--taiko-surface)] px-2 py-1 text-xs text-[var(--taiko-ink)]"
+          >
+            {KIT_NAMES.map((k) => (
+              <option
+                key={k.id}
+                value={k.id}
+                className="bg-[var(--taiko-surface)] text-[var(--taiko-ink)]"
+              >
+                {tr(k.zh, k.en)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <HelpDot label={tr("鼓组", "Drum kit")} text={helpText("kitId", language)} />
       </div>
     </section>
   );

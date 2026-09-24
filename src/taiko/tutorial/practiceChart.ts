@@ -33,10 +33,8 @@ function push(notes: TaikoNote[], part: PartId, timeMs: number, holdMs?: number)
 /**
  * 生成练习谱：
  * - short / combo：目标鼓件每 2 拍轮流落一个短音符；
- *   组合里若同时含左踏板（pedalHat）与手部鼓件，
- *   每个手部音符的同一时刻都会配一个左踏板短音符——
- *   两者并排同时到达判定线，要求同时敲击（不再用长音符表现「保持踩住」）。
- * - hold：左踏板长音符，每 12 拍一次（仅「踩住长音符」专属课）。
+ *   组合里的左踏板（pedalHat）以长音符表现「保持踩住」。
+ * - hold：左踏板长音符，每 12 拍一次。
  * - parts / done：无音符（只显示鼓阵）。
  */
 export function buildPracticeChart(step: TutorialStep, title: string): TaikoChart {
@@ -49,16 +47,17 @@ export function buildPracticeChart(step: TutorialStep, title: string): TaikoChar
     for (let i = 0; i < LOOPS; i++) push(notes, "pedalHat", lead + i * cycle, HOLD_MS);
   } else if (targets.length > 0) {
     const hand = targets.filter((p) => p !== "pedalHat");
-    const syncPedal = targets.includes("pedalHat") && hand.length > 0;
+    const holdPedal = targets.includes("pedalHat") && hand.length > 0;
     const step2 = BEAT_MS * 2;
     const per = Math.max(1, hand.length ? hand.length : targets.length);
     const seq: readonly PartId[] = hand.length ? hand : targets;
     const total = LOOPS * per * 2;
-    for (let i = 0; i < total; i++) {
-      const t = lead + i * step2;
-      push(notes, seq[i % seq.length]!, t);
-      // 同一时刻补一个左踏板短音符，与手部音符同时触发
-      if (syncPedal) push(notes, "pedalHat", t);
+    for (let i = 0; i < total; i++) push(notes, seq[i % seq.length]!, lead + i * step2);
+    if (holdPedal) {
+      const phrase = step2 * seq.length * 2;
+      for (let i = 0; i < LOOPS; i++) {
+        push(notes, "pedalHat", lead + i * phrase, phrase - BEAT_MS * 0.5);
+      }
     }
   }
 
