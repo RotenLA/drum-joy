@@ -107,7 +107,7 @@ function HorizontalTitle({ title }: { title: string }) {
   }, [title]);
 
   return (
-    <span ref={boxRef} className="block overflow-hidden">
+    <span ref={boxRef} className="block max-w-[calc(100%-8rem)] overflow-hidden">
       <span
         ref={textRef}
         className={`block w-max whitespace-nowrap text-2xl font-semibold text-[rgba(255,255,255,0.96)] ${
