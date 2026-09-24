@@ -1,13 +1,18 @@
 import type { TaikoChart } from "@/shared/taikoChart";
 import { PART_BY_ID, partOfNote, type PartId } from "./laneLayouts";
-import { orderedColumnParts, columnIndexOfHeight } from "./fallMode";
+import {
+  COLUMN_YAW_MAX,
+  COLUMN_YAW_MIN,
+  orderedColumnParts,
+  columnIndexOfYaw,
+} from "./fallMode";
 import { quality } from "./perf";
 import { drawBackground, drawHud, drawVignette, hexToRgba, stageViewport, type StageFrame } from "./stageRenderer";
 
 const LEAD_MS = 2400;
 const HIT_Y = 0.69;
-const YAW_MIN = -90;
-const YAW_MAX = 92;
+const PITCH_MIN = -18;
+const PITCH_MAX = 58;
 const STICK_Y_SHIFT = 0.035;
 
 function addFlowStops(
@@ -106,13 +111,9 @@ function drawPartGlyph(
   ctx.restore();
 }
 
-function notePoint(
-  column: ColumnGeom,
-  y: number,
-  big: boolean,
-) {
+function notePoint(column: ColumnGeom, y: number) {
   const color = PART_BY_ID[column.part].color;
-  const width = column.noteW * (big ? 1.22 : 1);
+  const width = column.noteW;
   const height = Math.max(8, width * 0.28);
   return { x: column.x, y, rx: width / 2, ry: height / 2, color };
 }
@@ -155,7 +156,7 @@ function drawHold(
 ) {
   const top = Math.min(point.y, tailY);
   const bottom = Math.max(point.y, tailY);
-  const halfW = point.rx * 0.78;
+  const halfW = point.rx;
   const gradient = ctx.createLinearGradient(point.x, top, point.x, bottom);
   const phase = (performance.now() % 1400) / 1400;
   if (quality.tier !== "low") addFlowStops(gradient, point.color, phase);
@@ -224,7 +225,7 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
       if ((!hold && (travel <= 0 || travel >= 1)) || (hold && note.timeMs + hold < f.timeMs - 100)) continue;
       const topY = viewport.h * 0.1;
       const y = noteY(note.timeMs, f.timeMs, f.speed, topY, hitY);
-      const point = notePoint(column, y, note.big === true);
+      const point = notePoint(column, y);
       const alpha = Math.min(1, Math.max(0.15, travel * 5));
       if (hold > 0) {
         const tailY = noteY(note.timeMs + hold, f.timeMs, f.speed, topY, hitY);
@@ -249,13 +250,13 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
     for (const side of ["l", "r"] as const) {
       const pose = f.sticks[side];
       if (!pose) continue;
-      const index = columnIndexOfHeight(pose.p, parts);
+      const index = columnIndexOfYaw(pose.y, parts);
       const column = columns[index];
       if (!column) continue;
       const color = side === "l" ? "#7DE2FF" : "#FFC46B";
-      const yaw = Math.max(YAW_MIN, Math.min(YAW_MAX, Number.isFinite(pose.y) ? pose.y : 0));
-      const yawT = (yaw - YAW_MIN) / (YAW_MAX - YAW_MIN);
-      const tipY = hitY + viewport.h * (STICK_Y_SHIFT * (yawT - 0.5) * 2);
+      const pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, Number.isFinite(pose.p) ? pose.p : 0));
+      const pitchT = (pitch - PITCH_MIN) / (PITCH_MAX - PITCH_MIN);
+      const tipY = hitY + viewport.h * (STICK_Y_SHIFT * (0.5 - pitchT) * 2);
       ctx.strokeStyle = hexToRgba(color, 0.78);
       ctx.lineWidth = Math.max(2, viewport.h * 0.005);
       ctx.shadowColor = color;

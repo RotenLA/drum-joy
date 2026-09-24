@@ -838,21 +838,21 @@ export function FallScreen({
               <Button
                 variant="outline"
                 onClick={resume}
-                className="h-12 min-w-28 border-[var(--taiko-glass-line-strong)] bg-transparent px-5 text-sm text-[var(--taiko-ink)] hover:bg-[var(--taiko-ink)] hover:text-[var(--taiko-paper)]"
+                className="h-12 w-32 border-[var(--taiko-glass-line)] bg-transparent px-5 text-sm text-[var(--taiko-ink)]/75 hover:border-[var(--taiko-glass-line-strong)] hover:text-[var(--taiko-ink)]"
               >
                 {tr("继续", "Resume")}
               </Button>
               <Button
                 variant="outline"
                 onClick={start}
-                className="h-12 min-w-28 border-[var(--taiko-glass-line)] bg-transparent px-5 text-sm text-[var(--taiko-ink)]/75 hover:border-[var(--taiko-glass-line-strong)] hover:text-[var(--taiko-ink)]"
+                className="h-12 w-32 border-[var(--taiko-glass-line)] bg-transparent px-5 text-sm text-[var(--taiko-ink)]/75 hover:border-[var(--taiko-glass-line-strong)] hover:text-[var(--taiko-ink)]"
               >
                 {tr("重新开始", "Restart")}
               </Button>
               <Button
                 variant="outline"
                 onClick={backToPicker}
-                className="h-12 min-w-28 border-[var(--taiko-glass-line)] bg-transparent px-5 text-sm text-[var(--taiko-ink)]/75 hover:border-[var(--taiko-glass-line-strong)] hover:text-[var(--taiko-ink)]"
+                className="h-12 w-32 border-[var(--taiko-glass-line)] bg-transparent px-5 text-sm text-[var(--taiko-ink)]/75 hover:border-[var(--taiko-glass-line-strong)] hover:text-[var(--taiko-ink)]"
               >
                 {tr("退出", "Exit")}
               </Button>

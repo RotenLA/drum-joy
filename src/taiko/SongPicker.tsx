@@ -64,7 +64,7 @@ function VerticalTitle({ title }: { title: string }) {
         >
           <span
             ref={textRef}
-            className={`block whitespace-nowrap text-[22px] font-semibold tracking-wide text-[rgba(255,255,255,0.9)] ${
+            className={`block whitespace-nowrap text-[26px] font-semibold tracking-wide text-[rgba(255,255,255,0.9)] ${
               shift ? "taiko-marquee-run" : ""
             }`}
             style={
@@ -465,7 +465,7 @@ export function SongPicker({
                 </button>
 
                 {ready && (
-                  <div className="absolute inset-x-8 top-1/2 z-20 -translate-y-1/2">
+                  <div className="absolute inset-x-8 top-[44%] z-20 -translate-y-1/2">
                     <CardControls
                       songId={item.id}
                       bests={bests}
