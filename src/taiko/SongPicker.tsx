@@ -387,7 +387,8 @@ export function SongPicker({
           {filtered.map((item, i) => {
             const active = loadedSongId === item.id;
             const busyThis = loadingId === item.id;
-            const wide = active || busyThis;
+            // 切换歌曲时旧卡立即收拢，只让正在加载的新卡保持展开。
+            const wide = busyThis || (active && loadingId === null);
             const ready = active && !loadingId;
             return (
               <div
