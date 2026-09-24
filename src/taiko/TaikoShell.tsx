@@ -68,6 +68,29 @@ function ShellInner() {
       }
     } catch { /* 忽略损坏设置 */ }
   }, []);
+  // 屏蔽双指缩放与双击放大（Unity WebView 常忽略 viewport 限制）
+  useEffect(() => {
+    const block = (e: Event) => e.preventDefault();
+    const multi = (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault(); };
+    let lastTouchEnd = 0;
+    const dbl = (e: TouchEvent) => {
+      const now = Date.now();
+      const t = e.target as HTMLElement | null;
+      if (now - lastTouchEnd < 300 && !t?.closest("input,textarea")) e.preventDefault();
+      lastTouchEnd = now;
+    };
+    const wheel = (e: WheelEvent) => { if (e.ctrlKey) e.preventDefault(); };
+    document.addEventListener("gesturestart", block, { passive: false });
+    document.addEventListener("touchmove", multi, { passive: false });
+    document.addEventListener("touchend", dbl, { passive: false });
+    window.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      document.removeEventListener("gesturestart", block);
+      document.removeEventListener("touchmove", multi);
+      document.removeEventListener("touchend", dbl);
+      window.removeEventListener("wheel", wheel);
+    };
+  }, []);
   useEffect(() => {
     installExternalBridge();
     installStickBridge();
