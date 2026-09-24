@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
 import { fetchLibrarySongs, loadLibrarySong, type LibrarySong } from "./songLibrary";
 import { songPlayer } from "./player";
-import { STEM_KINDS, hasAnyStem, stemsLeadMs } from "./stems";
+import { STEM_KINDS, emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
 import { clearHistory, loadPlayData, type BestMap, type HistoryEntry } from "./history";
 import { CardControls } from "./CardControls";
@@ -208,6 +208,10 @@ export function SongPicker({
       setPercent(0);
       setLoadingId(item.id);
       songPlayer.stop();
+      // 先释放上一首的解码音频再解码新歌：避免两首歌同时占内存，
+      // 低内存手机长时间切歌时 WebView 更不易被系统回收
+      songPlayer.load(emptyStems());
+      song.setSong({ stems: emptyStems(), songId: null } as Parameters<typeof song.setSong>[0]);
       try {
         const loaded = await loadLibrarySong(item, (p) => setPercent(Math.round(p)));
         const leadMs = stemsLeadMs(loaded.stems);

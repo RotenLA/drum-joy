@@ -8,6 +8,7 @@ import { DeviceToast } from "./DeviceToast";
 import { ensureKitLoaded, loadKitEnabled, loadKitId, stopAllDrums } from "./drumKit";
 import { Toaster } from "@/components/ui/sonner";
 import { debugLog } from "./debugLog";
+import { getAudioContext } from "./metronome";
 import { LabHub, type LabGame } from "./LabHub";
 import { ThereminScreen } from "./theremin/ThereminScreen";
 import { useLanguage } from "./i18n";
@@ -67,6 +68,18 @@ function ShellInner() {
         }));
       }
     } catch { /* 忽略损坏设置 */ }
+  }, []);
+  // 切到后台时挂起音频引擎，回到前台再恢复：后台不占 CPU/音频线程，降低被系统回收的概率
+  useEffect(() => {
+    const onVis = () => {
+      try {
+        const ctx = getAudioContext();
+        if (document.visibilityState === "hidden") void ctx.suspend();
+        else void ctx.resume();
+      } catch { /* 无音频环境 */ }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
   // 屏蔽双指缩放与双击放大（Unity WebView 常忽略 viewport 限制）
   useEffect(() => {

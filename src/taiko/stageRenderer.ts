@@ -363,6 +363,7 @@ const padGradCache = new Map<string, CanvasGradient>();
 function cachedGrad(key: string, make: () => CanvasGradient): CanvasGradient {
   let g = padGradCache.get(key);
   if (!g) {
+    if (padGradCache.size > 256) padGradCache.clear();
     g = make();
     padGradCache.set(key, g);
   }
