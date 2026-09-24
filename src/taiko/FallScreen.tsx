@@ -438,12 +438,13 @@ export function FallScreen({
     };
   }, [phase]);
 
-  // 空格暂停/继续，回车开始
+  // 空格暂停；暂停后按空格同样先倒数一小节再继续。
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === " " && (phaseRef.current === "playing" || phaseRef.current === "paused")) {
         e.preventDefault();
-        togglePause();
+        if (phaseRef.current === "paused") resume();
+        else togglePause();
       } else if (
         e.key === "Enter" &&
         (phaseRef.current === "idle" || phaseRef.current === "ended")
@@ -453,7 +454,7 @@ export function FallScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [togglePause, start]);
+  }, [togglePause, resume, start]);
 
   // 渲染循环
   useEffect(() => {
@@ -572,11 +573,17 @@ export function FallScreen({
               ),
             )
           : null;
+      const countdownRemainingMs =
+        ph === "countdown"
+          ? Math.max(0, countdownStartRef.current + countdownMsRef.current + 150 - now)
+          : 0;
+      const visualTimeMs =
+        ph === "countdown" ? countdownTargetMsRef.current - countdownRemainingMs : t;
 
       const frame = {
         chart: frameChart,
         // 视觉偏移：只影响画面，不影响判定
-        timeMs: t + calibRef.current.visualMs,
+        timeMs: visualTimeMs + calibRef.current.visualMs,
         speed,
         now,
         flashes: flashesRef.current,
@@ -674,7 +681,7 @@ export function FallScreen({
         {debugVisible() && <DebugLogPanel />}
 
         {/* 顶部右侧：演奏中只保留暂停 */}
-        {(phase === "playing" || phase === "countdown") && (
+        {phase === "playing" && (
           <div className="absolute right-3 top-16 z-10 flex flex-col items-end gap-2">
             <span className="hidden text-right text-xs leading-tight text-[rgba(255,255,255,0.6)] lg:block">
               {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
