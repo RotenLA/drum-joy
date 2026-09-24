@@ -106,6 +106,7 @@ export function FallScreen({
   const countdownStartRef = useRef(0);
   const countdownMsRef = useRef(0);
   const countdownBeatsRef = useRef(4);
+  const countdownTargetRef = useRef(0);
   const beatMsRef = useRef(500);
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
@@ -367,6 +368,7 @@ export function FallScreen({
     countdownBeatsRef.current = beats;
     const countdownMs = beats * beatMs;
     countdownMsRef.current = countdownMs;
+    countdownTargetRef.current = fromMs;
     // 一次算好绝对起播时刻，倒计时从目标位置前方走来，结束后无缝衔接。
     const ctx = getAudioContext();
     const LEAD_SEC = 0.15;
@@ -498,8 +500,8 @@ export function FallScreen({
 
       let ph = phaseRef.current;
       const t = readTimeMs(now);
-      // 倒计时走到 0 → 直接进入演奏（时钟不重设，音符不跳位）
-      if (ph === "countdown" && t >= 0) {
+      // 倒计时走到目标位置 → 直接进入演奏（时钟不重设，音符不跳位）
+      if (ph === "countdown" && t >= countdownTargetRef.current) {
         ph = "playing";
         phaseRef.current = "playing";
         setPhase("playing");
@@ -562,7 +564,7 @@ export function FallScreen({
           ? String(
               Math.min(
                 countdownBeatsRef.current,
-                Math.max(1, Math.ceil((countdownMsRef.current - (t - timeRef.current)) / beatMsRef.current)),
+                Math.max(1, Math.ceil((countdownTargetRef.current - t) / beatMsRef.current)),
               ),
             )
           : null;
@@ -668,7 +670,7 @@ export function FallScreen({
         {debugVisible() && <DebugLogPanel />}
 
         {/* 顶部右侧：暂停按钮放在画布曲名/BPM 下方，避免重叠 */}
-        {(phase === "playing" || phase === "countdown") && (
+        {phase === "playing" && (
           <div className="absolute right-3 top-16 z-10 flex flex-col items-end gap-2">
             <span className="hidden text-right text-xs leading-tight text-[rgba(255,255,255,0.6)] lg:block">
               {tr("速度", "Speed")} {speed}x · {tr("难度", "Difficulty")}{" "}
@@ -679,18 +681,11 @@ export function FallScreen({
             </span>
             <div className="flex items-center gap-2">
               <button
-                onClick={togglePause}
+                onClick={pause}
                 className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
               >
                 {tr("暂停", "Pause")}
               </button>
-              <button
-                onClick={backToPicker}
-                className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
-              >
-                {tr("返回", "Back")}
-              </button>
-              <HelpDot label={tr("游玩", "Play")} text={helpText("play", language)} />
             </div>
           </div>
         )}
@@ -805,7 +800,12 @@ export function FallScreen({
                   <X size={16} />
                 </button>
               </div>
-              <GlobalSettings />
+              <GlobalSettings
+                speed={speed}
+                onSpeedChange={(next) => onSpeedChange?.(next)}
+                fallMode={fallMode}
+                onFallModeChange={(next) => onFallModeChange?.(next)}
+              />
             </div>
           </div>
         )}
@@ -815,7 +815,7 @@ export function FallScreen({
             <p className="text-lg tracking-[0.3em] text-white">{tr("已暂停", "PAUSED")}</p>
             <div className="flex gap-3">
               <button
-                onClick={togglePause}
+                onClick={resume}
                 className="border border-white/70 px-6 py-2 text-sm text-white transition-colors hover:bg-white hover:text-black"
               >
                 {tr("继续", "Resume")}
@@ -830,7 +830,7 @@ export function FallScreen({
                 onClick={backToPicker}
                 className="border border-white/30 px-6 py-2 text-sm text-white/70 transition-colors hover:border-white/70 hover:text-white"
               >
-                {tr("选择歌曲", "Songs")}
+                {tr("退出", "Exit")}
               </button>
             </div>
           </Overlay>

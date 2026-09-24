@@ -14,7 +14,6 @@ import { CardControls } from "./CardControls";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
 import { BookOpen, LogOut, Play, Search, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { FallMode } from "./fallMode";
 
 const fmtTime = (ms: number) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -132,8 +131,6 @@ function HorizontalTitle({ title }: { title: string }) {
 export function SongPicker({
   speed,
   onSpeedChange,
-  fallMode,
-  onFallModeChange,
   onStart,
   onOpenSettings,
   onExit,
@@ -143,8 +140,6 @@ export function SongPicker({
 }: {
   speed: number;
   onSpeedChange?: ((s: number) => void) | undefined;
-  fallMode: FallMode;
-  onFallModeChange?: ((mode: FallMode) => void) | undefined;
   onStart: () => void;
   onOpenSettings: () => void;
   onExit?: (() => void) | undefined;
