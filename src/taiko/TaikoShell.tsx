@@ -56,7 +56,17 @@ function ShellInner() {
 
 
   useEffect(() => {
-    try { const raw = localStorage.getItem(SETTINGS_KEY); if (raw) setSettings((s) => ({ ...s, ...(JSON.parse(raw) as Partial<TaikoSettings>) })); } catch { /* 忽略损坏设置 */ }
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<TaikoSettings>;
+        setSettings((s) => ({
+          ...s,
+          ...saved,
+          fallMode: saved.fallMode === "columns" ? "columns" : "stage",
+        }));
+      }
+    } catch { /* 忽略损坏设置 */ }
   }, []);
   useEffect(() => {
     installExternalBridge();

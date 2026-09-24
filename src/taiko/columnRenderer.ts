@@ -41,7 +41,7 @@ function drawPartGlyph(
   ctx.translate(x, y);
   ctx.strokeStyle = hexToRgba(color, 0.55 + intensity * 0.4);
   ctx.lineWidth = Math.max(1.2, size * 0.035);
-  ctx.shadowColor = color;
+  ctx.shadowColor = point.color;
   ctx.shadowBlur = quality.params.glow ? 7 + intensity * 18 : 0;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -100,8 +100,8 @@ function drawNote(ctx: CanvasRenderingContext2D, point: NotePoint, alpha: number
   ctx.globalAlpha = alpha;
   ctx.shadowColor = color;
   ctx.shadowBlur = quality.params.glow ? 14 : 0;
-  ctx.fillStyle = hexToRgba(color, 0.7);
-  ctx.strokeStyle = color;
+  ctx.fillStyle = hexToRgba(point.color, 0.7);
+  ctx.strokeStyle = point.color;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.roundRect(point.x - point.rx, point.y - point.ry, point.rx * 2, point.ry * 2, point.ry);
