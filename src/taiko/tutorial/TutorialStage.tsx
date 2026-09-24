@@ -13,6 +13,7 @@ import { Metronome, unlockAudio } from "../metronome";
 import { stickManager } from "../stickInput";
 import { renderColumns } from "../columnRenderer";
 import type { FallMode } from "../fallMode";
+import type { TaikoChart } from "@/shared/taikoChart";
 
 export function TutorialStage({
   step,
@@ -23,6 +24,7 @@ export function TutorialStage({
   hold,
   restartKey,
   fallMode,
+  clockRef,
 }: {
   step: TutorialStep;
   index: number;
@@ -32,6 +34,8 @@ export function TutorialStage({
   hold: boolean;
   restartKey: number;
   fallMode: FallMode;
+  /** 当前练习时钟与谱面，供外层做真实判定 */
+  clockRef?: React.MutableRefObject<{ timeMs: number; chart: TaikoChart | null }>;
 }) {
   const { language } = useLanguage();
   const labels = tutorialLabels(language);
@@ -71,7 +75,8 @@ export function TutorialStage({
     if (!ctx) return;
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, quality.params.maxDpr);
+      // 教学画面较静态，至少按 2 倍像素绘制保证鼓面清晰
+      const dpr = Math.min(window.devicePixelRatio || 1, Math.max(quality.params.maxDpr, 2));
       canvas.width = Math.max(1, wrap.clientWidth * dpr);
       canvas.height = Math.max(1, wrap.clientHeight * dpr);
       canvas.style.width = `${wrap.clientWidth}px`;
@@ -91,6 +96,7 @@ export function TutorialStage({
       const elapsed = now - t0;
       const timeMs = chart.durationMs > 0 ? elapsed % chart.durationMs : elapsed;
       timeRef.current = timeMs;
+      if (clockRef) clockRef.current = { timeMs, chart };
       const frame = {
         chart,
         timeMs,
@@ -113,7 +119,7 @@ export function TutorialStage({
       ro?.disconnect();
       if (!ro) window.removeEventListener("resize", resize);
     };
-  }, [chart, flashes, parts, showNotes, restartKey, fallMode]);
+  }, [chart, flashes, parts, showNotes, restartKey, fallMode, clockRef]);
 
   return (
     <div ref={wrapRef} className="relative h-full min-h-[240px] w-full overflow-hidden bg-[var(--taiko-paper)]">
