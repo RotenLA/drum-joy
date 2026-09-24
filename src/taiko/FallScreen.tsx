@@ -10,7 +10,7 @@ import { gestureHitDetector, noteOfPart } from "./gestureHit";
 
 import { DebugLogPanel } from "./DebugLogPanel";
 import { click as metronomeClick, getAudioContext, unlockAudio } from "./metronome";
-import { loadKitEnabled, playDrum, warmUpDrums } from "./drumKit";
+import { loadKitEnabled, playDrum, subscribeKitEnabled, warmUpDrums } from "./drumKit";
 import { latencyMeter } from "./latencyMeter";
 import { debugLog } from "./debugLog";
 import { HelpDot } from "@/components/HelpDot";
@@ -130,6 +130,7 @@ export function FallScreen({
   useEffect(() => {
     calibRef.current = loadCalibration();
     kitOnRef.current = loadKitEnabled();
+    return subscribeKitEnabled((on) => { kitOnRef.current = on; });
   }, []);
 
   const layout = layoutOf(song.difficulty);
@@ -672,6 +673,12 @@ export function FallScreen({
                 className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
               >
                 {tr("暂停", "Pause")}
+              </button>
+              <button
+                onClick={backToPicker}
+                className="rounded-md bg-[rgba(255,255,255,0.14)] px-4 py-1.5 text-xs text-[rgba(255,255,255,0.92)] transition-colors hover:bg-[rgba(255,255,255,0.26)]"
+              >
+                {tr("返回", "Back")}
               </button>
               <HelpDot label={tr("游玩", "Play")} text={helpText("play", language)} />
             </div>

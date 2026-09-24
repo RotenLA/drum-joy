@@ -198,6 +198,12 @@ export function SongPicker({
   const pickSong = useCallback(
     async (item: LibrarySong, diff?: Difficulty, spd?: number) => {
       if (loadingId) return;
+      if (item.id === loadedSongId) {
+        if (spd) onSpeedChange?.(spd);
+        if (diff) song.setSong({ difficulty: diff } as Parameters<typeof song.setSong>[0]);
+        setTab("songs");
+        return;
+      }
       setWarn(null);
       setPercent(0);
       setLoadingId(item.id);
@@ -232,7 +238,7 @@ export function SongPicker({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loadingId, song, onSpeedChange, tr],
+    [loadingId, loadedSongId, song, onSpeedChange, tr],
   );
 
   const filtered = useMemo(() => {

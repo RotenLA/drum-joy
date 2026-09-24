@@ -152,7 +152,9 @@ export function GlobalSettings({
       const run = runRef.current;
       const part = partOfNote(note);
       if (kitOnRef.current && part) playDrum(part, vel, undefined, note);
-      if (!run) return;
+      if (!run || run.taps.length >= CALIB_TARGET) return;
+      const last = run.taps[run.taps.length - 1];
+      if (last !== undefined && atMs - last < 120) return;
       run.taps.push(atMs);
       setTaps(run.taps.length);
     });
