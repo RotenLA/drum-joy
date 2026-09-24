@@ -14,6 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
+      play_bests: {
+        Row: {
+          best_accuracy: number
+          best_combo: number
+          best_progress: number
+          best_score: number
+          completed: boolean
+          difficulty: string
+          plays: number
+          song_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          best_accuracy?: number
+          best_combo?: number
+          best_progress?: number
+          best_score?: number
+          completed?: boolean
+          difficulty: string
+          plays?: number
+          song_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          best_accuracy?: number
+          best_combo?: number
+          best_progress?: number
+          best_score?: number
+          completed?: boolean
+          difficulty?: string
+          plays?: number
+          song_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      play_records: {
+        Row: {
+          accuracy: number
+          completed: boolean
+          difficulty: string
+          id: string
+          max_combo: number
+          notes: number
+          played_at: string
+          progress: number
+          score: number
+          song_id: string
+          speed: number
+          title: string
+          user_id: string
+        }
+        Insert: {
+          accuracy?: number
+          completed?: boolean
+          difficulty: string
+          id?: string
+          max_combo?: number
+          notes?: number
+          played_at?: string
+          progress?: number
+          score?: number
+          song_id: string
+          speed?: number
+          title?: string
+          user_id: string
+        }
+        Update: {
+          accuracy?: number
+          completed?: boolean
+          difficulty?: string
+          id?: string
+          max_combo?: number
+          notes?: number
+          played_at?: string
+          progress?: number
+          score?: number
+          song_id?: string
+          speed?: number
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       song_charts: {
         Row: {
           chart: Json
