@@ -136,6 +136,8 @@ export interface StageFrame {
 
   /** 判定统计（HUD 显示 P/G/M 与准确率） */
   stats?: { perfect: number; good: number; miss: number } | null;
+  /** 当前准确率对应的实时评级。 */
+  rating?: string | null;
   /** 生存模式血量 0~1（其他模式不传） */
   hp?: number | null;
   /** 宿主注入的鼓棒姿态（度）；null / 缺省不绘制该棒 */
@@ -1151,11 +1153,28 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     ctx.shadowBlur = 0;
   }
 
-  // 右上曲名 + BPM
-  ctx.textAlign = "right";
+  // 右上曲名 + BPM；超长标题在限定区域内往返滚动
   ctx.fillStyle = "#ffffff";
   ctx.font = "700 15px system-ui, sans-serif";
-  ctx.fillText(f.chart.title, w - 28, 32);
+  const titleRight = w - 28;
+  const titleMaxWidth = Math.min(360, w * 0.42);
+  const titleWidth = ctx.measureText(f.chart.title).width;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(titleRight - titleMaxWidth, 12, titleMaxWidth, 25);
+  ctx.clip();
+  if (titleWidth > titleMaxWidth) {
+    const overflow = titleWidth - titleMaxWidth;
+    const cycle = (f.now / Math.max(6000, overflow * 35)) % 2;
+    const shift = cycle <= 1 ? cycle * overflow : (2 - cycle) * overflow;
+    ctx.textAlign = "left";
+    ctx.fillText(f.chart.title, titleRight - titleMaxWidth - shift, 32);
+  } else {
+    ctx.textAlign = "right";
+    ctx.fillText(f.chart.title, titleRight, 32);
+  }
+  ctx.restore();
+  ctx.textAlign = "right";
   ctx.fillStyle = "#5D8CF4";
   ctx.font = "600 11px system-ui, sans-serif";
   ctx.fillText(`BPM ${f.chart.bpm}`, w - 28, 50);
@@ -1187,6 +1206,11 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
       ctx.fillText(`P ${f.stats.perfect} · G ${f.stats.good} · M ${f.stats.miss}`, 28, y);
       ctx.fillStyle = "rgba(255,255,255,0.4)";
       ctx.fillText(`ACC ${acc.toFixed(1)}%`, 28, y + 18);
+      if (f.rating) {
+        ctx.fillStyle = "#fc8800";
+        ctx.font = "900 24px system-ui, sans-serif";
+        ctx.fillText(f.rating, 28, y + 48);
+      }
     }
   }
 

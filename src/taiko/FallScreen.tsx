@@ -29,6 +29,7 @@ import { quality, type QualityTier } from "./perf";
 import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
 import { addHistory } from "./history";
 import { TutorialOverlay, markTutorialSeen } from "./tutorial/TutorialOverlay";
+import { ratingOfAccuracy } from "./rating";
 
 const FLASH_MS = 200;
 /** 判定窗口：Perfect ±100ms / Good ±200ms，超时未击为 Miss（调手感改这里） */
@@ -563,6 +564,14 @@ export function FallScreen({
         judgement: judgementRef.current,
         countText,
         stats: statsRef.current,
+        rating:
+          statsRef.current.perfect + statsRef.current.good + statsRef.current.miss > 0
+            ? ratingOfAccuracy(
+                ((statsRef.current.perfect + statsRef.current.good * 0.5) /
+                  (statsRef.current.perfect + statsRef.current.good + statsRef.current.miss)) *
+                  100,
+              )
+            : null,
         // 未开始（idle）时不画音符，只显示鼓阵
         showNotes: ph !== "idle",
 
@@ -604,6 +613,7 @@ export function FallScreen({
         title: song.fileName,
         difficulty: song.difficulty,
         speed,
+        score: scoreRef.current,
         accuracy: total > 0 ? ((s.perfect + s.good * 0.5) / total) * 100 : 0,
         maxCombo: maxComboRef.current,
         notes: total,
@@ -802,9 +812,14 @@ export function FallScreen({
           <Overlay>
             <p className="text-xs uppercase tracking-[0.3em] text-white/50">Result</p>
 
-            <p className="text-3xl font-bold tabular-nums text-white">
-              {String(scoreRef.current).padStart(7, "0")}
-            </p>
+            <div className="flex items-center gap-4">
+              <p className="text-5xl font-black text-[var(--taiko-accent)]">
+                {ratingOfAccuracy(acc)}
+              </p>
+              <p className="text-3xl font-bold tabular-nums text-white">
+                {String(scoreRef.current).padStart(7, "0")}
+              </p>
+            </div>
             <p className="text-sm tabular-nums text-white/75">
               {tr("最大连击", "Max combo")} {maxComboRef.current} · {tr("准确率", "Accuracy")} {acc.toFixed(1)}%
             </p>
