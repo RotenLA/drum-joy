@@ -756,8 +756,6 @@ export function FallScreen({
           <SongPicker
             speed={speed}
             onSpeedChange={onSpeedChange}
-            fallMode={fallMode}
-            onFallModeChange={onFallModeChange}
             onStart={start}
             onOpenSettings={() => setSettingsOpen(true)}
             onExit={onExit}
