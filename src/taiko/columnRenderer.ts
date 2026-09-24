@@ -10,23 +10,26 @@ const YAW_MIN = -90;
 const YAW_MAX = 92;
 const STICK_Y_SHIFT = 0.035;
 
-function addWrappedFlowBand(
+function addFlowStops(
   gradient: CanvasGradient,
-  center: number,
-  halfWidth: number,
   color: string,
-  dimAlpha: number,
-  brightAlpha: number,
+  phase: number,
 ) {
-  for (const offset of [-1, 0, 1]) {
-    const c = center + offset;
-    const lo = Math.max(0, c - halfWidth);
-    const hi = Math.min(1, c + halfWidth);
-    if (lo >= hi) continue;
-    gradient.addColorStop(lo, hexToRgba(color, dimAlpha));
-    if (c >= 0 && c <= 1) gradient.addColorStop(c, hexToRgba(color, brightAlpha));
-    gradient.addColorStop(hi, hexToRgba(color, dimAlpha));
+  const stops: { at: number; alpha: number }[] = [{ at: 0, alpha: 0.28 }, { at: 1, alpha: 0.28 }];
+  for (const [center, halfWidth, brightAlpha] of [
+    [phase, 0.1, 0.66],
+    [(phase + 0.5) % 1, 0.075, 0.5],
+  ] as const) {
+    for (const offset of [-1, 0, 1]) {
+      const c = center + offset;
+      if (c + halfWidth < 0 || c - halfWidth > 1) continue;
+      stops.push({ at: Math.max(0, c - halfWidth), alpha: 0.3 });
+      if (c >= 0 && c <= 1) stops.push({ at: c, alpha: brightAlpha });
+      stops.push({ at: Math.min(1, c + halfWidth), alpha: 0.3 });
+    }
   }
+  stops.sort((a, b) => a.at - b.at);
+  for (const stop of stops) gradient.addColorStop(stop.at, hexToRgba(color, stop.alpha));
 }
 
 interface ColumnGeom {
@@ -155,12 +158,11 @@ function drawHold(
   const halfW = point.rx * 0.78;
   const gradient = ctx.createLinearGradient(point.x, top, point.x, bottom);
   const phase = (performance.now() % 1400) / 1400;
-  gradient.addColorStop(0, hexToRgba(point.color, 0.28));
-  if (quality.tier !== "low") {
-    addWrappedFlowBand(gradient, phase, 0.1, point.color, 0.3, 0.66);
-    addWrappedFlowBand(gradient, (phase + 0.5) % 1, 0.075, point.color, 0.3, 0.5);
+  if (quality.tier !== "low") addFlowStops(gradient, point.color, phase);
+  else {
+    gradient.addColorStop(0, hexToRgba(point.color, 0.28));
+    gradient.addColorStop(1, hexToRgba(point.color, 0.28));
   }
-  gradient.addColorStop(1, hexToRgba(point.color, 0.28));
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.fillStyle = gradient;

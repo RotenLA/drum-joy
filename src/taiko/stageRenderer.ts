@@ -409,23 +409,26 @@ const ARRIVAL_DEPTH = 2;
 const CUE_DEPTH = 3;
 
 /** 在已有底色上叠两道首尾连续的流光，避免单亮斑走到末端后突然跳回。 */
-function addWrappedFlowBand(
+function addFlowStops(
   gradient: CanvasGradient,
-  center: number,
-  halfWidth: number,
   color: string,
-  dimAlpha: number,
-  brightAlpha: number,
+  phase: number,
 ) {
-  for (const offset of [-1, 0, 1]) {
-    const c = center + offset;
-    const lo = Math.max(0, c - halfWidth);
-    const hi = Math.min(1, c + halfWidth);
-    if (lo >= hi) continue;
-    gradient.addColorStop(lo, hexToRgba(color, dimAlpha));
-    if (c >= 0 && c <= 1) gradient.addColorStop(c, hexToRgba(color, brightAlpha));
-    gradient.addColorStop(hi, hexToRgba(color, dimAlpha));
+  const stops: { at: number; alpha: number }[] = [{ at: 0, alpha: 0.25 }, { at: 1, alpha: 0.25 }];
+  for (const [center, halfWidth, brightAlpha] of [
+    [phase, 0.1, 0.58],
+    [(phase + 0.5) % 1, 0.075, 0.44],
+  ] as const) {
+    for (const offset of [-1, 0, 1]) {
+      const c = center + offset;
+      if (c + halfWidth < 0 || c - halfWidth > 1) continue;
+      stops.push({ at: Math.max(0, c - halfWidth), alpha: 0.27 });
+      if (c >= 0 && c <= 1) stops.push({ at: c, alpha: brightAlpha });
+      stops.push({ at: Math.min(1, c + halfWidth), alpha: 0.27 });
+    }
   }
+  stops.sort((a, b) => a.at - b.at);
+  for (const stop of stops) gradient.addColorStop(stop.at, hexToRgba(color, stop.alpha));
 }
 
 /** 音符进入自身鼓面的程度（0~1），严格在旋转后的鼓面轮廓内平滑显现。 */
@@ -544,12 +547,11 @@ function noteItems(
           ctx.shadowBlur = GLOW ? 14 * scale : 0;
           const flow = ctx.createLinearGradient(tail.x, tail.y, head.x, head.y);
            const phase = (f.now % 1400) / 1400;
-           flow.addColorStop(0, hexToRgba(color, 0.25));
-           if (QUALITY_TIER !== "low") {
-             addWrappedFlowBand(flow, phase, 0.1, color, 0.27, 0.58);
-             addWrappedFlowBand(flow, (phase + 0.5) % 1, 0.075, color, 0.27, 0.44);
+           if (QUALITY_TIER !== "low") addFlowStops(flow, color, phase);
+           else {
+             flow.addColorStop(0, hexToRgba(color, 0.25));
+             flow.addColorStop(1, hexToRgba(color, 0.25));
            }
-           flow.addColorStop(1, hexToRgba(color, 0.25));
           ctx.fillStyle = flow;
           ctx.strokeStyle = hexToRgba(color, 0.75);
           ctx.lineWidth = Math.max(1, rx * 0.08);
