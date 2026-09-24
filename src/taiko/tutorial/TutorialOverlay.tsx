@@ -72,14 +72,25 @@ export function TutorialOverlay({ onLeave, gestureHits = false, fallMode = "stag
     if (!chart) return;
     const WINDOW = 200;
     const dur = chart.durationMs || 0;
+    const keyOf = (n: { timeMs: number; note?: number }) => `${n.timeMs}:${n.note ?? ""}`;
     const hit = chart.notes.find((n) => {
-      if (n.note === undefined || partOfNote(n.note) !== part || consumedRef.current.has(n.timeMs)) return false;
+      if (n.note === undefined || partOfNote(n.note) !== part || consumedRef.current.has(keyOf(n))) return false;
       let d = Math.abs(n.timeMs - timeMs);
       if (dur > 0) d = Math.min(d, dur - d);
       return d <= WINDOW;
     });
     if (!hit) return;
-    consumedRef.current.add(hit.timeMs);
+    consumedRef.current.add(keyOf(hit));
+    // 同一时刻的配对音符（如闭镲 + 左踏板同时触发课）：两个都命中才计 1 次
+    const partner = chart.notes.find(
+      (n) =>
+        n !== hit &&
+        n.timeMs === hit.timeMs &&
+        n.note !== undefined &&
+        partOfNote(n.note) !== part &&
+        step.targets?.includes(partOfNote(n.note) as PartId),
+    );
+    if (partner && !consumedRef.current.has(keyOf(partner))) return;
     setProgress((value) => { const next = value + 1; if (next >= needed) setPassed(true); return Math.min(next, needed); });
   }, [needed, passed, step.kind, step.targets]);
 
