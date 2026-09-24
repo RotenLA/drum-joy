@@ -37,6 +37,8 @@ if (typeof document !== "undefined") preloadPadSprites();
  * GLOW=false 时全部 shadowBlur 走 0，安卓中低端机上这一项能省掉大半开销。
  */
 let GLOW = true;
+/** 当前实际画质，控制连线流光与命中环复杂度。 */
+let QUALITY_TIER: "high" | "medium" | "low" = "high";
 /** 单次命中喷出的粒子数（低档为 0） */
 let SPARKS = 12;
 /** 粒子总量上限，超出丢弃最旧的 */
@@ -636,6 +638,67 @@ function drawParticles(ctx: CanvasRenderingContext2D, fx: CanvasFx, now: number)
   ctx.restore();
 }
 
+/** 不增加粒子的命中冲击环：复用命中闪光进度，按画质减少层数。 */
+function drawImpactRing(
+  ctx: CanvasRenderingContext2D,
+  id: PartId,
+  intensity: number,
+  w: number,
+  h: number,
+) {
+  if (intensity <= 0 || QUALITY_TIER === "low") return;
+  const pad = geomOf(id, w, h);
+  const anchor = PAD_ANCHORS[id];
+  const color = PART_BY_ID[id].color;
+  const progress = 1 - intensity;
+  const scale = 0.94 + progress * 0.62;
+  const alpha = Math.sin(progress * Math.PI) * 0.82;
+  if (alpha <= 0.01) return;
+
+  const path = (ringScale: number) => {
+    ctx.beginPath();
+    if (anchor.square) {
+      const th = id === "kick" ? -PEDAL_TILT : PEDAL_TILT;
+      ctx.save();
+      ctx.scale(1, 0.42);
+      ctx.rotate(th);
+      const r = pad.rx * ringScale;
+      ctx.roundRect(-r, -r, r * 2, r * 2, r * 0.24);
+      ctx.restore();
+    } else {
+      const meta = padSpriteMeta(id);
+      const angle = meta ? (meta.ringAngleDeg * Math.PI) / 180 : pad.rot;
+      ctx.ellipse(0, 0, pad.rx * ringScale, pad.ry * ringScale, angle, 0, Math.PI * 2);
+    }
+  };
+
+  ctx.save();
+  ctx.translate(pad.cx, pad.cy);
+  ctx.strokeStyle = hexToRgba(color, alpha);
+  ctx.lineWidth = Math.max(1.5, pad.rx * 0.045);
+  ctx.shadowColor = color;
+  ctx.shadowBlur = GLOW ? 14 * alpha : 0;
+  path(scale);
+  ctx.stroke();
+
+  if (QUALITY_TIER === "high") {
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = Math.max(1, pad.rx * 0.022);
+    path(scale + 0.16);
+    ctx.stroke();
+
+    // 一道快速扫过的亮弧，比增加粒子更轻量。
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.shadowBlur = 0;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.ellipse(0, 0, pad.rx * scale, pad.ry * scale, pad.rot, -Math.PI * 0.85 + progress * 2.2, -Math.PI * 0.25 + progress * 2.2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 
 /**
  * 方形踏板鼓盘（底鼓/踩镲踏板）：斜放的立方体。
@@ -1040,8 +1103,8 @@ function cueItems(
 const CHORD_TOL_MS = 15;
 
 /**
- * 同刻音符之间的淡连线：提示「要一起敲」，刻意压低视觉，
- * 只随接近判定位置略微提亮，永远淡于音符本身。
+ * 同刻音符之间的混色能量线：提示「要一起敲」。
+ * 每段由两端鼓件颜色连续过渡，接近判定位置时更亮、更粗。
  */
 function chordItems(
   ctx: CanvasRenderingContext2D,
@@ -1065,7 +1128,7 @@ function chordItems(
   let i = lo;
   while (i < notes.length && notes[i]!.timeMs <= until) {
     const t0 = notes[i]!.timeMs;
-    const group: { x: number; y: number }[] = [];
+    const group: { x: number; y: number; color: string }[] = [];
     let progress = 0;
     let j = i;
     while (j < notes.length && notes[j]!.timeMs - t0 <= CHORD_TOL_MS) {
@@ -1079,25 +1142,59 @@ function chordItems(
       if (t <= 0.02 || t >= 1) continue;
       const p = Math.pow(Math.max(0.02, Math.min(1, t)), EASE);
       progress = p;
-      group.push({ x: pad.gx + (pad.cx - pad.gx) * p, y: pad.gy + (pad.cy - pad.gy) * p });
+      group.push({
+        x: pad.gx + (pad.cx - pad.gx) * p,
+        y: pad.gy + (pad.cy - pad.gy) * p,
+        color: PART_BY_ID[part].color,
+      });
     }
     i = j;
     if (group.length < 2) continue;
     group.sort((a, b) => a.x - b.x);
-    const alpha = (0.05 + 0.13 * progress) * Math.min(1, progress * 6);
+    const alpha = (0.34 + 0.4 * progress) * Math.min(1, progress * 8);
     const pts = group;
     items.push({
       // 连线与在途音符同处固定后景，不再因端点跨越鼓面边缘而跳层。
       depth: TRANSIT_BAND_DEPTH + 0.1,
       draw: () => {
         ctx.save();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = `rgba(235,240,255,${alpha})`;
-        ctx.lineWidth = Math.max(1, h * 0.0022);
-        ctx.beginPath();
-        ctx.moveTo(pts[0]!.x, pts[0]!.y);
-        for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k]!.x, pts[k]!.y);
-        ctx.stroke();
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        for (let k = 1; k < pts.length; k++) {
+          const a = pts[k - 1]!;
+          const b = pts[k]!;
+          const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+          gradient.addColorStop(0, hexToRgba(a.color, alpha));
+          gradient.addColorStop(1, hexToRgba(b.color, alpha));
+
+          // 外层能量带。
+          ctx.strokeStyle = gradient;
+          ctx.lineWidth = Math.max(3, h * (0.005 + progress * 0.002));
+          ctx.shadowColor = a.color;
+          ctx.shadowBlur = GLOW ? 13 + 8 * progress : 0;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+
+          // 内层亮芯，保证在压暗背景和低画质下仍清楚。
+          ctx.shadowBlur = 0;
+          ctx.globalAlpha = 0.9;
+          ctx.lineWidth = Math.max(1.2, h * 0.0021);
+          ctx.stroke();
+
+          // 中高画质沿线流光；只移动虚线偏移，不增加对象和粒子。
+          if (QUALITY_TIER !== "low") {
+            ctx.globalAlpha = 0.72;
+            ctx.strokeStyle = "rgba(255,255,255,0.92)";
+            ctx.lineWidth = Math.max(1, h * 0.0014);
+            ctx.setLineDash([Math.max(8, h * 0.018), Math.max(18, h * 0.045)]);
+            ctx.lineDashOffset = -((f.now * 0.08) % Math.max(26, h * 0.063));
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          ctx.globalAlpha = 1;
+        }
         ctx.restore();
       },
     });
@@ -1355,6 +1452,7 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   const q = quality.params;
   GLOW = q.glow;
   SPARKS = q.particles;
+  QUALITY_TIER = quality.tier;
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
@@ -1380,6 +1478,12 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
       depth: PAD_ANCHORS[id].cy,
       draw: () => drawPad(ctx, id, intensity, v.w, v.h, miss),
     });
+    if (intensity > 0 && QUALITY_TIER !== "low") {
+      items.push({
+        depth: PAD_ANCHORS[id].cy + 0.01,
+        draw: () => drawImpactRing(ctx, id, intensity, v.w, v.h),
+      });
+    }
   }
   if (f.showNotes !== false) {
     items.push(...noteItems(ctx, v.w, v.h, f));

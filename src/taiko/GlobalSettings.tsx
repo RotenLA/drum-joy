@@ -1,5 +1,5 @@
 /**
- * 全局参数（谱面屏顶部）：画质、视觉/判定偏移、自动校准、鼓音色、下落速度。
+ * 全局参数（谱面屏顶部）：画质、视觉/判定偏移、自动校准、手机音色、下落速度。
  * 一次设置对所有歌曲生效，不随歌曲变化。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -68,7 +68,7 @@ export function GlobalSettings({
   const updateCalib = (patch: Partial<Calibration>) =>
     setCalib((c) => saveCalibration({ ...c, ...patch }));
 
-  // ---- 鼓音色 ----
+  // ---- 手机音色 ----
   const [kitOn, setKitOn] = useState(true);
   const kitOnRef = useRef(true);
   useEffect(() => {
@@ -300,9 +300,9 @@ export function GlobalSettings({
               : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:text-[var(--taiko-ink)]"
           }`}
         >
-          {tr("鼓音色", "Drum sound")} {kitOn ? tr("开", "On") : tr("关", "Off")}
+          {tr("手机音色", "Mobile sound")} {kitOn ? tr("开", "On") : tr("关", "Off")}
         </button>
-        <HelpDot label={tr("鼓音色", "Drum sound")} text={helpText("kit", language)} />
+        <HelpDot label={tr("手机音色", "Mobile sound")} text={helpText("kit", language)} />
 
         <span className="mx-1 h-5 w-px bg-[var(--taiko-line)]" />
         <label className="flex items-center gap-2 text-xs text-[var(--taiko-ink)]/70">

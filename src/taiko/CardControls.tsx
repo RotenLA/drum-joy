@@ -1,5 +1,5 @@
 /**
- * 选中歌曲卡片内的操作区：难度（带最佳成绩/进度）+ 鼓音色开关 + 鼓组。
+ * 选中歌曲卡片内的操作区：难度（带最佳成绩/进度）+ 手机音色开关 + 鼓组。
  * 与设置弹窗共用同一份全局值。
  */
 import { useEffect, useState } from "react";
@@ -18,6 +18,8 @@ import { useSong } from "./songStore";
 import { useLanguage } from "./i18n";
 import type { BestMap } from "./history";
 import { ratingOfAccuracy } from "./rating";
+import { HelpDot } from "@/components/HelpDot";
+import { helpText } from "./helpTexts";
 
 const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 
@@ -33,7 +35,7 @@ export function CardControls({
   onSpeedChange?: ((speed: number) => void) | undefined;
 }) {
   const song = useSong();
-  const { tr } = useLanguage();
+  const { tr, language } = useLanguage();
   const [kitOn, setKitOn] = useState(true);
   const [kitId, setKitId] = useState(0);
   const currentBest = bests[`${songId}|${song.difficulty}`];
@@ -110,17 +112,23 @@ export function CardControls({
         })}
       </div>
       <div className="flex w-full flex-wrap items-center justify-center gap-2">
-        <button
-          type="button"
-          onClick={() => saveKitEnabled(!kitOn)}
-          className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-            kitOn
-              ? "bg-[var(--taiko-accent)] text-[#12141a]"
-              : "border border-[rgba(255,255,255,0.2)] bg-[rgba(0,0,0,0.28)] text-[rgba(255,255,255,0.75)]"
-          }`}
-        >
-          {tr("鼓音色", "Drum sound")} {kitOn ? tr("开", "On") : tr("关", "Off")}
-        </button>
+        <span className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => saveKitEnabled(!kitOn)}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+              kitOn
+                ? "bg-[var(--taiko-accent)] text-[#12141a]"
+                : "border border-[rgba(255,255,255,0.2)] bg-[rgba(0,0,0,0.28)] text-[rgba(255,255,255,0.75)]"
+            }`}
+          >
+            {tr("手机音色", "Mobile sound")} {kitOn ? tr("开", "On") : tr("关", "Off")}
+          </button>
+          <HelpDot
+            label={tr("手机音色", "Mobile sound")}
+            text={helpText("kit", language)}
+          />
+        </span>
         <select
           value={kitId}
           onChange={(e) => {
