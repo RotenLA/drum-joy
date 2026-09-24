@@ -295,7 +295,7 @@ export function SongPicker({
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-picker-glass)] backdrop-blur-[16px]">
       {/* 顶部：退出常驻左侧，标签与搜索统一靠右；全局设置由演奏页统一承载 */}
-      <div className="flex shrink-0 items-center gap-2 px-3 py-3 sm:px-4">
+      <div className="flex shrink-0 items-center gap-2 py-3 pl-14 pr-3 sm:pr-4">
         <button
           type="button"
           onClick={onExit}
