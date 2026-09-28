@@ -95,7 +95,7 @@ export async function addHistory(
       const prevBest = prev
         .filter((h) => h.songId === entry.songId && h.difficulty === entry.difficulty)
         .reduce((m, h) => Math.max(m, h.score ?? 0), 0);
-      newBest = entry.completed !== false && entry.score > prevBest && prev.some((h) => h.songId === entry.songId && h.difficulty === entry.difficulty);
+      newBest = entry.completed !== false && (entry.score ?? 0) > prevBest && prev.some((h) => h.songId === entry.songId && h.difficulty === entry.difficulty);
       localStorage.setItem(KEY, JSON.stringify([entry, ...prev].slice(0, MAX)));
     } catch {
       // 存储不可用时忽略
