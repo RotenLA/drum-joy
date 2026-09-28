@@ -16,6 +16,10 @@ export async function fetchLibrarySongs(): Promise<LibrarySong[]> {
   return songs;
 }
 
+export async function fetchLibrary(): Promise<{ songs: LibrarySong[]; tags: LibraryTag[] }> {
+  return listLibrarySongs();
+}
+
 export interface LoadedLibrarySong {
   stems: StemMap;
   midi: ParsedMidi;

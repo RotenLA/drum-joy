@@ -17,6 +17,7 @@ const record = z.object({
   notes: z.number().int().min(0).max(100000),
   progress: z.number().int().min(0).max(100),
   completed: z.boolean(),
+  fullCombo: z.boolean().optional(),
   playedAt: z.number().int().min(0),
 });
 export type PlayRecordInput = z.infer<typeof record>;
@@ -29,6 +30,7 @@ export interface PlayBest {
   maxCombo: number;
   progress: number;
   completed: boolean;
+  fullCombo: boolean;
   plays: number;
 }
 
@@ -50,6 +52,7 @@ async function saveRecords(uid: string, recs: PlayRecordInput[], name?: string |
     notes: r.notes,
     progress: r.progress,
     completed: r.completed,
+    full_combo: r.fullCombo === true && r.completed,
     played_at: new Date(r.playedAt).toISOString(),
   }));
   if (rows.length) {
@@ -82,6 +85,7 @@ async function saveRecords(uid: string, recs: PlayRecordInput[], name?: string |
       best_combo: cur?.best_combo ?? 0,
       best_progress: cur?.best_progress ?? 0,
       completed: cur?.completed ?? false,
+      full_combo: cur?.full_combo ?? false,
       plays: (cur?.plays ?? 0) + list.length,
       updated_at: new Date().toISOString(),
       player_name: name ?? (cur as { player_name?: string | null } | null)?.player_name ?? null,
@@ -92,6 +96,7 @@ async function saveRecords(uid: string, recs: PlayRecordInput[], name?: string |
       b.best_combo = Math.max(b.best_combo, r.maxCombo);
       b.best_progress = Math.max(b.best_progress, r.progress);
       b.completed = b.completed || r.completed;
+      b.full_combo = b.full_combo || (r.fullCombo === true && r.completed);
     }
     const { error } = await db.from("play_bests").upsert(b);
     if (error) throw new Error(error.message);
@@ -219,6 +224,7 @@ export const getPlayData = createServerFn({ method: "POST" })
       maxCombo: r.best_combo,
       progress: r.best_progress,
       completed: r.completed,
+      fullCombo: r.full_combo,
       plays: r.plays,
     }));
     const history = (histRes.data ?? []).map((r) => ({
@@ -235,4 +241,50 @@ export const getPlayData = createServerFn({ method: "POST" })
       playedAt: new Date(r.played_at).getTime(),
     }));
     return { bests, history };
+  });
+
+const songIdZ = z.string().min(1).max(64);
+
+export const getFavorites = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => z.object({ userId }).parse(d))
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { data: rows } = await db
+      .from("song_favorites")
+      .select("song_id")
+      .eq("user_id", data.userId)
+      .order("created_at", { ascending: false });
+    return { songIds: (rows ?? []).map((r) => r.song_id) };
+  });
+
+export const toggleFavorite = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ userId, songId: songIdZ, on: z.boolean() }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const q = data.on
+      ? db.from("song_favorites").upsert({ user_id: data.userId, song_id: data.songId })
+      : db.from("song_favorites").delete().eq("user_id", data.userId).eq("song_id", data.songId);
+    const { error } = await q;
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const importFavorites = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z.object({ userId, songIds: z.array(songIdZ).max(500) }).parse(d),
+  )
+  .handler(async ({ data }) => {
+    const db = await admin();
+    if (data.songIds.length) {
+      const { error } = await db
+        .from("song_favorites")
+        .upsert(
+          data.songIds.map((id) => ({ user_id: data.userId, song_id: id })),
+          { onConflict: "user_id,song_id", ignoreDuplicates: true },
+        );
+      if (error) throw new Error(error.message);
+    }
+    return { ok: true };
   });
