@@ -44,7 +44,7 @@ export const Route = createFileRoute("/admin")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  component: AdminPage,
+  component: AdminScroll,
   errorComponent: ({ error }) => (
     <div className="p-8 text-sm text-red-400">后台出错：{String((error as Error)?.message)}</div>
   ),
@@ -609,6 +609,15 @@ function AdminPage() {
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+function AdminScroll() {
+  // 全站锁定了整页滚动（游戏画面需要），后台用独立滚动容器
+  return (
+    <div className="taiko-scroll h-screen overflow-y-auto" style={{ height: "100dvh" }}>
+      <AdminPage />
     </div>
   );
 }

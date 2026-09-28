@@ -7,9 +7,9 @@ import { getAudioContext } from "./metronome";
 import { emptyStems, peakOf, STEM_KINDS, STEM_LABEL, type StemKind, type StemMap } from "./stems";
 import { registerCloudCharts } from "./chartCache";
 import type { TaikoChart } from "@/shared/taikoChart";
-import { listLibrarySongs, getSongAssets, type LibrarySong } from "@/lib/songs.functions";
+import { listLibrarySongs, getSongAssets, type LibrarySong, type LibraryTag } from "@/lib/songs.functions";
 
-export type { LibrarySong };
+export type { LibrarySong, LibraryTag };
 
 export async function fetchLibrarySongs(): Promise<LibrarySong[]> {
   const { songs } = await listLibrarySongs();

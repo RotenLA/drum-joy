@@ -15,7 +15,8 @@ import {
 } from "./drumKit";
 import { useSong } from "./songStore";
 import { useLanguage } from "./i18n";
-import type { BestMap } from "./history";
+import { isUnlocked, unlockRequirement, type BestMap } from "./history";
+import { Lock } from "lucide-react";
 import { ratingOfAccuracy } from "./rating";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
@@ -85,12 +86,21 @@ export function CardControls({
       <div className="grid w-full grid-cols-4 gap-1.5">
         {DIFFICULTIES.map((d) => {
           const on = song.difficulty === d.id;
+          const open = isUnlocked(bests, songId, d.id);
+          const req = unlockRequirement(d.id);
+          const reqItem = DIFFICULTIES.find((x) => x.id === req);
           return (
             <Button
               key={d.id}
               variant="outline"
               type="button"
-              onClick={() => song.setSong({ difficulty: d.id })}
+              disabled={!open}
+              title={
+                !open && reqItem
+                  ? tr(`${reqItem.label}全连击后解锁`, `Full combo ${reqItem.labelEn} to unlock`)
+                  : undefined
+              }
+              onClick={() => open && song.setSong({ difficulty: d.id })}
               className={`h-9 min-w-0 rounded-md px-1.5 text-center ${
                 on
                   ? "border-[var(--taiko-accent)] bg-[rgba(255,140,0,0.18)]"
@@ -100,6 +110,7 @@ export function CardControls({
               <span
                 className={`text-xs font-semibold sm:text-sm ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.85)]"}`}
               >
+                {!open && <Lock size={11} className="mr-1 inline -translate-y-px" />}
                 {tr(d.label, d.labelEn)}
               </span>
             </Button>

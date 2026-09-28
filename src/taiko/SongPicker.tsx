@@ -5,16 +5,16 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
-import { fetchLibrarySongs, decodeStoredSong, type LibrarySong } from "./songLibrary";
+import { fetchLibrary, decodeStoredSong, type LibrarySong, type LibraryTag } from "./songLibrary";
 import { cancelDownload, downloadSong, readStoredAny, scanDownloads, useDownloads } from "./songDownloads";
 import { LeaderboardDialog } from "./LeaderboardDialog";
 import { songPlayer } from "./player";
 import { emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
-import { clearHistory, loadPlayData, type BestMap, type HistoryEntry } from "./history";
+import { clearHistory, isUnlocked, loadFavorites, loadPlayData, setFavorite, type BestMap, type HistoryEntry } from "./history";
 import { CardControls } from "./CardControls";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
-import { BookOpen, Download, Loader2, LogOut, Play, Search, Trophy, X } from "lucide-react";
+import { ArrowLeft, BookOpen, Download, Heart, ListMusic, Loader2, LogOut, Play, Search, Trophy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const fmtTime = (ms: number) => {
@@ -156,6 +156,10 @@ export function SongPicker({
 
   const [tab, setTab] = useState<"songs" | "history">("songs");
   const [library, setLibrary] = useState<LibrarySong[]>([]);
+  const [tags, setTags] = useState<LibraryTag[]>([]);
+  const [favs, setFavs] = useState<string[]>([]);
+  /** 当前打开的歌单：null=歌单列表；"fav"=我的收藏；"untagged"=未分类；其余为标签 id */
+  const [openList, setOpenList] = useState<string | null>(null);
   const [listErr, setListErr] = useState<string | null>(null);
   const [listing, setListing] = useState(true);
   const [query, setQuery] = useState("");
@@ -175,13 +179,16 @@ export function SongPicker({
   useEffect(() => {
     void (async () => {
       try {
-        setLibrary(await fetchLibrarySongs());
+        const lib = await fetchLibrary();
+        setLibrary(lib.songs);
+        setTags(lib.tags);
       } catch {
         setListErr(tr("曲库读取失败，请稍后重试", "Failed to load the song library"));
       } finally {
         setListing(false);
       }
     })();
+    void loadFavorites().then(setFavs);
     void loadPlayData().then((r) => {
       setHistory(r.history);
       setBests(r.bests);
@@ -215,16 +222,46 @@ export function SongPicker({
 
   const isDl = (item: LibrarySong) => dl.done.has(`${item.id}|${item.fingerprint}`);
 
+  const listSongs = (key: string): LibrarySong[] => {
+    if (key === "fav") {
+      const m = new Map(library.map((x) => [x.id, x]));
+      return favs.map((id) => m.get(id)).filter((x): x is LibrarySong => !!x);
+    }
+    if (key === "untagged") return library.filter((x) => x.tagIds.length === 0);
+    return library.filter((x) => x.tagIds.includes(key));
+  };
+  const playlists = useMemo(() => {
+    const out: { key: string; name: string; count: number }[] = [
+      { key: "fav", name: tr("我的收藏", "Favorites"), count: favs.filter((id) => library.some((x) => x.id === id)).length },
+    ];
+    for (const t of tags) out.push({ key: t.id, name: t.name, count: library.filter((x) => x.tagIds.includes(t.id)).length });
+    const un = library.filter((x) => x.tagIds.length === 0).length;
+    if (un) out.push({ key: "untagged", name: tr("未分类", "Uncategorized"), count: un });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library, tags, favs, tr]);
+  const toggleFav = (id: string) => {
+    const on = !favs.includes(id);
+    setFavs((f) => (on ? [id, ...f] : f.filter((x) => x !== id)));
+    void setFavorite(id, on);
+  };
+
   /** 选中只展开，不下载 */
   const pickSong = useCallback(
     (item: LibrarySong, diff?: Difficulty, spd?: number) => {
       setSelectedId(item.id);
       setWarn(null);
+      setOpenList((cur) =>
+        cur && listSongs(cur).some((x) => x.id === item.id)
+          ? cur
+          : (item.tagIds[0] ?? "untagged"),
+      );
       if (diff) song.setSong({ difficulty: diff });
       if (spd) onSpeedChange?.(spd);
       setTab("songs");
     },
-    [song, onSpeedChange],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [song, onSpeedChange, library, favs],
   );
 
   /** 已下载：解码（若未加载）后直接开始 */
@@ -278,9 +315,17 @@ export function SongPicker({
   const filtered = useMemo(() => {
     const norm = (v: string) => v.normalize("NFKC").toLowerCase().replace(/[\s·\-_'"’.,，。]/g, "");
     const q = norm(query);
-    if (!q) return library;
-    return library.filter((s) => norm(`${s.title}${s.artist ?? ""}`).includes(q));
-  }, [library, query]);
+    const base = openList ? listSongs(openList) : library;
+    if (!q) return base;
+    return base.filter((s) => norm(`${s.title}${s.artist ?? ""}`).includes(q));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library, query, openList, favs]);
+  const selected = filtered.find((x) => x.id === selectedId) ?? null;
+  // 难度被锁时回落到入门
+  useEffect(() => {
+    if (selected && !isUnlocked(bests, selected.id, song.difficulty)) song.setSong({ difficulty: "beginner" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id, bests, song.difficulty]);
   // 搜索结果变化时把列表滚回开头，避免结果落在视野外看起来“搜索没反应”
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollLeft = 0;
@@ -409,7 +454,7 @@ export function SongPicker({
         <p className="px-4 pb-1 text-xs text-[var(--taiko-accent)]">{warn ?? listErr}</p>
       )}
 
-      {tab === "songs" ? (
+      {tab === "songs" && !openList ? (
         <div
           ref={scrollRef}
           onPointerDown={onPointerDown}
@@ -417,148 +462,185 @@ export function SongPicker({
           onPointerUp={endDrag}
           onPointerLeave={endDrag}
           onWheel={onWheel}
-          className="taiko-hscroll flex min-h-0 flex-1 cursor-grab items-center gap-3 overflow-x-auto overflow-y-hidden pb-5 pt-1 active:cursor-grabbing"
-          // 右侧留白足够多：可一直右滑到只剩最后一首露出一部分在界面内
-          style={{ paddingLeft: "1rem", paddingRight: "max(1rem, calc(100vw - 160px))" }}
+          className="taiko-hscroll flex min-h-0 flex-1 cursor-grab items-center gap-4 overflow-x-auto overflow-y-hidden px-6 pb-5 pt-1 active:cursor-grabbing"
         >
           {listing && (
             <p className="m-auto text-xs text-[rgba(255,255,255,0.55)]">
               {tr("正在读取曲库…", "Loading library…")}
             </p>
           )}
-          {!listing && !filtered.length && (
-            <p className="m-auto text-xs text-[rgba(255,255,255,0.55)]">
-              {library.length
-                ? tr("没有匹配的歌曲", "No matching songs")
-                : tr("曲库还没有歌曲", "The library is empty")}
-            </p>
-          )}
-          {filtered.map((item, i) => {
-            const busyThis = loadingId === item.id;
-            const wide = selectedId === item.id;
-            const ready = wide;
-            const downloaded = isDl(item);
-            const downloading = dl.activeId === item.id;
-            return (
-              <div
-                key={item.id}
-                data-active={wide ? "1" : "0"}
-                className="relative shrink-0 rounded-lg transition-all duration-300"
+          {!listing &&
+            playlists.map((pl, i) => (
+              <button
+                key={pl.key}
+                type="button"
+                onClick={guardClick(() => {
+                  setOpenList(pl.key);
+                  setSelectedId(null);
+                })}
+                className="relative shrink-0 overflow-hidden rounded-lg border border-[var(--taiko-glass-line)] text-left shadow-xl transition-all duration-300 hover:border-[var(--taiko-accent)]"
                 style={{
-                  height: "min(86%, 360px)",
-                  width: wide ? "min(72vw, 420px)" : "clamp(84px, 13vw, 124px)",
+                  height: "min(80%, 320px)",
+                  width: "clamp(180px, 22vw, 240px)",
                   transform: "skewX(-9deg)",
-                  opacity: wide ? 1 : 0.72,
+                  background:
+                    pl.key === "fav"
+                      ? "linear-gradient(150deg, #5c2430 0%, #8a3345 55%, #34141c 100%)"
+                      : CARD_GRADIENTS[i % CARD_GRADIENTS.length],
                 }}
               >
-                <button
-                  type="button"
-                  onClick={guardClick(() => pickSong(item))}
-                  className={`relative block h-full w-full overflow-hidden rounded-lg border text-left shadow-xl backdrop-blur-[18px] transition-all duration-300 ${
-                    wide
-                      ? "border-[var(--taiko-accent)] ring-1 ring-[var(--taiko-accent)]"
-                      : "border-[var(--taiko-glass-line)] opacity-80 hover:border-[var(--taiko-glass-line-strong)] hover:opacity-100"
-                  }`}
-                  style={{ background: CARD_GRADIENTS[i % CARD_GRADIENTS.length] }}
-                >
-                  {/* 未选中：淡色蒙层压暗 */}
-                  <span
-                    className="absolute inset-0 transition-opacity duration-300"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, rgba(10,12,18,0.15), rgba(10,12,18,0.85))",
-                      opacity: wide ? 0.55 : 0.8,
-                    }}
-                  />
-                  {downloading && (
-                    <span
-                      className="absolute inset-y-0 left-0 bg-[var(--taiko-accent-progress)] transition-[width] duration-200"
-                      style={{ width: `${dl.percent}%` }}
-                    />
-                  )}
-
-                  {wide ? (
-                    <span
-                      className="relative z-10 flex h-full flex-col justify-end gap-1 p-5"
-                      style={{ transform: "skewX(9deg)" }}
-                    >
-                      <HorizontalTitle title={item.title} />
-                      <span className="truncate text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
-                        {fmtTime(item.durationMs)} · BPM {item.bpm} · {item.timeSignature[0]}/
-                        {item.timeSignature[1]}
-                      </span>
-                      {downloaded && (
-                        <span className="text-[11px] text-[var(--taiko-accent)]">
-                          {tr("已下载", "Downloaded")}
-                        </span>
-                      )}
-                    </span>
+                <span className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,12,18,0.05), rgba(10,12,18,0.7))" }} />
+                <span className="relative z-10 flex h-full flex-col justify-between p-5" style={{ transform: "skewX(9deg)" }}>
+                  {pl.key === "fav" ? (
+                    <Heart size={28} className="fill-[#ff5a6e] text-[#ff5a6e]" />
                   ) : (
-                    <span className="relative z-10 block h-full w-full">
-                      <VerticalTitle title={item.title} />
-                    </span>
+                    <ListMusic size={28} className="text-[rgba(255,255,255,0.8)]" />
                   )}
-                </button>
-
-                {ready && (
-                  <div className="absolute inset-x-8 top-[44%] z-20 -translate-y-1/2">
-                    <CardControls
-                      songId={item.id}
-                      bests={bests}
-                    />
+                  <span className="flex flex-col gap-1">
+                    <HorizontalTitle title={pl.name} />
+                    <span className="text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
+                      {pl.count} {tr("首", pl.count === 1 ? "song" : "songs")}
+                    </span>
+                  </span>
+                </span>
+              </button>
+            ))}
+        </div>
+      ) : tab === "songs" && openList ? (
+        <div className="flex min-h-0 flex-1 gap-3 px-4 pb-4">
+          {/* 左：歌单内歌曲 */}
+          <div className="flex w-[min(38%,320px)] shrink-0 flex-col rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)]">
+            <button
+              type="button"
+              onClick={() => setOpenList(null)}
+              className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--taiko-glass-line)] px-3 text-sm text-[rgba(255,255,255,0.85)] hover:text-[var(--taiko-accent)]"
+            >
+              <ArrowLeft size={16} />
+              <span className="truncate font-semibold">
+                {playlists.find((p) => p.key === openList)?.name ?? ""}
+              </span>
+            </button>
+            <div className="taiko-scroll min-h-0 flex-1 overflow-y-auto p-1.5">
+              {!filtered.length && (
+                <p className="py-8 text-center text-xs text-[rgba(255,255,255,0.5)]">
+                  {openList === "fav"
+                    ? tr("点歌曲右上角的红心即可收藏", "Tap the heart on a song to add it here")
+                    : query
+                      ? tr("没有匹配的歌曲", "No matching songs")
+                      : tr("这个歌单还没有歌曲", "This playlist is empty")}
+                </p>
+              )}
+              {filtered.map((item) => {
+                const on = item.id === selectedId;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => pickSong(item)}
+                    className={`mb-1 flex w-full flex-col rounded-md px-3 py-2 text-left transition-colors ${
+                      on
+                        ? "bg-[rgba(255,140,0,0.18)] ring-1 ring-[var(--taiko-accent)]"
+                        : "hover:bg-[rgba(255,255,255,0.08)]"
+                    }`}
+                  >
+                    <span className={`truncate text-sm font-semibold ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.9)]"}`}>
+                      {item.title}
+                    </span>
+                    <span className="truncate text-[11px] tabular-nums text-[rgba(255,255,255,0.55)]">
+                      {item.artist ? `${item.artist} · ` : ""}
+                      {fmtTime(item.durationMs)} · BPM {item.bpm}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {/* 右：歌曲信息与设置 */}
+          <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-[var(--taiko-glass-line)]" style={{ background: CARD_GRADIENTS[0] }}>
+            {!selected ? (
+              <p className="m-auto text-sm text-[rgba(255,255,255,0.6)]">
+                {tr("从左侧选择一首歌", "Pick a song on the left")}
+              </p>
+            ) : (
+              (() => {
+                const item = selected;
+                const busyThis = loadingId === item.id;
+                const downloaded = isDl(item);
+                const downloading = dl.activeId === item.id;
+                const fav = favs.includes(item.id);
+                const locked = !isUnlocked(bests, item.id, song.difficulty);
+                return (
+                  <div className="taiko-scroll relative flex h-full flex-col gap-3 overflow-y-auto p-5">
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        <HorizontalTitle title={item.title} />
+                        <span className="block truncate text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
+                          {item.artist ? `${item.artist} · ` : ""}
+                          {fmtTime(item.durationMs)} · BPM {item.bpm} · {item.timeSignature[0]}/{item.timeSignature[1]}
+                          {downloaded ? ` · ${tr("已下载", "Downloaded")}` : ""}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBoardFor(item)}
+                        aria-label={tr("排行榜", "Leaderboard")}
+                        className="flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 text-xs text-[rgba(255,255,255,0.8)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+                      >
+                        <Trophy size={14} />
+                        {tr("排行榜", "Ranking")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => toggleFav(item.id)}
+                        aria-label={fav ? tr("取消收藏", "Unfavorite") : tr("收藏", "Favorite")}
+                        aria-pressed={fav}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] hover:border-[#ff5a6e]"
+                      >
+                        <Heart size={17} className={fav ? "fill-[#ff5a6e] text-[#ff5a6e]" : "text-[rgba(255,255,255,0.75)]"} />
+                      </button>
+                    </div>
+                    <div className="my-auto">
+                      <CardControls songId={item.id} bests={bests} />
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (downloading) cancelDownload();
+                          else if (downloaded) void startSong(item);
+                          else void downloadSong(item);
+                        }}
+                        disabled={busyThis || (locked && downloaded)}
+                        className="relative flex h-10 min-w-[7.5rem] items-center justify-center gap-2 overflow-hidden rounded-md bg-[var(--taiko-accent)] px-5 text-sm font-semibold tracking-[0.15em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04] disabled:opacity-60"
+                      >
+                        {busyThis ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            {tr("准备中", "Loading")}
+                          </>
+                        ) : downloading ? (
+                          <>
+                            <X size={16} />
+                            {dl.percent}%
+                          </>
+                        ) : downloaded ? (
+                          <>
+                            <Play size={16} />
+                            {tr("开始", "PLAY")}
+                          </>
+                        ) : (
+                          <>
+                            <Download size={16} />
+                            {dl.errorId === item.id ? tr("重试", "Retry") : tr("下载", "Download")}
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                )}
-
-                {ready && (
-                  <button
-                    type="button"
-                    onClick={guardClick(() => setBoardFor(item))}
-                    aria-label={tr("排行榜", "Leaderboard")}
-                    className="absolute right-6 top-4 z-20 flex h-9 items-center gap-1.5 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 text-xs text-[rgba(255,255,255,0.8)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
-                    style={{ transform: "skewX(9deg)" }}
-                  >
-                    <Trophy size={14} />
-                    {tr("排行榜", "Ranking")}
-                  </button>
-                )}
-
-                {ready && (
-                  <button
-                    type="button"
-                    onClick={guardClick(() => {
-                      if (downloading) cancelDownload();
-                      else if (downloaded) void startSong(item);
-                      else void downloadSong(item);
-                    })}
-                    disabled={busyThis}
-                    className="absolute bottom-4 right-4 z-20 flex h-10 min-w-[7.5rem] items-center justify-center gap-2 rounded-md bg-[var(--taiko-accent)] px-5 text-sm font-semibold tracking-[0.15em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04] disabled:opacity-70"
-                  >
-                    {busyThis ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        {tr("准备中", "Loading")}
-                      </>
-                    ) : downloading ? (
-                      <>
-                        <X size={16} />
-                        {dl.percent}%
-                      </>
-                    ) : downloaded ? (
-                      <>
-                        <Play size={16} />
-                        {tr("开始", "PLAY")}
-                      </>
-                    ) : (
-                      <>
-                        <Download size={16} />
-                        {dl.errorId === item.id ? tr("重试", "Retry") : tr("下载", "Download")}
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-            );
-          })}
+                );
+              })()
+            )}
+          </div>
         </div>
       ) : (
         <div className="taiko-scroll min-h-0 flex-1 overflow-y-auto px-4 pb-5">
