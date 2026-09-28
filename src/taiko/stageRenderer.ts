@@ -244,14 +244,14 @@ function buildBackground(w: number, h: number, scale: number) {
 
   // 上：夜空；下：地面，都极暗
   const sky = c.createLinearGradient(0, 0, 0, h * HORIZON);
-  sky.addColorStop(0, "#07070a");
-  sky.addColorStop(1, "#15161c");
+  sky.addColorStop(0, "#1d1a38");
+  sky.addColorStop(1, "#3a3160");
   c.fillStyle = sky;
   c.fillRect(0, 0, w, h * HORIZON);
 
   const floor = c.createLinearGradient(0, h * HORIZON, 0, h);
-  floor.addColorStop(0, "#1b1d25");
-  floor.addColorStop(1, "#0b0b0e");
+  floor.addColorStop(0, "#35305a");
+  floor.addColorStop(1, "#1a1830");
   c.fillStyle = floor;
   c.fillRect(0, h * HORIZON, w, h - h * HORIZON);
 
@@ -294,7 +294,7 @@ function buildBackground(w: number, h: number, scale: number) {
 
   const edge = c.createRadialGradient(w * 0.5, h * 0.5, h * 0.35, w * 0.5, h * 0.5, h * 1.05);
   edge.addColorStop(0, "rgba(4,4,6,0)");
-  edge.addColorStop(1, "rgba(4,4,6,0.55)");
+  edge.addColorStop(1, "rgba(4,4,6,0.3)");
   c.fillStyle = edge;
   c.fillRect(0, 0, w, h);
 }
@@ -313,7 +313,14 @@ export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: numb
     ctx.filter = "blur(4px)";
     ctx.drawImage(bg, (w - dw) / 2 - bleed, (h - dh) / 2 - bleed, dw + bleed * 2, dh + bleed * 2);
     ctx.restore();
-    ctx.fillStyle = "rgba(6,6,9,0.5)";
+    // 提亮：压暗减到 0.22，再叠一层暖色舞台光，整体更明亮欢快
+    ctx.fillStyle = "rgba(10,8,20,0.22)";
+    ctx.fillRect(0, 0, w, h);
+    const warm = ctx.createRadialGradient(w * 0.5, h * 0.2, 0, w * 0.5, h * 0.2, h * 1.1);
+    warm.addColorStop(0, "rgba(255,170,90,0.16)");
+    warm.addColorStop(0.5, "rgba(170,120,255,0.08)");
+    warm.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = warm;
     ctx.fillRect(0, 0, w, h);
     return;
   }
@@ -347,7 +354,7 @@ export function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number
   if (!vignetteGrad) {
     const g = ctx.createLinearGradient(0, h * 0.72, 0, h);
     g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,0.55)");
+    g.addColorStop(1, "rgba(0,0,0,0.3)");
     vignetteGrad = g;
   }
   ctx.fillStyle = vignetteGrad;
@@ -903,6 +910,18 @@ function drawPad(
         ctx.shadowBlur = 24 * intensity;
       }
       ctx.drawImage(sp, -dw / 2, -dh / 2, dw, dh);
+      if (intensity > 0.02) {
+        // 踩下反馈：彩色描边 + 淡色覆盖，低画质下同样可见
+        ctx.shadowBlur = 0;
+        ctx.globalAlpha = Math.min(1, intensity * 1.2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(3, dw * 0.05);
+        ctx.strokeRect(-dw / 2 - 3, -dh / 2 - 3, dw + 6, dh + 6);
+        ctx.globalAlpha = 0.28 * intensity;
+        ctx.fillStyle = color;
+        ctx.fillRect(-dw / 2, -dh / 2, dw, dh);
+        ctx.globalAlpha = 1;
+      }
       if (miss > 0) {
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 0.5 * miss;
@@ -1269,6 +1288,9 @@ function chordItems(
 }
 
 
+const comboFx = { last: 0, at: 0, breakAt: 0 };
+const judgeFx = { text: "", until: 0, at: 0 };
+
 export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
   ctx.save();
   const minimal = f.minimalHud === true;
@@ -1277,11 +1299,11 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
     // 顶部细进度条
     const progress = f.chart.durationMs > 0 ? f.timeMs / f.chart.durationMs : 0;
     ctx.fillStyle = "rgba(255,255,255,0.08)";
-    ctx.fillRect(0, 0, w, 3);
-    ctx.shadowColor = "#5D8CF4";
-    ctx.shadowBlur = GLOW ? 8 : 0;
-    ctx.fillStyle = "#5D8CF4";
-    ctx.fillRect(0, 0, w * Math.min(1, progress), 3);
+    ctx.fillRect(0, 0, w, 5);
+    ctx.shadowColor = "#fc8800";
+    ctx.shadowBlur = GLOW ? 10 : 0;
+    ctx.fillStyle = "#fc8800";
+    ctx.fillRect(0, 0, w * Math.min(1, Math.max(0, progress)), 5);
     ctx.shadowBlur = 0;
 
     // 生存模式血条（进度条下方一条粗条，低血变红闪）
@@ -1342,20 +1364,46 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   ctx.font = "600 11px system-ui, sans-serif";
   ctx.fillText(`BPM ${f.chart.bpm}`, w - 28, 50);
 
-  // 连击（左上角，分数下方，大号斜体）
+  // 连击：分档放大变色（10/30/50/100），新增连击时跳动一下
   if (!minimal && f.combo > 0) {
-    const size = Math.round(h * 0.062);
+    const tier = f.combo >= 100 ? 4 : f.combo >= 50 ? 3 : f.combo >= 30 ? 2 : f.combo >= 10 ? 1 : 0;
+    const TIER_COLOR = ["#ffffff", "#7dd3fc", "#4ade80", "#fbbf24", "#f472b6"];
+    const col = TIER_COLOR[tier]!;
+    if (f.combo !== comboFx.last) {
+      comboFx.at = f.now;
+      comboFx.last = f.combo;
+    }
+    const since = f.now - comboFx.at;
+    const pop = since < 160 ? 1 + 0.25 * Math.sin((since / 160) * Math.PI) : 1;
+    const size = Math.round(h * 0.062 * (1 + tier * 0.12) * pop);
     ctx.textAlign = "left";
-    ctx.shadowColor = "rgba(255,255,255,0.4)";
-    ctx.shadowBlur = GLOW ? 16 : 0;
-    ctx.fillStyle = "#ffffff";
+    ctx.shadowColor = col;
+    ctx.shadowBlur = GLOW ? 16 + tier * 6 : 0;
+    ctx.fillStyle = col;
     ctx.font = `italic 900 ${size}px system-ui, sans-serif`;
     ctx.fillText(String(f.combo), 28, 58 + size + 10);
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.font = "700 10px system-ui, sans-serif";
+    ctx.fillStyle = tier ? col : "rgba(255,255,255,0.45)";
+    ctx.font = "700 11px system-ui, sans-serif";
     ctx.fillText("C O M B O", 28, 58 + size + 28);
+  } else if (!minimal && comboFx.last > 0) {
+    // 断连：旧数字收缩淡出
+    if (comboFx.breakAt === 0) comboFx.breakAt = f.now;
+    const t = (f.now - comboFx.breakAt) / 280;
+    if (t < 1) {
+      const size = Math.round(h * 0.062 * (1 - t * 0.6));
+      ctx.globalAlpha = 1 - t;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#f87171";
+      ctx.font = `italic 900 ${size}px system-ui, sans-serif`;
+      ctx.fillText(String(comboFx.last), 28, 58 + size + 10);
+      ctx.globalAlpha = 1;
+    } else {
+      comboFx.last = 0;
+      comboFx.breakAt = 0;
+    }
   }
+  if (f.combo > 0) comboFx.breakAt = 0;
 
   // 判定统计 + 准确率（连击下方）
   if (!minimal && f.stats) {
@@ -1380,12 +1428,20 @@ export function drawHud(ctx: CanvasRenderingContext2D, w: number, h: number, f: 
   // 判定浮字（屏幕中上部居中，淡出）
   if (f.judgement && f.judgement.until > f.now) {
     const a = Math.min(1, (f.judgement.until - f.now) / 300);
+    if (judgeFx.text !== f.judgement.text || judgeFx.until !== f.judgement.until) {
+      judgeFx.text = f.judgement.text;
+      judgeFx.until = f.judgement.until;
+      judgeFx.at = f.now;
+    }
+    const js = f.now - judgeFx.at;
+    // 弹跳：先冲到 1.35 再回到 1
+    const bounce = js < 90 ? 0.7 + (js / 90) * 0.65 : js < 200 ? 1.35 - ((js - 90) / 110) * 0.35 : 1;
     ctx.textAlign = "center";
     ctx.globalAlpha = a;
     ctx.shadowColor = f.judgement.color;
     ctx.shadowBlur = GLOW ? 18 : 0;
     ctx.fillStyle = f.judgement.color;
-    ctx.font = `800 ${Math.round(h * 0.045)}px system-ui, sans-serif`;
+    ctx.font = `900 ${Math.round(h * 0.072 * bounce)}px system-ui, sans-serif`;
     ctx.fillText(f.judgement.text, w / 2, h * 0.3);
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;

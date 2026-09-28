@@ -45,6 +45,20 @@ export function getHostUserId(): string | null {
   }
 }
 
+/** 宿主玩家昵称（可选 name 字段）；没有则 null */
+export function getHostUserName(): string | null {
+  try {
+    const fn = (window as unknown as { __pd2uGetUser?: () => unknown }).__pd2uGetUser;
+    if (typeof fn !== "function") return null;
+    let r = fn();
+    if (typeof r === "string") r = JSON.parse(r);
+    const n = (r as { name?: unknown } | null)?.name;
+    return typeof n === "string" && n.trim() ? n.trim().slice(0, 40) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readHistory(): HistoryEntry[] {
   if (typeof localStorage === "undefined") return [];
   try {
@@ -70,20 +84,35 @@ const toInput = (e: HistoryEntry) => ({
   playedAt: Math.round(e.playedAt),
 });
 
-export function addHistory(entry: HistoryEntry): void {
-  if (typeof localStorage === "undefined") return;
-  try {
-    const list = [entry, ...readHistory()].slice(0, MAX);
-    localStorage.setItem(KEY, JSON.stringify(list));
-  } catch {
-    // 存储不可用时忽略
+/** 记一条演奏；返回是否破本机纪录，以及（已登录时）云端名次 */
+export async function addHistory(
+  entry: HistoryEntry,
+): Promise<{ newBest: boolean; rank: number | null }> {
+  let newBest = false;
+  if (typeof localStorage !== "undefined") {
+    try {
+      const prev = readHistory();
+      const prevBest = prev
+        .filter((h) => h.songId === entry.songId && h.difficulty === entry.difficulty)
+        .reduce((m, h) => Math.max(m, h.score ?? 0), 0);
+      newBest = entry.completed !== false && (entry.score ?? 0) > prevBest && prev.some((h) => h.songId === entry.songId && h.difficulty === entry.difficulty);
+      localStorage.setItem(KEY, JSON.stringify([entry, ...prev].slice(0, MAX)));
+    } catch {
+      // 存储不可用时忽略
+    }
   }
   const uid = getHostUserId();
   if (uid && entry.songId) {
-    void submitPlay({ data: { userId: uid, record: toInput(entry) } }).catch((e) =>
-      console.warn("[history] 云端写入失败", e),
-    );
+    try {
+      const r = await submitPlay({
+        data: { userId: uid, record: toInput(entry), name: getHostUserName() },
+      });
+      return { newBest, rank: r.rank ?? null };
+    } catch (e) {
+      console.warn("[history] 云端写入失败", e);
+    }
   }
+  return { newBest, rank: null };
 }
 
 export function clearHistory(): void {

@@ -25,9 +25,17 @@ export interface MixState {
   drums: number;
   bass: number;
   other: number;
+  /** 背景音乐总音量滑杆 0~1：0.8 = 原始音量，1 = +6dB */
+  music: number;
 }
 
-export const DEFAULT_MIX: MixState = { vocals: 1, drums: 0, bass: 1, other: 1 };
+export const DEFAULT_MIX: MixState = { vocals: 1, drums: 0, bass: 1, other: 1, music: 0.8 };
+
+/** 滑杆值 → 线性增益：80% = 1，100% = +6dB（≈1.995），0 = 静音 */
+export function musicGain(v: number): number {
+  if (!(v > 0)) return 0;
+  return Math.min(1.995, (v / 0.8) ** 3.094);
+}
 
 export interface SongState {
   /** 各条 stem 音轨（可缺，全缺则静音试玩） */
@@ -106,6 +114,7 @@ export function SongProvider({ children }: { children: ReactNode }) {
               drums: clamp01(mix["drums"], DEFAULT_MIX.drums),
               bass: clamp01(mix["bass"], DEFAULT_MIX.bass),
               other: clamp01(mix["other"], DEFAULT_MIX.other),
+              music: clamp01(mix["music"], DEFAULT_MIX.music),
             }
           : s.mix,
       }));
