@@ -96,7 +96,15 @@ function ShellInner() {
     };
   }, []);
   useEffect(() => {
-    (window as unknown as { __pd2uBooted?: boolean }).__pd2uBooted = true;
+    const host = window as unknown as {
+      __pd2uBooted?: boolean;
+      __pd2uMarkBooted?: () => void;
+    };
+    if (host.__pd2uMarkBooted) host.__pd2uMarkBooted();
+    else {
+      host.__pd2uBooted = true;
+      document.getElementById("pd2u-startup-failure")?.remove();
+    }
     installExternalBridge();
     installStickBridge();
     installDeviceBridge();
