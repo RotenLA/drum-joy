@@ -45,6 +45,20 @@ export function getHostUserId(): string | null {
   }
 }
 
+/** 宿主玩家昵称（可选 name 字段）；没有则 null */
+export function getHostUserName(): string | null {
+  try {
+    const fn = (window as unknown as { __pd2uGetUser?: () => unknown }).__pd2uGetUser;
+    if (typeof fn !== "function") return null;
+    let r = fn();
+    if (typeof r === "string") r = JSON.parse(r);
+    const n = (r as { name?: unknown } | null)?.name;
+    return typeof n === "string" && n.trim() ? n.trim().slice(0, 40) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function readHistory(): HistoryEntry[] {
   if (typeof localStorage === "undefined") return [];
   try {

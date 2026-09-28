@@ -36,7 +36,7 @@ async function admin() {
   return (await import("@/integrations/supabase/client.server")).supabaseAdmin;
 }
 
-async function saveRecords(uid: string, recs: PlayRecordInput[]) {
+async function saveRecords(uid: string, recs: PlayRecordInput[], name?: string | null) {
   const db = await admin();
   const rows = recs.map((r) => ({
     user_id: uid,
@@ -84,6 +84,7 @@ async function saveRecords(uid: string, recs: PlayRecordInput[]) {
       completed: cur?.completed ?? false,
       plays: (cur?.plays ?? 0) + list.length,
       updated_at: new Date().toISOString(),
+      player_name: name ?? (cur as { player_name?: string | null } | null)?.player_name ?? null,
     };
     for (const r of list) {
       b.best_score = Math.max(b.best_score, r.score);
@@ -98,10 +99,94 @@ async function saveRecords(uid: string, recs: PlayRecordInput[]) {
 }
 
 export const submitPlay = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) => z.object({ userId, record }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ userId, record, name: z.string().max(40).nullish() }).parse(d),
+  )
   .handler(async ({ data }) => {
-    await saveRecords(data.userId, [data.record]);
-    return { ok: true };
+    await saveRecords(data.userId, [data.record], data.name ?? null);
+    const rank = await rankOf(data.userId, data.record.songId, data.record.difficulty);
+    return { ok: true, rank };
+  });
+
+async function rankOf(uid: string, songId: string, difficulty: string): Promise<number | null> {
+  const db = await admin();
+  const { data: mine } = await db
+    .from("play_bests")
+    .select("best_score")
+    .eq("user_id", uid)
+    .eq("song_id", songId)
+    .eq("difficulty", difficulty)
+    .maybeSingle();
+  if (!mine || mine.best_score <= 0) return null;
+  const { count } = await db
+    .from("play_bests")
+    .select("user_id", { count: "exact", head: true })
+    .eq("song_id", songId)
+    .eq("difficulty", difficulty)
+    .gt("best_score", mine.best_score);
+  return (count ?? 0) + 1;
+}
+
+export interface BoardRow {
+  rank: number;
+  name: string;
+  score: number;
+  accuracy: number;
+  me: boolean;
+}
+
+const maskId = (id: string) => `••${id.slice(-4)}`;
+
+/** 每首歌每档难度前 20 名 + 我的名次；不返回完整 user_id */
+export const getLeaderboard = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        songId: z.string().min(1).max(64),
+        difficulty: z.enum(["easy", "beginner", "standard", "hard"]),
+        userId: userId.nullish(),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data }) => {
+    const db = await admin();
+    const { data: rows } = await db
+      .from("play_bests")
+      .select("user_id, player_name, best_score, best_accuracy")
+      .eq("song_id", data.songId)
+      .eq("difficulty", data.difficulty)
+      .gt("best_score", 0)
+      .order("best_score", { ascending: false })
+      .limit(20);
+    const top: BoardRow[] = (rows ?? []).map((r, i) => ({
+      rank: i + 1,
+      name: r.player_name || maskId(r.user_id),
+      score: r.best_score,
+      accuracy: Number(r.best_accuracy),
+      me: !!data.userId && r.user_id === data.userId,
+    }));
+    let mine: BoardRow | null = top.find((r) => r.me) ?? null;
+    if (!mine && data.userId) {
+      const rank = await rankOf(data.userId, data.songId, data.difficulty);
+      if (rank) {
+        const { data: m } = await db
+          .from("play_bests")
+          .select("player_name, best_score, best_accuracy")
+          .eq("user_id", data.userId)
+          .eq("song_id", data.songId)
+          .eq("difficulty", data.difficulty)
+          .maybeSingle();
+        if (m)
+          mine = {
+            rank,
+            name: m.player_name || maskId(data.userId),
+            score: m.best_score,
+            accuracy: Number(m.best_accuracy),
+            me: true,
+          };
+      }
+    }
+    return { top, mine };
   });
 
 export const importLocalHistory = createServerFn({ method: "POST" })

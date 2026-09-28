@@ -9,7 +9,7 @@ import { fetchLibrarySongs, decodeStoredSong, type LibrarySong } from "./songLib
 import { cancelDownload, downloadSong, readStoredAny, scanDownloads, useDownloads } from "./songDownloads";
 import { LeaderboardDialog } from "./LeaderboardDialog";
 import { songPlayer } from "./player";
-import { STEM_KINDS, emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
+import { emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
 import { clearHistory, loadPlayData, type BestMap, type HistoryEntry } from "./history";
 import { CardControls } from "./CardControls";
