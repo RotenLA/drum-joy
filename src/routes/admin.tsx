@@ -19,6 +19,12 @@ import {
   replaceCharts,
   saveSong,
   updateSong,
+  listTags,
+  createTag,
+  renameTag,
+  deleteTag,
+  reorderTags,
+  setSongTags,
 } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/admin")({
@@ -94,6 +100,19 @@ function AdminPage() {
   const remove = useServerFn(deleteSong);
   const midiUrlOf = useServerFn(getSongMidiUrl);
   const regenerate = useServerFn(replaceCharts);
+  const fetchTags = useServerFn(listTags);
+  const addTag = useServerFn(createTag);
+  const renTag = useServerFn(renameTag);
+  const delTag = useServerFn(deleteTag);
+  const sortTags = useServerFn(reorderTags);
+  const linkTags = useServerFn(setSongTags);
+
+  const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
+  const [tagMap, setTagMap] = useState<Record<string, string[]>>({});
+  const [newTag, setNewTag] = useState("");
+  const [uploadTags, setUploadTags] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<string>("all");
+  const [editTagsOf, setEditTagsOf] = useState<string | null>(null);
 
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [user, setUser] = useState("");
@@ -114,7 +133,32 @@ function AdminPage() {
   const refresh = useCallback(async () => {
     const res = await list();
     setSongs(res.songs as AdminSongRow[]);
-  }, [list]);
+    const t = await fetchTags();
+    setTags(t.tags);
+    const m: Record<string, string[]> = {};
+    for (const l of t.links) (m[l.song_id] ??= []).push(l.tag_id);
+    setTagMap(m);
+  }, [list, fetchTags]);
+
+  const tagAction = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+      await refresh();
+    } catch (err) {
+      setNote(`操作失败：${(err as Error).message}`);
+    }
+  };
+  const moveTag = (i: number, d: number) => {
+    const ids = tags.map((t) => t.id);
+    const j = i + d;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j]!, ids[i]!];
+    void tagAction(() => sortTags({ data: { ids } }));
+  };
+  const toggleIn = (arr: string[], id: string) =>
+    arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
+  const tagCount = (id: string) =>
+    Object.values(tagMap).filter((ids) => ids.includes(id)).length;
 
   useEffect(() => {
     void (async () => {
@@ -138,12 +182,18 @@ function AdminPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return songs;
-    return songs.filter(
+    const byTag = songs.filter((s) => {
+      const ids = tagMap[s.id] ?? [];
+      if (tagFilter === "all") return true;
+      if (tagFilter === "none") return ids.length === 0;
+      return ids.includes(tagFilter);
+    });
+    if (!q) return byTag;
+    return byTag.filter(
       (s) =>
         s.title.toLowerCase().includes(q) || (s.artist ?? "").toLowerCase().includes(q),
     );
-  }, [songs, query]);
+  }, [songs, query, tagMap, tagFilter]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,11 +273,13 @@ function AdminPage() {
           },
           sizes,
           charts: charts.map((c) => ({ difficulty: c.difficulty, chart: c.chart })),
+          tagIds: uploadTags,
         },
       });
       setNote(`《${title.trim()}》已入库，四档谱面已生成`);
       setTitle("");
       setArtist("");
+      setUploadTags([]);
       setMidiFile(null);
       stemInputs.current = {};
       setStemsPicked(0);
@@ -372,6 +424,21 @@ function AdminPage() {
             </label>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--taiko-ink)]/60">
+            <span>标签（可多选，不选为未分类）</span>
+            {tags.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setUploadTags((a) => toggleIn(a, t.id))}
+                className={`border px-2 py-1 text-xs ${uploadTags.includes(t.id) ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] text-[var(--taiko-accent)]" : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:border-[var(--taiko-accent)]"}`}
+              >
+                {t.name}
+              </button>
+            ))}
+            {!tags.length && <span className="text-[var(--taiko-ink)]/40">还没有标签，先在下方新建</span>}
+          </div>
+
           <div className="flex items-center gap-3">
             <button
               type="submit"
@@ -388,6 +455,69 @@ function AdminPage() {
       </section>
 
       <section className="border border-[var(--taiko-line)] p-4">
+        <h2 className="mb-3 text-sm font-medium">标签管理（{tags.length}）</h2>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const name = newTag.trim();
+            if (!name) return;
+            setNewTag("");
+            void tagAction(() => addTag({ data: { name } }));
+          }}
+          className="mb-3 flex gap-2"
+        >
+          <input
+            value={newTag}
+            onChange={(e) => setNewTag(e.target.value)}
+            placeholder="新标签名，如：摇滚、热门"
+            maxLength={40}
+            className="w-64 border border-[var(--taiko-line)] bg-transparent px-3 py-1.5 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+          />
+          <button
+            type="submit"
+            className="border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-3 py-1.5 text-xs text-[var(--taiko-accent)]"
+          >
+            添加
+          </button>
+        </form>
+        <div className="flex flex-col divide-y divide-[var(--taiko-line)]">
+          {tags.map((t, i) => (
+            <div key={t.id} className="flex items-center gap-2 py-1.5 text-sm">
+              <input
+                key={t.name}
+                defaultValue={t.name}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v && v !== t.name) void tagAction(() => renTag({ data: { id: t.id, name: v } }));
+                }}
+                className="min-w-40 flex-1 border border-transparent bg-transparent px-1 py-0.5 text-base hover:border-[var(--taiko-line)] focus:border-[var(--taiko-accent)] focus:outline-none"
+              />
+              <span className="w-16 text-xs tabular-nums text-[var(--taiko-ink)]/50">{tagCount(t.id)} 首</span>
+              <button onClick={() => moveTag(i, -1)} disabled={i === 0} className="border border-[var(--taiko-line)] px-2 py-1 text-xs disabled:opacity-30">上移</button>
+              <button onClick={() => moveTag(i, 1)} disabled={i === tags.length - 1} className="border border-[var(--taiko-line)] px-2 py-1 text-xs disabled:opacity-30">下移</button>
+              <button
+                onClick={() => {
+                  if (confirm(`删除标签「${t.name}」？歌曲本身会保留。`)) void tagAction(() => delTag({ data: { id: t.id } }));
+                }}
+                className="border border-[var(--taiko-line)] px-2 py-1 text-xs text-red-400 hover:border-red-400"
+              >
+                删除
+              </button>
+            </div>
+          ))}
+          {!tags.length && <p className="py-4 text-center text-xs text-[var(--taiko-ink)]/50">还没有标签</p>}
+        </div>
+      </section>
+
+      <section className="border border-[var(--taiko-line)] p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-[var(--taiko-ink)]/60">筛选：</span>
+          {[{ id: "all", name: "全部" }, ...tags, { id: "none", name: "未分类" }].map((t) => (
+            <button key={t.id} onClick={() => setTagFilter(t.id)} className={`border px-2 py-1 text-xs ${tagFilter === t.id ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] text-[var(--taiko-accent)]" : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:border-[var(--taiko-accent)]"}`}>
+              {t.name}
+            </button>
+          ))}
+        </div>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-medium">曲库（{songs.length}）</h2>
           <input
@@ -399,7 +529,8 @@ function AdminPage() {
         </div>
         <div className="flex flex-col divide-y divide-[var(--taiko-line)]">
           {filtered.map((s) => (
-            <div key={s.id} className="flex flex-wrap items-center gap-3 py-2 text-sm">
+            <div key={s.id} className="py-2">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
               <input
                 defaultValue={s.title}
                 onBlur={(e) => {
@@ -436,6 +567,39 @@ function AdminPage() {
               >
                 删除
               </button>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-1">
+              {(tagMap[s.id] ?? []).map((id) => {
+                const t = tags.find((x) => x.id === id);
+                return t ? (
+                  <span key={id} className="border border-[var(--taiko-accent)]/60 px-1.5 py-0.5 text-[11px] text-[var(--taiko-accent)]">{t.name}</span>
+                ) : null;
+              })}
+              {!(tagMap[s.id] ?? []).length && <span className="text-[11px] text-[var(--taiko-ink)]/40">未分类</span>}
+              <button
+                onClick={() => setEditTagsOf(editTagsOf === s.id ? null : s.id)}
+                className="px-1.5 py-0.5 text-[11px] text-[var(--taiko-ink)]/60 underline hover:text-[var(--taiko-accent)]"
+              >
+                {editTagsOf === s.id ? "完成" : "编辑标签"}
+              </button>
+            </div>
+            {editTagsOf === s.id && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5 pl-1">
+                {tags.map((t) => {
+                  const cur = tagMap[s.id] ?? [];
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => void tagAction(() => linkTags({ data: { songId: s.id, tagIds: toggleIn(cur, t.id) } }))}
+                      className={`border px-2 py-1 text-xs ${cur.includes(t.id) ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] text-[var(--taiko-accent)]" : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60 hover:border-[var(--taiko-accent)]"}`}
+                    >
+                      {t.name}
+                    </button>
+                  );
+                })}
+                {!tags.length && <span className="text-xs text-[var(--taiko-ink)]/40">先在上方新建标签</span>}
+              </div>
+            )}
             </div>
           ))}
           {!filtered.length && (

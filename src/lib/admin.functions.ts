@@ -96,6 +96,7 @@ export interface SaveSongInput {
   };
   sizes: Record<string, number>;
   charts: { difficulty: string; chart: unknown }[];
+  tagIds?: string[];
 }
 
 /** 入库：歌曲元数据 + 预生成的四档谱面 */
@@ -133,6 +134,11 @@ export const saveSong = createServerFn({ method: "POST" })
     }));
     const { error: chartErr } = await supabaseAdmin.from("song_charts").insert(rows);
     if (chartErr) throw new Error(chartErr.message);
+    if (data.tagIds?.length) {
+      await supabaseAdmin
+        .from("song_tag_links")
+        .insert(data.tagIds.map((tag_id) => ({ song_id: song.id, tag_id })));
+    }
     return { id: song.id };
   });
 
@@ -231,4 +237,91 @@ export const getSongMidiUrl = createServerFn({ method: "POST" })
       .createSignedUrl(song.midi_path, 3600);
     if (sErr || !signed) throw new Error(sErr?.message ?? "取链接失败");
     return { url: signed.signedUrl };
+  });
+
+/* ---------------- 自定义标签 ---------------- */
+
+export const listTags = createServerFn({ method: "GET" }).handler(async () => {
+  await requireAdmin();
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: tags, error } = await supabaseAdmin
+    .from("song_tags")
+    .select("id, name, sort_order")
+    .order("sort_order")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+  const { data: links, error: lErr } = await supabaseAdmin
+    .from("song_tag_links")
+    .select("song_id, tag_id");
+  if (lErr) throw new Error(lErr.message);
+  return { tags: tags ?? [], links: links ?? [] };
+});
+
+export const createTag = createServerFn({ method: "POST" })
+  .inputValidator((data: { name: string }) => ({ name: String(data.name).trim().slice(0, 40) }))
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    if (!data.name) throw new Error("标签名不能为空");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: last } = await supabaseAdmin
+      .from("song_tags")
+      .select("sort_order")
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const { error } = await supabaseAdmin
+      .from("song_tags")
+      .insert({ name: data.name, sort_order: (last?.sort_order ?? 0) + 1 });
+    if (error) throw new Error(error.code === "23505" ? "标签已存在" : error.message);
+    return { ok: true as const };
+  });
+
+export const renameTag = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string; name: string }) => ({
+    id: data.id,
+    name: String(data.name).trim().slice(0, 40),
+  }))
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    if (!data.name) throw new Error("标签名不能为空");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("song_tags").update({ name: data.name }).eq("id", data.id);
+    if (error) throw new Error(error.code === "23505" ? "标签已存在" : error.message);
+    return { ok: true as const };
+  });
+
+export const deleteTag = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin.from("song_tags").delete().eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+export const reorderTags = createServerFn({ method: "POST" })
+  .inputValidator((data: { ids: string[] }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    for (let i = 0; i < data.ids.length; i++) {
+      await supabaseAdmin.from("song_tags").update({ sort_order: i + 1 }).eq("id", data.ids[i]!);
+    }
+    return { ok: true as const };
+  });
+
+export const setSongTags = createServerFn({ method: "POST" })
+  .inputValidator((data: { songId: string; tagIds: string[] }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("song_tag_links").delete().eq("song_id", data.songId);
+    if (data.tagIds.length) {
+      const { error } = await supabaseAdmin
+        .from("song_tag_links")
+        .insert(data.tagIds.map((tag_id) => ({ song_id: data.songId, tag_id })));
+      if (error) throw new Error(error.message);
+    }
+    return { ok: true as const };
   });

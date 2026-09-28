@@ -139,6 +139,57 @@ export type Database = {
           },
         ]
       }
+      song_tag_links: {
+        Row: {
+          song_id: string
+          tag_id: string
+        }
+        Insert: {
+          song_id: string
+          tag_id: string
+        }
+        Update: {
+          song_id?: string
+          tag_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "song_tag_links_song_id_fkey"
+            columns: ["song_id"]
+            isOneToOne: false
+            referencedRelation: "songs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "song_tag_links_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "song_tags"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      song_tags: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       songs: {
         Row: {
           artist: string | null
