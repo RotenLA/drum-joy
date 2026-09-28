@@ -622,6 +622,7 @@ export function FallScreen({
   const acc = totalJudged > 0 ? ((judged.perfect + judged.good * 0.5) / totalJudged) * 100 : 0;
 
   /** 写一条本机历史演奏（同一局只写一次） */
+  const [resultRank, setResultRank] = useState<{ newBest: boolean; rank: number | null } | null>(null);
   const recordRun = useCallback(
     (completed: boolean) => {
       if (!playedRef.current || !song.fileName) return;
@@ -634,7 +635,7 @@ export function FallScreen({
         : dur > 0
           ? Math.max(0, Math.min(100, (timeRef.current / dur) * 100))
           : 0;
-      addHistory({
+      void addHistory({
         songId: song.songId,
         title: song.fileName,
         difficulty: song.difficulty,
@@ -646,6 +647,8 @@ export function FallScreen({
         completed,
         progress: Math.round(progress),
         playedAt: Date.now(),
+      }).then((r) => {
+        if (completed) setResultRank(r);
       });
     },
     [song.songId, song.fileName, song.difficulty, speed, durationMs],
@@ -653,7 +656,10 @@ export function FallScreen({
 
   // 一曲结束 → 记一条完整记录
   useEffect(() => {
-    if (phase !== "ended") return;
+    if (phase !== "ended") {
+      setResultRank(null);
+      return;
+    }
     recordRun(true);
     // 只在结束的那一刻记录
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -858,6 +864,20 @@ export function FallScreen({
                 {String(scoreRef.current).padStart(7, "0")}
               </p>
             </div>
+            {resultRank && (resultRank.newBest || resultRank.rank) && (
+              <p className="flex items-center gap-3 text-sm font-semibold">
+                {resultRank.newBest && (
+                  <span className="rounded-md bg-[var(--taiko-accent)] px-2 py-0.5 text-[var(--taiko-paper)]">
+                    {tr("新纪录", "New record")}
+                  </span>
+                )}
+                {resultRank.rank && (
+                  <span className="text-white/85">
+                    {tr("全球排名", "Global rank")} #{resultRank.rank}
+                  </span>
+                )}
+              </p>
+            )}
             <p className="text-sm tabular-nums text-white/75">
               {tr("最大连击", "Max combo")} {maxComboRef.current} · {tr("准确率", "Accuracy")} {acc.toFixed(1)}%
             </p>
