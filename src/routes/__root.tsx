@@ -120,7 +120,7 @@ function RootShell({ children }: { children: ReactNode }) {
         />
         <script
           dangerouslySetInnerHTML={{
-             __html: `(function(){var ID='pd2u-startup-failure';var errs=[];var timer=0;function remove(){var d=document.getElementById(ID);if(d&&d.parentNode)d.parentNode.removeChild(d)}window.__pd2uMarkBooted=function(){window.__pd2uBooted=true;remove();if(timer)clearInterval(timer)};function rec(m){try{errs.push(String(m).slice(0,300));if(errs.length>6)errs.shift();}catch(e){}}window.addEventListener('error',function(e){rec((e&&e.message)||'error')});window.addEventListener('unhandledrejection',function(e){rec('promise: '+((e&&e.reason&&(e.reason.message||e.reason))||''))});var preview=/(?:lovableproject|lovableproject-dev|lovable\.app|gpt-eng|gptengineer\.run)$/i.test(location.hostname);var wait=preview?45000:20000;setTimeout(function(){if(window.__pd2uBooted||document.documentElement.hasAttribute('data-pd2u-unsupported'))return;try{if(document.getElementById(ID))return;var d=document.createElement('div');d.id=ID;d.style.cssText='position:fixed;inset:0;z-index:99999;background:#100c0a;color:#f4f1ed;font:14px/1.6 sans-serif;padding:24px;overflow:auto';d.innerHTML='<h2 style="margin:0 0 8px">页面启动失败 / Failed to start</h2><p>请截图反馈给开发，或尝试更新系统 WebView / Chrome 后重试。</p><pre style="white-space:pre-wrap;font-size:12px;opacity:.75"></pre><button style="margin-top:12px;padding:8px 16px">重新加载 / Reload</button>';d.querySelector('pre').textContent='UA: '+navigator.userAgent+'\\n\\n'+(errs.join('\\n')||'no error captured');d.querySelector('button').onclick=function(){location.reload()};document.body.appendChild(d);}catch(e){}},wait);timer=setInterval(function(){if(window.__pd2uBooted){remove();clearInterval(timer)}},500)})();`,
+             __html: `(function(){var ID='pd2u-startup-failure';var errs=[];var timer=0;function remove(){var d=document.getElementById(ID);if(d&&d.parentNode)d.parentNode.removeChild(d)}window.__pd2uMarkBooted=function(){window.__pd2uBooted=true;remove();if(timer)clearInterval(timer)};function rec(m){try{errs.push(String(m).slice(0,300));if(errs.length>6)errs.shift();}catch(e){}}window.addEventListener('error',function(e){rec((e&&e.message)||'error')});window.addEventListener('unhandledrejection',function(e){rec('promise: '+((e&&e.reason&&(e.reason.message||e.reason))||''))});var preview=/(?:lovableproject|lovableproject-dev|lovable\.app|gpt-eng|gptengineer\.run)$/i.test(location.hostname);var ua=navigator.userAgent||'';var mobile=/android|iphone|ipad|ipod/i.test(ua)||typeof window.__pd2uExit==='function'||/unity/i.test(ua);var skip=preview||!mobile;setTimeout(function(){if(skip||window.__pd2uBooted||errs.length===0||document.documentElement.hasAttribute('data-pd2u-unsupported'))return;try{if(document.getElementById(ID))return;var d=document.createElement('div');d.id=ID;d.style.cssText='position:fixed;inset:0;z-index:99999;background:#100c0a;color:#f4f1ed;font:14px/1.6 sans-serif;padding:24px;overflow:auto';d.innerHTML='<h2 style="margin:0 0 8px">页面启动失败 / Failed to start</h2><p>请截图反馈给开发，或尝试更新系统 WebView / Chrome 后重试。</p><pre style="white-space:pre-wrap;font-size:12px;opacity:.75"></pre><button style="margin-top:12px;padding:8px 16px">重新加载 / Reload</button>';d.querySelector('pre').textContent='UA: '+navigator.userAgent+'\\n\\n'+(errs.join('\\n')||'no error captured');d.querySelector('button').onclick=function(){location.reload()};document.body.appendChild(d);}catch(e){}},20000);timer=setInterval(function(){if(window.__pd2uBooted){remove();clearInterval(timer)}},500)})();`,
           }}
         />
         <HeadContent />
@@ -195,6 +195,16 @@ function CrashOverlay() {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  // 任何页面（含 /admin）挂载成功即报告启动完成，看门狗不再误报
+  useEffect(() => {
+    const host = window as unknown as { __pd2uBooted?: boolean; __pd2uMarkBooted?: () => void };
+    if (host.__pd2uMarkBooted) host.__pd2uMarkBooted();
+    else {
+      host.__pd2uBooted = true;
+      document.getElementById("pd2u-startup-failure")?.remove();
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
