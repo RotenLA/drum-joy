@@ -124,3 +124,32 @@ export async function loadLibrarySong(
   onProgress?.(100);
   return { stems, midi, midiFileName: `${song.title}.mid`, title: song.title };
 }
+
+
+/** 从本地已下载的原始文件解码成可播放歌曲（只解码当前这一首） */
+export async function decodeStoredSong(
+  song: LibrarySong,
+  stored: import("./songDownloads").StoredSong,
+): Promise<LoadedLibrarySong> {
+  let midi: ParsedMidi;
+  try {
+    midi = parseMidi(stored.midi.slice(0));
+  } catch (cause) {
+    throw new Error("MIDI 文件解析失败", { cause });
+  }
+  const cloud: Partial<Record<string, TaikoChart>> = {};
+  for (const [diff, chart] of Object.entries(stored.charts)) {
+    if (chart) cloud[diff] = chart as TaikoChart;
+  }
+  registerCloudCharts(song.title, midi, cloud);
+  const ctx = getAudioContext();
+  const stems = emptyStems();
+  for (const kind of STEM_KINDS) {
+    const src = stored.stems[kind];
+    if (!src) continue;
+    // decodeAudioData 会转移缓冲区所有权，传副本以保留本地存储对象
+    const buffer = await ctx.decodeAudioData(src.slice(0));
+    stems[kind] = { buffer, fileName: `${song.title}_${STEM_LABEL[kind]}.mp3`, peak: peakOf(buffer) };
+  }
+  return { stems, midi, midiFileName: `${song.title}.mid`, title: song.title };
+}

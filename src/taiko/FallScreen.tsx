@@ -3,7 +3,7 @@ import { PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayout
 import { renderStage } from "./stageRenderer";
 import { musicGain, useSong } from "./songStore";
 import { songPlayer } from "./player";
-import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
+import { STEM_KINDS, hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
 import { stickManager } from "./stickInput";
 import { gestureHitDetector, noteOfPart } from "./gestureHit";
