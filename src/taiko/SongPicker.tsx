@@ -202,6 +202,14 @@ export function SongPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedSongId]);
 
+  const [pendingStart, setPendingStart] = useState<string | null>(null);
+  useEffect(() => {
+    if (pendingStart && loadedSongId === pendingStart) {
+      setPendingStart(null);
+      onStart();
+    }
+  }, [pendingStart, loadedSongId, onStart]);
+
   const isDl = (item: LibrarySong) => dl.done.has(`${item.id}|${item.fingerprint}`);
 
   /** 选中只展开，不下载 */
@@ -251,8 +259,8 @@ export function SongPicker({
           audioLeadMs: leadMs,
           chart: null,
         });
-        // 等 stems 进入全局状态后再开始
-        window.setTimeout(onStart, 0);
+        // 等 stems 进入全局状态后再开始（见下方 effect）
+        setPendingStart(item.id);
       } catch (err) {
         console.error(err);
         setWarn(tr("歌曲准备失败，请点「开始」重试", "Failed to prepare the song, tap PLAY to retry"));
@@ -503,7 +511,7 @@ export function SongPicker({
                     type="button"
                     onClick={guardClick(() => setBoardFor(item))}
                     aria-label={tr("排行榜", "Leaderboard")}
-                    className="absolute bottom-4 left-5 z-20 flex h-10 items-center gap-1.5 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 text-xs text-[rgba(255,255,255,0.8)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+                    className="absolute right-6 top-4 z-20 flex h-9 items-center gap-1.5 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 text-xs text-[rgba(255,255,255,0.8)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
                     style={{ transform: "skewX(9deg)" }}
                   >
                     <Trophy size={14} />
