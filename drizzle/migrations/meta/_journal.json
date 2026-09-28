@@ -36,6 +36,13 @@
       "when": 1790557608163,
       "tag": "0004_song_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790559601116,
+      "tag": "0005_favorites_full_combo",
+      "breakpoints": true
     }
   ]
 }

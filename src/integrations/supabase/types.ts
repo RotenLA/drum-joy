@@ -22,6 +22,7 @@ export type Database = {
           best_score: number
           completed: boolean
           difficulty: string
+          full_combo: boolean
           player_name: string | null
           plays: number
           song_id: string
@@ -35,6 +36,7 @@ export type Database = {
           best_score?: number
           completed?: boolean
           difficulty: string
+          full_combo?: boolean
           player_name?: string | null
           plays?: number
           song_id: string
@@ -48,6 +50,7 @@ export type Database = {
           best_score?: number
           completed?: boolean
           difficulty?: string
+          full_combo?: boolean
           player_name?: string | null
           plays?: number
           song_id?: string
@@ -61,6 +64,7 @@ export type Database = {
           accuracy: number
           completed: boolean
           difficulty: string
+          full_combo: boolean
           id: string
           max_combo: number
           notes: number
@@ -76,6 +80,7 @@ export type Database = {
           accuracy?: number
           completed?: boolean
           difficulty: string
+          full_combo?: boolean
           id?: string
           max_combo?: number
           notes?: number
@@ -91,6 +96,7 @@ export type Database = {
           accuracy?: number
           completed?: boolean
           difficulty?: string
+          full_combo?: boolean
           id?: string
           max_combo?: number
           notes?: number
@@ -138,6 +144,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      song_favorites: {
+        Row: {
+          created_at: string
+          song_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          song_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          song_id?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       song_tag_links: {
         Row: {
