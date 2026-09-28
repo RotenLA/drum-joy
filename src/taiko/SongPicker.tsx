@@ -206,7 +206,9 @@ export function SongPicker({
   useEffect(() => {
     if (pendingStart && loadedSongId === pendingStart) {
       setPendingStart(null);
-      onStart();
+      // 父层装载音频的 effect 会把状态重置为选歌，需排在它之后再开始
+      const t = window.setTimeout(onStart, 80);
+      return () => window.clearTimeout(t);
     }
   }, [pendingStart, loadedSongId, onStart]);
 
