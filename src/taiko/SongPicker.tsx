@@ -5,14 +5,16 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
-import { fetchLibrarySongs, loadLibrarySong, type LibrarySong } from "./songLibrary";
+import { fetchLibrarySongs, decodeStoredSong, type LibrarySong } from "./songLibrary";
+import { cancelDownload, downloadSong, readStoredAny, scanDownloads, useDownloads } from "./songDownloads";
+import { LeaderboardDialog } from "./LeaderboardDialog";
 import { songPlayer } from "./player";
 import { STEM_KINDS, emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
 import { useLanguage } from "./i18n";
 import { clearHistory, loadPlayData, type BestMap, type HistoryEntry } from "./history";
 import { CardControls } from "./CardControls";
 import { DIFFICULTIES, type Difficulty } from "./difficulty";
-import { BookOpen, LogOut, Play, Search } from "lucide-react";
+import { BookOpen, Download, Loader2, LogOut, Play, Search, Trophy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const fmtTime = (ms: number) => {
@@ -188,29 +190,54 @@ export function SongPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const dl = useDownloads();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [boardFor, setBoardFor] = useState<LibrarySong | null>(null);
+  useEffect(() => {
+    void scanDownloads();
+  }, []);
+  // 当前已加载的歌默认展开
+  useEffect(() => {
+    if (loadedSongId && selectedId === null) setSelectedId(loadedSongId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedSongId]);
+
+  const isDl = (item: LibrarySong) => dl.done.has(`${item.id}|${item.fingerprint}`);
+
+  /** 选中只展开，不下载 */
   const pickSong = useCallback(
-    async (item: LibrarySong, diff?: Difficulty, spd?: number) => {
+    (item: LibrarySong, diff?: Difficulty, spd?: number) => {
+      setSelectedId(item.id);
+      setWarn(null);
+      if (diff) song.setSong({ difficulty: diff });
+      if (spd) onSpeedChange?.(spd);
+      setTab("songs");
+    },
+    [song, onSpeedChange],
+  );
+
+  /** 已下载：解码（若未加载）后直接开始 */
+  const startSong = useCallback(
+    async (item: LibrarySong) => {
       if (loadingId) return;
       if (item.id === loadedSongId) {
-        if (spd) onSpeedChange?.(spd);
-        if (diff) song.setSong({ difficulty: diff });
-        setTab("songs");
+        onStart();
         return;
       }
       setWarn(null);
       setPercent(0);
       setLoadingId(item.id);
       songPlayer.stop();
-      // 先释放上一首的解码音频再解码新歌：避免两首歌同时占内存，
-      // 低内存手机长时间切歌时 WebView 更不易被系统回收
+      // 先释放上一首的解码音频，避免两首同时占内存
       songPlayer.load(emptyStems());
       song.setSong({ stems: emptyStems(), songId: "" });
       try {
-        const loaded = await loadLibrarySong(item, (p) => setPercent(Math.round(p)));
+        const stored = await readStoredAny(item);
+        if (!stored) throw new Error("not downloaded");
+        const loaded = await decodeStoredSong(item, stored);
         const leadMs = stemsLeadMs(loaded.stems);
         songPlayer.setLeadMs(leadMs);
         songPlayer.load(loaded.stems);
-        for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
         song.setSong({
           stems: loaded.stems,
           midi: loaded.midi,
@@ -223,19 +250,18 @@ export function SongPicker({
           timeSignature: loaded.midi.timeSignature,
           audioLeadMs: leadMs,
           chart: null,
-          ...(diff ? { difficulty: diff } : {}),
         });
-        if (spd) onSpeedChange?.(spd);
-        setTab("songs");
+        // 等 stems 进入全局状态后再开始
+        window.setTimeout(onStart, 0);
       } catch (err) {
         console.error(err);
-        setWarn(tr("加载失败，请检查网络后重试", "Failed to load, check your network and retry"));
+        setWarn(tr("歌曲准备失败，请点「开始」重试", "Failed to prepare the song, tap PLAY to retry"));
       } finally {
         setLoadingId(null);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loadingId, loadedSongId, song, onSpeedChange, tr],
+    [loadingId, loadedSongId, song, onStart, tr],
   );
 
   const filtered = useMemo(() => {
@@ -255,7 +281,7 @@ export function SongPicker({
     if (!box || tab !== "songs") return;
     const el = box.querySelector<HTMLElement>('[data-active="1"]');
     if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, [loadedSongId, tab, filtered.length]);
+  }, [selectedId, tab, filtered.length]);
 
   // 鼠标拖拽横向滑动（拖动超过阈值则吞掉后续 click）
   const onPointerDown = (e: React.PointerEvent) => {
@@ -397,11 +423,11 @@ export function SongPicker({
             </p>
           )}
           {filtered.map((item, i) => {
-            const active = loadedSongId === item.id;
             const busyThis = loadingId === item.id;
-            // 切换歌曲时旧卡立即收拢，只让正在加载的新卡保持展开。
-            const wide = busyThis || (active && loadingId === null);
-            const ready = active && !loadingId;
+            const wide = selectedId === item.id;
+            const ready = wide;
+            const downloaded = isDl(item);
+            const downloading = dl.activeId === item.id;
             return (
               <div
                 key={item.id}
@@ -416,8 +442,7 @@ export function SongPicker({
               >
                 <button
                   type="button"
-                  onClick={guardClick(() => void pickSong(item))}
-                  disabled={loadingId !== null}
+                  onClick={guardClick(() => pickSong(item))}
                   className={`relative block h-full w-full overflow-hidden rounded-lg border text-left shadow-xl backdrop-blur-[18px] transition-all duration-300 ${
                     wide
                       ? "border-[var(--taiko-accent)] ring-1 ring-[var(--taiko-accent)]"
@@ -434,10 +459,10 @@ export function SongPicker({
                       opacity: wide ? 0.55 : 0.8,
                     }}
                   />
-                  {busyThis && (
+                  {downloading && (
                     <span
                       className="absolute inset-y-0 left-0 bg-[var(--taiko-accent-progress)] transition-[width] duration-200"
-                      style={{ width: `${percent}%` }}
+                      style={{ width: `${dl.percent}%` }}
                     />
                   )}
 
@@ -451,9 +476,9 @@ export function SongPicker({
                         {fmtTime(item.durationMs)} · BPM {item.bpm} · {item.timeSignature[0]}/
                         {item.timeSignature[1]}
                       </span>
-                      {busyThis && (
-                        <span className="text-[11px] tabular-nums text-[var(--taiko-accent)]">
-                          {percent}%
+                      {downloaded && (
+                        <span className="text-[11px] text-[var(--taiko-accent)]">
+                          {tr("已下载", "Downloaded")}
                         </span>
                       )}
                     </span>
@@ -476,11 +501,48 @@ export function SongPicker({
                 {ready && (
                   <button
                     type="button"
-                    onClick={guardClick(onStart)}
-                    className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-md bg-[var(--taiko-accent)] px-5 py-2.5 text-sm font-semibold tracking-[0.2em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04]"
+                    onClick={guardClick(() => setBoardFor(item))}
+                    aria-label={tr("排行榜", "Leaderboard")}
+                    className="absolute bottom-4 left-5 z-20 flex h-10 items-center gap-1.5 rounded-md border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] px-3 text-xs text-[rgba(255,255,255,0.8)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+                    style={{ transform: "skewX(9deg)" }}
                   >
-                    <Play size={16} />
-                    {tr("开始", "PLAY")}
+                    <Trophy size={14} />
+                    {tr("排行榜", "Ranking")}
+                  </button>
+                )}
+
+                {ready && (
+                  <button
+                    type="button"
+                    onClick={guardClick(() => {
+                      if (downloading) cancelDownload();
+                      else if (downloaded) void startSong(item);
+                      else void downloadSong(item);
+                    })}
+                    disabled={busyThis}
+                    className="absolute bottom-4 right-4 z-20 flex h-10 min-w-[7.5rem] items-center justify-center gap-2 rounded-md bg-[var(--taiko-accent)] px-5 text-sm font-semibold tracking-[0.15em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04] disabled:opacity-70"
+                  >
+                    {busyThis ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        {tr("准备中", "Loading")}
+                      </>
+                    ) : downloading ? (
+                      <>
+                        <X size={16} />
+                        {dl.percent}%
+                      </>
+                    ) : downloaded ? (
+                      <>
+                        <Play size={16} />
+                        {tr("开始", "PLAY")}
+                      </>
+                    ) : (
+                      <>
+                        <Download size={16} />
+                        {dl.errorId === item.id ? tr("重试", "Retry") : tr("下载", "Download")}
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -508,9 +570,9 @@ export function SongPicker({
                 <button
                   key={`${h.playedAt}-${i}`}
                   onClick={() => {
-                    if (item) void pickSong(item, h.difficulty, h.speed);
+                    if (item) pickSong(item, h.difficulty, h.speed);
                   }}
-                  disabled={!item || loadingId !== null}
+                  disabled={!item}
                   className="flex flex-wrap items-center justify-between gap-2 py-2 text-left text-sm text-[rgba(255,255,255,0.85)] hover:text-[var(--taiko-accent)] disabled:opacity-50"
                 >
                   <span className="min-w-0 truncate">{h.title}</span>
@@ -532,6 +594,9 @@ export function SongPicker({
             )}
           </div>
         </div>
+      )}
+      {boardFor && (
+        <LeaderboardDialog song={boardFor} difficulty={song.difficulty} onClose={() => setBoardFor(null)} />
       )}
     </div>
   );
