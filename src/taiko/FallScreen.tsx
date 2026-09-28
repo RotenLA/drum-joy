@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
-import { useSong } from "./songStore";
+import { musicGain, useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { STEM_KINDS, STEM_LABEL, hasAnyStem, stemsDurationMs } from "./stems";
 import { midiManager } from "./midiInput";
@@ -217,7 +217,8 @@ export function FallScreen({
 
   // 调音台音量 → 播放器（实时生效）
   useEffect(() => {
-    for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, song.mix[kind]);
+    const g = musicGain(song.mix.music);
+    for (const kind of STEM_KINDS) songPlayer.setStemGain(kind, kind === "drums" ? 0 : g);
   }, [song.mix, stems]);
 
   useEffect(() => {
@@ -718,46 +719,32 @@ export function FallScreen({
         {phase !== "idle" && <div className="absolute bottom-3 left-3 z-30">
 
           {mixerOpen && (
-            <div className="mb-2 w-[min(78vw,420px)] bg-[rgba(10,12,18,0.82)] px-4 py-3 backdrop-blur-[8px]">
+            <div className="mb-2 w-[min(70vw,300px)] bg-[rgba(10,12,18,0.82)] px-4 py-3 backdrop-blur-[8px]">
               <div className="mb-2 flex items-baseline gap-3">
                 <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">
                   {tr("调音台", "Mixer")}
                 </span>
                 <span className="text-[10px] text-[rgba(255,255,255,0.45)]">
-                  {tr("100% = 原始文件音量", "100% = original file volume")}
+                  {tr("80% = 原始音量，100% = +6dB", "80% = original, 100% = +6dB")}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
-                {STEM_KINDS.map((key) => {
-                  const track = stems[key];
-                  const value = song.mix[key];
-                  return (
-                    <label key={key} className="flex min-w-0 flex-col gap-1">
-                      <span className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 text-[10px] text-[rgba(255,255,255,0.7)]">
-                        <span className={`truncate ${track ? "" : "opacity-40"}`}>
-                          {STEM_LABEL[key]}
-                          {track ? "" : tr("（无）", " (none)")}
-                        </span>
-                        <span className="tabular-nums text-[rgba(255,255,255,0.55)]">
-                          {Math.round(value * 100)}%
-                        </span>
-                      </span>
-                      <input
-                        type="range"
-                        min={0}
-                        max={100}
-                        step={1}
-                        value={Math.round(value * 100)}
-                        disabled={!track}
-                        onChange={(e) =>
-                          song.setSong({ mix: { ...song.mix, [key]: Number(e.target.value) / 100 } })
-                        }
-                        className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[rgba(255,255,255,0.25)] accent-[var(--taiko-accent)] disabled:cursor-not-allowed disabled:opacity-40"
-                      />
-                    </label>
-                  );
-                })}
-              </div>
+              <label className="flex min-w-0 flex-col gap-1">
+                <span className="flex items-center justify-between text-[11px] text-[rgba(255,255,255,0.75)]">
+                  <span>{tr("背景音乐", "Music")}</span>
+                  <span className="tabular-nums text-[rgba(255,255,255,0.55)]">
+                    {Math.round(song.mix.music * 100)}%
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(song.mix.music * 100)}
+                  onChange={(e) => song.setSong({ mix: { ...song.mix, music: Number(e.target.value) / 100 } })}
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[rgba(255,255,255,0.25)] accent-[var(--taiko-accent)]"
+                />
+              </label>
             </div>
           )}
           <button

@@ -68,7 +68,7 @@ class SongPlayer {
 
   /** 音量 0~1，1 = 原始文件音量（不做超过峰值的放大） */
   setStemGain(kind: StemKind, value: number): void {
-    const v = Math.min(1, Math.max(0, value));
+    const v = Math.min(2, Math.max(0, value));
     this.levels[kind] = v;
     const g = this.gains[kind];
     if (g) g.gain.value = v;
