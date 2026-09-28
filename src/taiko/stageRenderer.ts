@@ -244,14 +244,14 @@ function buildBackground(w: number, h: number, scale: number) {
 
   // 上：夜空；下：地面，都极暗
   const sky = c.createLinearGradient(0, 0, 0, h * HORIZON);
-  sky.addColorStop(0, "#07070a");
-  sky.addColorStop(1, "#15161c");
+  sky.addColorStop(0, "#1d1a38");
+  sky.addColorStop(1, "#3a3160");
   c.fillStyle = sky;
   c.fillRect(0, 0, w, h * HORIZON);
 
   const floor = c.createLinearGradient(0, h * HORIZON, 0, h);
-  floor.addColorStop(0, "#1b1d25");
-  floor.addColorStop(1, "#0b0b0e");
+  floor.addColorStop(0, "#35305a");
+  floor.addColorStop(1, "#1a1830");
   c.fillStyle = floor;
   c.fillRect(0, h * HORIZON, w, h - h * HORIZON);
 
@@ -294,7 +294,7 @@ function buildBackground(w: number, h: number, scale: number) {
 
   const edge = c.createRadialGradient(w * 0.5, h * 0.5, h * 0.35, w * 0.5, h * 0.5, h * 1.05);
   edge.addColorStop(0, "rgba(4,4,6,0)");
-  edge.addColorStop(1, "rgba(4,4,6,0.55)");
+  edge.addColorStop(1, "rgba(4,4,6,0.3)");
   c.fillStyle = edge;
   c.fillRect(0, 0, w, h);
 }
@@ -313,7 +313,14 @@ export function drawBackground(ctx: CanvasRenderingContext2D, w: number, h: numb
     ctx.filter = "blur(4px)";
     ctx.drawImage(bg, (w - dw) / 2 - bleed, (h - dh) / 2 - bleed, dw + bleed * 2, dh + bleed * 2);
     ctx.restore();
-    ctx.fillStyle = "rgba(6,6,9,0.5)";
+    // 提亮：压暗减到 0.22，再叠一层暖色舞台光，整体更明亮欢快
+    ctx.fillStyle = "rgba(10,8,20,0.22)";
+    ctx.fillRect(0, 0, w, h);
+    const warm = ctx.createRadialGradient(w * 0.5, h * 0.2, 0, w * 0.5, h * 0.2, h * 1.1);
+    warm.addColorStop(0, "rgba(255,170,90,0.16)");
+    warm.addColorStop(0.5, "rgba(170,120,255,0.08)");
+    warm.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = warm;
     ctx.fillRect(0, 0, w, h);
     return;
   }
@@ -347,7 +354,7 @@ export function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number
   if (!vignetteGrad) {
     const g = ctx.createLinearGradient(0, h * 0.72, 0, h);
     g.addColorStop(0, "rgba(0,0,0,0)");
-    g.addColorStop(1, "rgba(0,0,0,0.55)");
+    g.addColorStop(1, "rgba(0,0,0,0.3)");
     vignetteGrad = g;
   }
   ctx.fillStyle = vignetteGrad;
