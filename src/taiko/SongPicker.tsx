@@ -203,14 +203,15 @@ export function SongPicker({
   }, [loadedSongId]);
 
   const [pendingStart, setPendingStart] = useState<string | null>(null);
+  const startRef = useRef(onStart);
+  startRef.current = onStart;
   useEffect(() => {
     if (pendingStart && loadedSongId === pendingStart) {
       setPendingStart(null);
       // 父层装载音频的 effect 会把状态重置为选歌，需排在它之后再开始
-      const t = window.setTimeout(onStart, 80);
-      return () => window.clearTimeout(t);
+      window.setTimeout(() => startRef.current(), 80);
     }
-  }, [pendingStart, loadedSongId, onStart]);
+  }, [pendingStart, loadedSongId]);
 
   const isDl = (item: LibrarySong) => dl.done.has(`${item.id}|${item.fingerprint}`);
 
