@@ -32,7 +32,15 @@ function Index() {
   // 挂载后再一次性渲染真实界面，避免首屏文字与预渲染内容不一致的警告。
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    (window as unknown as { __pd2uBooted?: boolean }).__pd2uBooted = true;
+    const host = window as unknown as {
+      __pd2uBooted?: boolean;
+      __pd2uMarkBooted?: () => void;
+    };
+    if (host.__pd2uMarkBooted) host.__pd2uMarkBooted();
+    else {
+      host.__pd2uBooted = true;
+      document.getElementById("pd2u-startup-failure")?.remove();
+    }
     setMounted(true);
   }, []);
   if (!mounted) return <div style={{ minHeight: "100vh", background: "#100c0a" }} />;
