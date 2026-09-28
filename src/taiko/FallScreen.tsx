@@ -645,6 +645,7 @@ export function FallScreen({
         maxCombo: maxComboRef.current,
         notes: total,
         completed,
+        fullCombo: completed && total > 0 && s.miss === 0,
         progress: Math.round(progress),
         playedAt: Date.now(),
       }).then((r) => {

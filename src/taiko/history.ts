@@ -6,6 +6,9 @@ import {
   getPlayData,
   importLocalHistory,
   submitPlay,
+  getFavorites,
+  importFavorites,
+  toggleFavorite,
   type PlayBest,
 } from "@/lib/plays.functions";
 
@@ -27,6 +30,8 @@ export interface HistoryEntry {
   maxCombo?: number;
   notes?: number;
   completed?: boolean;
+  /** 完成且无 Miss */
+  fullCombo?: boolean;
   progress?: number;
   playedAt: number;
 }
@@ -81,6 +86,7 @@ const toInput = (e: HistoryEntry) => ({
   notes: e.notes ?? 0,
   progress: Math.round(e.completed === false ? (e.progress ?? 0) : 100),
   completed: e.completed !== false,
+  fullCombo: e.fullCombo === true && e.completed !== false,
   playedAt: Math.round(e.playedAt),
 });
 
@@ -140,6 +146,7 @@ function localBests(list: HistoryEntry[]): BestMap {
       maxCombo: 0,
       progress: 0,
       completed: false,
+      fullCombo: false,
       plays: 0,
     };
     b.score = Math.max(b.score, r.score);
@@ -147,6 +154,7 @@ function localBests(list: HistoryEntry[]): BestMap {
     b.maxCombo = Math.max(b.maxCombo, r.maxCombo);
     b.progress = Math.max(b.progress, r.progress);
     b.completed = b.completed || r.completed;
+    b.fullCombo = b.fullCombo || r.fullCombo;
     b.plays += 1;
     m[k] = b;
   }
@@ -180,5 +188,67 @@ export async function loadPlayData(): Promise<{
   } catch (e) {
     console.warn("[history] 云端读取失败，使用本机", e);
     return { history: local, bests: localBests(local), synced: false };
+  }
+}
+
+/** 难度解锁：轻松/入门常开；标准需入门全连击；困难需标准全连击 */
+const UNLOCK_REQ: Partial<Record<Difficulty, Difficulty>> = { standard: "beginner", hard: "standard" };
+export function unlockRequirement(diff: Difficulty): Difficulty | null {
+  return UNLOCK_REQ[diff] ?? null;
+}
+export function isUnlocked(bests: BestMap, songId: string, diff: Difficulty): boolean {
+  const req = UNLOCK_REQ[diff];
+  if (!req) return true;
+  return bests[`${songId}|${req}`]?.fullCombo === true;
+}
+
+// ================= 收藏 =================
+const FAV_KEY = "taiko.favorites.v1";
+const FAV_IMPORTED = "taiko.favorites.imported.v1";
+
+function readLocalFavs(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(FAV_KEY) ?? "[]");
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function writeLocalFavs(ids: string[]) {
+  try {
+    localStorage.setItem(FAV_KEY, JSON.stringify(ids));
+  } catch {
+    // ignore
+  }
+}
+
+/** 读取收藏（最新收藏在前）；有账号时首次把本机收藏合并到云端 */
+export async function loadFavorites(): Promise<string[]> {
+  const local = readLocalFavs();
+  const uid = getHostUserId();
+  if (!uid) return local;
+  try {
+    const flag = `${FAV_IMPORTED}:${uid}`;
+    if (!localStorage.getItem(flag)) {
+      if (local.length) await importFavorites({ data: { userId: uid, songIds: local.slice(0, 500) } });
+      localStorage.setItem(flag, "1");
+    }
+    const r = await getFavorites({ data: { userId: uid } });
+    return r.songIds;
+  } catch (e) {
+    console.warn("[favorites] 云端读取失败，使用本机", e);
+    return local;
+  }
+}
+
+export async function setFavorite(songId: string, on: boolean): Promise<void> {
+  const cur = readLocalFavs().filter((x) => x !== songId);
+  writeLocalFavs(on ? [songId, ...cur] : cur);
+  const uid = getHostUserId();
+  if (!uid) return;
+  try {
+    await toggleFavorite({ data: { userId: uid, songId, on } });
+  } catch (e) {
+    console.warn("[favorites] 云端写入失败", e);
   }
 }

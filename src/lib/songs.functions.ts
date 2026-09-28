@@ -18,6 +18,12 @@ export interface LibrarySong {
   fingerprint: string;
   sizes: Record<string, number>;
   createdAt: string;
+  tagIds: string[];
+}
+
+export interface LibraryTag {
+  id: string;
+  name: string;
 }
 
 export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async () => {
@@ -40,8 +46,16 @@ export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async 
     fingerprint: r.midi_fingerprint,
     sizes: (r.sizes ?? {}) as Record<string, number>,
     createdAt: r.created_at,
+    tagIds: [] as string[],
   }));
-  return { songs };
+  const [tagsRes, linksRes] = await Promise.all([
+    supabaseAdmin.from("song_tags").select("id, name, sort_order").order("sort_order"),
+    supabaseAdmin.from("song_tag_links").select("song_id, tag_id"),
+  ]);
+  const byId = new Map(songs.map((s) => [s.id, s]));
+  for (const l of linksRes.data ?? []) byId.get(l.song_id)?.tagIds.push(l.tag_id);
+  const tags: LibraryTag[] = (tagsRes.data ?? []).map((t) => ({ id: t.id, name: t.name }));
+  return { songs, tags };
 });
 
 export interface SongAssets {
