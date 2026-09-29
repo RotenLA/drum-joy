@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { parseMidi } from "@/taiko/midiFile";
 import { buildAllCharts, chartVersionFingerprint } from "@/taiko/adminChartBuild";
-import { decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
+import { applyConstantTempo, decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
 import {
   groupImportFiles,
   type FolderImportSong,
