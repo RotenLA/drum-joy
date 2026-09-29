@@ -12,10 +12,11 @@ export const ALL_DIFFICULTIES: Difficulty[] = ["easy", "beginner", "standard", "
 export function buildAllCharts(
   midi: ParsedMidi,
   title: string,
+  displayBpm = midi.bpm,
 ): { difficulty: Difficulty; chart: TaikoChart }[] {
   return ALL_DIFFICULTIES.map((difficulty) => ({
     difficulty,
-    chart: buildPlayChart(midi, { title }, difficulty),
+    chart: { ...buildPlayChart(midi, { title }, difficulty), bpm: Math.round(displayBpm * 10) / 10 },
   }));
 }
 

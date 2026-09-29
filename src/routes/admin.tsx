@@ -226,7 +226,7 @@ function AdminPage() {
     const tempo = await decodeAndAnalyzeTempo(files["drums"] ?? files["other"] ?? files["bass"] ?? files["vocals"]!, sourceMidi);
     const needsReview = tempo.status === "review";
     const parsed = tempo.midi;
-    const charts = buildAllCharts(parsed, songTitle);
+    const charts = buildAllCharts(parsed, songTitle, tempo.bpm);
     const fingerprint = chartVersionFingerprint(parsed);
     let durationMs = parsed.durationMs;
     for (const field of STEM_FIELDS) {
@@ -343,7 +343,7 @@ function AdminPage() {
       const { url } = await midiUrlOf({ data: { id: row.id } });
       const buf = await (await fetch(url)).arrayBuffer();
       const parsed = parseMidi(buf);
-      const charts = buildAllCharts(parsed, row.title);
+      const charts = buildAllCharts(parsed, row.title, Number(row.bpm));
       await regenerate({
         data: {
           songId: row.id,
@@ -382,7 +382,7 @@ function AdminPage() {
         const fingerprint = chartVersionFingerprint(analysis.midi);
         const differs = Math.abs(Number(row.bpm) - analysis.bpm) >= 0.1 || row.midi_fingerprint !== fingerprint;
         if (differs) {
-          const charts = buildAllCharts(analysis.midi, row.title);
+          const charts = buildAllCharts(analysis.midi, row.title, analysis.bpm);
           await replaceTempo({
             data: {
               songId: row.id,
@@ -423,7 +423,7 @@ function AdminPage() {
       if (!response.ok) throw new Error("MIDI 下载失败");
       const originalMidi = parseMidi(await response.arrayBuffer());
       const fingerprint = chartVersionFingerprint(originalMidi);
-      const charts = buildAllCharts(originalMidi, row.title);
+      const charts = buildAllCharts(originalMidi, row.title, bpm);
       await replaceTempo({
         data: {
           songId: row.id,
