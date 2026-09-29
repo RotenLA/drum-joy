@@ -401,7 +401,7 @@ export function FallScreen({
       if (phaseRef.current !== "countdown") return;
       const moved = getAudioContext().currentTime - watchStartCtx;
       if (moved > 0.2) return;
-      debugLog.push("audio", "倒计时时钟停滞，重新唤醒音频");
+      debugLog.push("system", "倒计时时钟停滞，重新唤醒音频");
       void getAudioContext().resume().catch(() => undefined);
       beginCountdownRef.current(fromMs, false);
     }, 600);
