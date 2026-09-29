@@ -169,8 +169,12 @@ function ratingLevelOf(rating: string | null | undefined): number {
   return rating ? (RATING_LEVEL[rating] ?? 0) : 0;
 }
 
+let reduceMotionCache: boolean | null = null;
 function reducedMotion(): boolean {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  if (reduceMotionCache === null) {
+    reduceMotionCache = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  }
+  return reduceMotionCache;
 }
 
 interface Particle {

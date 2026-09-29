@@ -181,6 +181,7 @@ export function SongPicker({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const detailScrollRef = useRef<HTMLDivElement | null>(null);
   const detailScrollTimerRef = useRef<number | null>(null);
+  const detailScrollingRef = useRef(false);
   const dragRef = useRef({ down: false, startX: 0, startScroll: 0, moved: 0 });
 
   useEffect(() => {
@@ -378,6 +379,7 @@ export function SongPicker({
     if (!nearest?.id) return;
     const item = activeSongs.find((candidate) => candidate.id === nearest?.id);
     if (item && item.id !== selectedId) pickSong(item);
+    detailScrollingRef.current = false;
     box.scrollTo({ top: Math.max(0, nearest.element.offsetTop - detailSlotTop()), behavior: "smooth" });
   }, [activeSongs, pickSong, selectedId]);
 
@@ -395,6 +397,7 @@ export function SongPicker({
   }, [selectedId]);
 
   const onDetailScroll = () => {
+    detailScrollingRef.current = true;
     syncDetailSelection();
     if (detailScrollTimerRef.current !== null) window.clearTimeout(detailScrollTimerRef.current);
     detailScrollTimerRef.current = window.setTimeout(settleDetailSelection, 110);
@@ -407,6 +410,7 @@ export function SongPicker({
   useEffect(() => {
     if (!openList || !selectedId) return;
     const frame = window.requestAnimationFrame(() => {
+      if (detailScrollingRef.current) return;
       const box = detailScrollRef.current;
       const element = box?.querySelector<HTMLElement>(`[data-song-id="${selectedId}"]`);
       if (box && element) box.scrollTo({ top: Math.max(0, element.offsetTop - detailSlotTop()), behavior: "smooth" });
