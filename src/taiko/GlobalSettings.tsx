@@ -24,7 +24,7 @@ import { songPlayer } from "./player";
 import { Button } from "@/components/ui/button";
 
 const CALIB_TARGET = 8;
-const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
 
 export function GlobalSettings({
   speed,
