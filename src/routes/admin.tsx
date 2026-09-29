@@ -209,7 +209,7 @@ function AdminPage() {
     files: Partial<Record<ImportFileKey, File>>,
     tagIds: string[],
   ) => {
-    const midi = files.midi;
+    const midi = files["midi"];
     if (!midi) throw new Error("缺少 MIDI");
     for (const field of STEM_FIELDS) if (!files[field.key]) throw new Error(`缺少 ${field.label}`);
     setBusy(`解析《${songTitle}》并生成四档谱面…`);
@@ -253,7 +253,7 @@ function AdminPage() {
       tsNum: parsed.timeSignature[0],
       tsDen: parsed.timeSignature[1],
       fingerprint,
-      paths: { vocals: paths.vocals ?? null, bass: paths.bass ?? null, drums: paths.drums ?? null, other: paths.other ?? null, midi: midiPath },
+      paths: { vocals: paths["vocals"] ?? null, bass: paths["bass"] ?? null, drums: paths["drums"] ?? null, other: paths["other"] ?? null, midi: midiPath },
       sizes,
       charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
       tagIds,
@@ -298,11 +298,19 @@ function AdminPage() {
     setNote(null);
     let completed = 0;
     for (const song of queue) {
-      setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "uploading", error: undefined } : item));
+      setFolderSongs((current) => current.map((item) => {
+        if (item.key !== song.key) return item;
+        const { error: _error, ...rest } = item;
+        return { ...rest, status: "uploading" };
+      }));
       try {
         await uploadOne(song.title.trim(), "", song.files, uploadTags);
         completed++;
-        setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "done", error: undefined } : item));
+        setFolderSongs((current) => current.map((item) => {
+          if (item.key !== song.key) return item;
+          const { error: _error, ...rest } = item;
+          return { ...rest, status: "done" };
+        }));
       } catch (error) {
         setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "failed", error: (error as Error).message } : item));
       }
