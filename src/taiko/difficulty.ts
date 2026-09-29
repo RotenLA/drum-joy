@@ -306,13 +306,11 @@ function sourceEmits(clean: CleanedMidi, diff: Difficulty): Emit[] {
   const allowed = new Set(NOTE_PARTS[diff]);
   const hits = clean.hits.filter((hit) => allowed.has(hit.part));
   if (diff === "standard") {
-    return hits.map((hit) => ({
-      step: hit.step,
-      part: hit.part,
-      velocity: hit.velocity,
-      timeMs: hit.timeMs,
-      open: hit.open,
-    }));
+    return hits.map((hit) => {
+      const emit: Emit = { step: hit.step, part: hit.part, velocity: hit.velocity, timeMs: hit.timeMs };
+      if (hit.open !== undefined) emit.open = hit.open;
+      return emit;
+    });
   }
 
   // 低难度仍以原谱落点为准：保留强音、正拍与每拍最重要的一次弱音，避免整段被滤空。
@@ -329,13 +327,11 @@ function sourceEmits(clean: CleanedMidi, diff: Difficulty): Emit[] {
     const beat = Math.floor(hit.step / clean.stepsPerBeat);
     return onBeat || strong || strongestByBeat.get(`${beat}:${hit.part}`) === hit;
   });
-  return selected.map((hit) => ({
-    step: hit.step,
-    part: hit.part,
-    velocity: hit.velocity,
-    timeMs: hit.timeMs,
-    open: diff === "easy" || diff === "beginner" ? false : hit.open,
-  }));
+  return selected.map((hit) => {
+    const emit: Emit = { step: hit.step, part: hit.part, velocity: hit.velocity, timeMs: hit.timeMs };
+    if (hit.part === "hihat") emit.open = false;
+    return emit;
+  });
 }
 
 /** 踩镲与低通/吊镲/叮叮镲不可同刻：同刻时丢掉踩镲 */

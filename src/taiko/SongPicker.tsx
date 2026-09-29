@@ -559,11 +559,16 @@ export function SongPicker({
               <div className="shrink-0 pb-1 pl-8 text-xs font-semibold tracking-[0.18em] text-[rgba(255,255,255,0.62)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                 {activePlaylist?.name ?? ""}
               </div>
-              <div
-                ref={detailScrollRef}
-                onScroll={onDetailScroll}
-                className="taiko-detail-scroll min-h-0 flex-1 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
-              >
+              <div className="relative min-h-0 flex-1">
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-1 right-4 top-[clamp(112px,20vh,160px)] z-10 h-[clamp(48px,9vh,72px)] -translate-x-3 rounded-lg border-l-4 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.84)] shadow-lg"
+                />
+                <div
+                  ref={detailScrollRef}
+                  onScroll={onDetailScroll}
+                  className="taiko-detail-scroll absolute inset-0 z-20 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
+                >
                 {activeSongs.map((item, index) => {
                   const on = item.id === selectedId;
                   return (
@@ -575,9 +580,9 @@ export function SongPicker({
                       onClick={() => {
                         pickSong(item);
                       }}
-                      className={`mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] flex-col items-stretch justify-center overflow-hidden rounded-lg border-l-4 px-5 text-left shadow-lg transition-[width,transform,background-color,border-color] duration-200 ${
+                      className={`relative mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] flex-col items-stretch justify-center overflow-visible rounded-lg border-l-4 px-5 text-left shadow-lg transition-[width,transform,background-color,border-color] duration-200 ${
                         on
-                          ? "w-[calc(100%-1rem)] -translate-x-3 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.84)] text-[var(--taiko-paper)]"
+                          ? "z-30 w-[calc(100%-1rem)] -translate-x-3 border-transparent bg-transparent text-[var(--taiko-paper)] shadow-none"
                           : "w-[82%] border-[rgba(255,255,255,0.34)] bg-[rgba(15,16,20,0.56)] text-[rgba(255,255,255,0.84)] hover:bg-[rgba(25,26,31,0.72)]"
                       }`}
                       style={{ transform: on ? "translateX(-0.75rem)" : undefined }}
@@ -597,6 +602,7 @@ export function SongPicker({
                   );
                 })}
                 <div aria-hidden="true" className="h-[80vh] shrink-0" />
+                </div>
               </div>
             </div>
 

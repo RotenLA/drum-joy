@@ -710,7 +710,8 @@ function AdminPage() {
                 defaultValue={t.name}
                 onBlur={(e) => {
                   const v = e.target.value.trim();
-                  if (v && t.name_en && v !== t.name) void tagAction(() => renTag({ data: { id: t.id, name: v, nameEn: t.name_en } }));
+                  const nameEn = t.name_en;
+                  if (v && nameEn && v !== t.name) void tagAction(() => renTag({ data: { id: t.id, name: v, nameEn } }));
                 }}
                 aria-label="中文歌单名"
                 className="min-w-0 border border-transparent bg-transparent px-1 py-0.5 text-base hover:border-[var(--taiko-line)] focus:border-[var(--taiko-accent)] focus:outline-none"
