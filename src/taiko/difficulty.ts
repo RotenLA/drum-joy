@@ -151,9 +151,9 @@ function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number
     }
   }
 
-  // 踩镲：入门以「每拍一下」为主，只有原曲是连续 16 分的密集段才升到八分
+  // 踩镲：以原曲脉冲为依据；乐句后半允许八分推进，但不把整段机械铺满。
   if (bar.hatDiv !== 0) {
-    const div = bar.hatDiv === 16 ? stepsPerBeat / 2 : stepsPerBeat;
+    const div = bar.hatDiv === 16 && bar.index % 4 >= 2 ? stepsPerBeat / 2 : stepsPerBeat;
     for (let s = 0; s < stepsPerBar; s += div) out.push({ step: s, part: "hihat", velocity: 90 });
   }
 
@@ -279,14 +279,15 @@ function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
     });
   }
 
-  // 3) 高通 / 中通低概率出现：非过门处每 3 个只留 1 个（确定性）
+  // 3) 非过门通鼓优先保留强拍和强音，避免机械地“每三个留一个”。
   const fillRanges = fillBars.map((b) => [b.startStep, b.startStep + skeleton.stepsPerBar]);
   const inFill = (step: number) => fillRanges.some(([a, b]) => step >= a! && step < b!);
-  let tomSeen = 0;
   const kept: Emit[] = [];
   for (const e of emits.slice().sort((a, b) => a.step - b.step)) {
     if ((e.part === "highTom" || e.part === "midTom") && !inFill(e.step)) {
-      if (tomSeen++ % 3 !== 0) continue;
+      const local = ((e.step - skeleton.phaseSteps) % skeleton.stepsPerBar + skeleton.stepsPerBar) % skeleton.stepsPerBar;
+      const accented = local % skeleton.stepsPerBeat === 0 || e.velocity >= BIG_VELOCITY;
+      if (!accented) continue;
     }
     kept.push(e);
   }
@@ -301,6 +302,32 @@ function excludeHihatClashes(emits: Emit[]): Emit[] {
     if (HIHAT_EXCLUSIVE.includes(e.part)) clash.add(e.step);
   }
   return emits.filter((e) => !(e.part === "hihat" && clash.has(e.step)));
+}
+
+const DENSITY_LIMIT: Record<Difficulty, number> = {
+  easy: 2.5,
+  beginner: 3.4,
+  standard: 6.5,
+  hard: 9,
+};
+
+/** 一秒滑窗限密度：保留脚、强拍与强音，优先移除弱的连续手击。 */
+function limitDensity(emits: Emit[], diff: Difficulty, clean: CleanedMidi): Emit[] {
+  const stepsPerSecond = Math.max(1, (clean.bpm / 60) * clean.stepsPerBeat);
+  const limit = DENSITY_LIMIT[diff];
+  const sorted = emits.slice().sort((a, b) => a.step - b.step || b.velocity - a.velocity);
+  const kept: Emit[] = [];
+  for (const e of sorted) {
+    const recent = kept.filter((x) => x.step > e.step - stepsPerSecond && x.step <= e.step);
+    if (recent.length < limit) {
+      kept.push(e);
+      continue;
+    }
+    const local = ((e.step - clean.phaseSteps) % clean.stepsPerBar + clean.stepsPerBar) % clean.stepsPerBar;
+    const essential = e.part === "kick" || e.part === "pedalHat" || e.velocity >= BIG_VELOCITY || local % clean.stepsPerBeat === 0;
+    if (essential) kept.push(e);
+  }
+  return kept;
 }
 
 // ================= 组装 =================
@@ -452,7 +479,7 @@ export function buildPlayChart(
   if (diff === "easy" || diff === "beginner") {
     for (const e of emits) e.open = false;
   }
-  emits = excludeHihatClashes(limitHands(emits));
+  emits = limitDensity(excludeHihatClashes(limitHands(emits)), diff, clean);
 
   const lastStep = emits.reduce((m, e) => Math.max(m, e.step), 0);
   const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);

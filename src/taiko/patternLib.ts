@@ -24,6 +24,9 @@ export const GROOVE_PATTERNS: readonly GroovePattern[] = [
   { id: "sixteen", label: "16 分踩镲", kick: [0, 3, 8, 11], snare: [4, 12], hatDiv: 16 },
   { id: "funk", label: "放克", kick: [0, 3, 6, 10], snare: [4, 12], hatDiv: 16 },
   { id: "sparse", label: "稀疏底鼓", kick: [0], snare: [8], hatDiv: 8 },
+  { id: "drive", label: "推进摇滚", kick: [0, 7, 8, 10], snare: [4, 12], hatDiv: 8 },
+  { id: "dance", label: "舞曲切分", kick: [0, 4, 8, 12], snare: [4, 12], hatDiv: 16 },
+  { id: "shuffle", label: "摇摆重音", kick: [0, 6, 8], snare: [4, 12, 14], hatDiv: 8 },
 ];
 
 function similarity(a: readonly number[], b: readonly number[]): number {
@@ -43,7 +46,9 @@ export function matchPattern(bar: BarSkeleton, stepsPerBar: number): GroovePatte
   let best: GroovePattern | null = null;
   let bestScore = -Infinity;
   for (const p of GROOVE_PATTERNS) {
-    const score = similarity(kick, p.kick) * 1.2 + similarity(snare, p.snare);
+    const hatScore = p.hatDiv === bar.hatDiv ? 0.18 : 0;
+    const phraseBias = bar.index % 4 === 2 && p.id.endsWith("b") ? 0.08 : 0;
+    const score = similarity(kick, p.kick) * 1.25 + similarity(snare, p.snare) * 1.1 + hatScore + phraseBias;
     if (score > bestScore) {
       bestScore = score;
       best = p;

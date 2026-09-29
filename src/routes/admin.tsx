@@ -9,6 +9,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { parseMidi } from "@/taiko/midiFile";
 import { buildAllCharts, midiFingerprint } from "@/taiko/adminChartBuild";
 import {
+  groupImportFiles,
+  type FolderImportSong,
+  type ImportFileKey,
+} from "@/taiko/adminFolderImport";
+import {
   adminLogin,
   adminLogout,
   adminStatus,
@@ -129,6 +134,9 @@ function AdminPage() {
   const stemInputs = useRef<Record<string, File | null>>({});
   const [midiFile, setMidiFile] = useState<File | null>(null);
   const [stemsPicked, setStemsPicked] = useState(0);
+  const [folderSongs, setFolderSongs] = useState<FolderImportSong[]>([]);
+  const [folderIgnored, setFolderIgnored] = useState<string[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
 
   const refresh = useCallback(async () => {
     const res = await list();
@@ -195,6 +203,63 @@ function AdminPage() {
     );
   }, [songs, query, tagMap, tagFilter]);
 
+  const uploadOne = async (
+    songTitle: string,
+    songArtist: string,
+    files: Partial<Record<ImportFileKey, File>>,
+    tagIds: string[],
+  ) => {
+    const midi = files.midi;
+    if (!midi) throw new Error("缺少 MIDI");
+    for (const field of STEM_FIELDS) if (!files[field.key]) throw new Error(`缺少 ${field.label}`);
+    setBusy(`解析《${songTitle}》并生成四档谱面…`);
+    const parsed = parseMidi(await midi.arrayBuffer());
+    const charts = buildAllCharts(parsed, songTitle);
+    const fingerprint = midiFingerprint(parsed);
+    let durationMs = parsed.durationMs;
+    for (const field of STEM_FIELDS) {
+      const file = files[field.key];
+      if (file) durationMs = Math.max(durationMs, await audioDurationMs(file));
+    }
+    const uploadFiles = [...STEM_FIELDS.map((field) => ({ key: field.key, file: files[field.key] })), { key: "midi" as const, file: midi }];
+    const completeFiles = uploadFiles.filter((item): item is { key: ImportFileKey; file: File } => item.file instanceof File);
+    const targets = await signUploads({
+      data: {
+        folder: songTitle.replace(/\s+/g, "-").toLowerCase(),
+        files: completeFiles.map(({ key, file }) => ({ key, ext: file.name.split(".").pop() ?? (key === "midi" ? "mid" : "mp3") })),
+      },
+    });
+    const paths: Record<string, string> = {};
+    const sizes: Record<string, number> = {};
+    for (let i = 0; i < targets.targets.length; i++) {
+      const target = targets.targets[i];
+      if (!target) continue;
+      const source = completeFiles.find((item) => item.key === target.key)?.file;
+      if (!source) throw new Error(`${target.key} 文件不存在`);
+      setBusy(`上传《${songTitle}》${target.key}（${i + 1}/${targets.targets.length}）…`);
+      const { error } = await supabase.storage.from("songs").uploadToSignedUrl(target.path, target.token, source);
+      if (error) throw new Error(`${target.key} 上传失败：${error.message}`);
+      paths[target.key] = target.path;
+      sizes[target.key] = source.size;
+    }
+    const midiPath = paths.midi;
+    if (!midiPath) throw new Error("MIDI 上传结果缺失");
+    setBusy(`写入《${songTitle}》…`);
+    await save({ data: {
+      title: songTitle,
+      artist: songArtist.trim() || null,
+      durationMs,
+      bpm: Math.round(parsed.bpm * 100) / 100,
+      tsNum: parsed.timeSignature[0],
+      tsDen: parsed.timeSignature[1],
+      fingerprint,
+      paths: { vocals: paths.vocals ?? null, bass: paths.bass ?? null, drums: paths.drums ?? null, other: paths.other ?? null, midi: midiPath },
+      sizes,
+      charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
+      tagIds,
+    } });
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const files = stemInputs.current;
@@ -203,79 +268,14 @@ function AdminPage() {
       setNote("请填写标题并选择鼓 MIDI");
       return;
     }
-    const missing = STEM_FIELDS.filter((f) => !files[f.key]);
+    const missing = STEM_FIELDS.filter((field) => !files[field.key]);
     if (missing.length) {
-      setNote(`缺少分轨：${missing.map((m) => m.label).join("、")}`);
+      setNote(`缺少分轨：${missing.map((item) => item.label).join("、")}`);
       return;
     }
-    setBusy("准备上传…");
     setNote(null);
     try {
-      // 1. 解析 MIDI，生成四档谱面
-      setBusy("解析 MIDI 并生成四档谱面…");
-      const midiBuf = await midi.arrayBuffer();
-      const parsed = parseMidi(midiBuf);
-      const charts = buildAllCharts(parsed, title.trim());
-      const fingerprint = midiFingerprint(parsed);
-
-      // 2. 时长（取最长的一条分轨）
-      setBusy("读取音频时长…");
-      let durationMs = parsed.durationMs;
-      for (const f of STEM_FIELDS) {
-        const file = files[f.key];
-        if (!file) continue;
-        durationMs = Math.max(durationMs, await audioDurationMs(file));
-      }
-
-      // 3. 申请上传直链并直传
-      const targets = await signUploads({
-        data: {
-          folder: title.trim().replace(/\s+/g, "-").toLowerCase(),
-          files: [
-            ...STEM_FIELDS.map((f) => ({ key: f.key, ext: (files[f.key]!.name.split(".").pop() ?? "mp3") })),
-            { key: "midi", ext: midi.name.split(".").pop() ?? "mid" },
-          ],
-        },
-      });
-
-      const paths: Record<string, string> = {};
-      const sizes: Record<string, number> = {};
-      let idx = 0;
-      for (const t of targets.targets) {
-        idx++;
-        const file = t.key === "midi" ? midi : files[t.key]!;
-        setBusy(`上传 ${t.key}（${idx}/${targets.targets.length}）…`);
-        const { error } = await supabase.storage
-          .from("songs")
-          .uploadToSignedUrl(t.path, t.token, file);
-        if (error) throw new Error(`${t.key} 上传失败：${error.message}`);
-        paths[t.key] = t.path;
-        sizes[t.key] = file.size;
-      }
-
-      // 4. 入库
-      setBusy("写入曲库…");
-      await save({
-        data: {
-          title: title.trim(),
-          artist: artist.trim() || null,
-          durationMs,
-          bpm: Math.round(parsed.bpm * 100) / 100,
-          tsNum: parsed.timeSignature[0],
-          tsDen: parsed.timeSignature[1],
-          fingerprint,
-          paths: {
-            vocals: paths["vocals"] ?? null,
-            bass: paths["bass"] ?? null,
-            drums: paths["drums"] ?? null,
-            other: paths["other"] ?? null,
-            midi: paths["midi"]!,
-          },
-          sizes,
-          charts: charts.map((c) => ({ difficulty: c.difficulty, chart: c.chart })),
-          tagIds: uploadTags,
-        },
-      });
+      await uploadOne(title.trim(), artist, { ...files, midi }, uploadTags);
       setNote(`《${title.trim()}》已入库，四档谱面已生成`);
       setTitle("");
       setArtist("");
@@ -289,6 +289,28 @@ function AdminPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const runBatch = async (onlyKey?: string) => {
+    const queue = folderSongs.filter((song) => song.status !== "invalid" && song.status !== "done" && (!onlyKey || song.key === onlyKey));
+    if (!queue.length) return;
+    setBatchRunning(true);
+    setNote(null);
+    let completed = 0;
+    for (const song of queue) {
+      setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "uploading", error: undefined } : item));
+      try {
+        await uploadOne(song.title.trim(), "", song.files, uploadTags);
+        completed++;
+        setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "done", error: undefined } : item));
+      } catch (error) {
+        setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "failed", error: (error as Error).message } : item));
+      }
+    }
+    setBatchRunning(false);
+    setBusy(null);
+    setNote(`批量导入完成：成功 ${completed} 首，失败 ${queue.length - completed} 首`);
+    await refresh();
   };
 
   const regen = async (row: AdminSongRow) => {
@@ -373,6 +395,82 @@ function AdminPage() {
           {busy ?? note}
         </div>
       )}
+
+      <section className="border border-[var(--taiko-line)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-medium">导入文件夹</h2>
+            <p className="mt-1 text-xs text-[var(--taiko-ink)]/50">
+              文件名：歌名_vocals / bass / drums / other / midi，歌名可包含下划线
+            </p>
+          </div>
+          <label className="cursor-pointer border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-4 py-2 text-sm text-[var(--taiko-accent)]">
+            选择文件夹
+            <input
+              ref={(input) => {
+                if (input) input.setAttribute("webkitdirectory", "");
+              }}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                const result = groupImportFiles(Array.from(event.target.files ?? []));
+                setFolderSongs(result.songs);
+                setFolderIgnored(result.ignored);
+                setNote(result.songs.length ? `识别到 ${result.songs.length} 首歌，请检查后开始导入` : "没有识别到符合命名规则的歌曲");
+                event.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+
+        {folderSongs.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 grid grid-cols-[minmax(160px,1fr)_100px_220px] gap-3 border-b border-[var(--taiko-line)] pb-2 text-xs text-[var(--taiko-ink)]/45">
+              <span>识别出的歌名</span><span>文件</span><span>状态</span>
+            </div>
+            <div className="max-h-72 overflow-y-auto taiko-scroll">
+              {folderSongs.map((song) => (
+                <div key={song.key} className="grid grid-cols-[minmax(160px,1fr)_100px_220px] items-center gap-3 border-b border-[var(--taiko-line)]/60 py-2 text-xs">
+                  <input
+                    value={song.title}
+                    disabled={song.status === "uploading" || song.status === "done"}
+                    onChange={(event) => setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, title: event.target.value } : item))}
+                    className="min-w-0 border border-[var(--taiko-line)] bg-transparent px-2 py-1.5 text-base outline-none focus:border-[var(--taiko-accent)] disabled:opacity-60"
+                  />
+                  <span className="tabular-nums text-[var(--taiko-ink)]/60">{Object.keys(song.files).length}/5</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {song.status === "invalid" && <span className="text-red-400">{song.missing.length ? `缺 ${song.missing.join("、")}` : `重复 ${song.duplicates.join("、")}`}</span>}
+                    {song.status === "ready" && <span className="text-[var(--taiko-accent)]">可以导入</span>}
+                    {song.status === "uploading" && <span>正在导入…</span>}
+                    {song.status === "done" && <span className="text-emerald-400">已完成</span>}
+                    {song.status === "failed" && (
+                      <>
+                        <span className="min-w-0 flex-1 truncate text-red-400" title={song.error}>失败：{song.error}</span>
+                        <button type="button" disabled={batchRunning} onClick={() => void runBatch(song.key)} className="shrink-0 border border-[var(--taiko-line)] px-2 py-1 hover:border-[var(--taiko-accent)] disabled:opacity-40">重试</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {folderIgnored.length > 0 && (
+              <p className="mt-2 text-xs text-amber-300/80" title={folderIgnored.join("\n")}>另有 {folderIgnored.length} 个文件因后缀或格式无法识别</p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={batchRunning || busy !== null || !folderSongs.some((song) => song.status === "ready" || song.status === "failed")}
+                onClick={() => void runBatch()}
+                className="border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-4 py-2 text-sm text-[var(--taiko-accent)] disabled:opacity-40"
+              >
+                {batchRunning ? "正在逐首导入…" : "导入全部可用歌曲"}
+              </button>
+              <span className="text-xs text-[var(--taiko-ink)]/50">使用下方已选标签；歌曲将逐首处理，避免页面卡死</span>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="border border-[var(--taiko-line)] p-4">
         <h2 className="mb-3 text-sm font-medium">上传新歌</h2>

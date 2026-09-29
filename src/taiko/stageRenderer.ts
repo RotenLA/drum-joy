@@ -113,6 +113,18 @@ const FLASH_MS = 200;
 /** 踏板斜放角：左右镜像「外八」，顶面正方形旋转后再按 0.42 压扁 */
 export const PEDAL_TILT = (12 * Math.PI) / 180;
 
+/**
+ * 不同鼓盘到收束点的斜向距离不同；按路径长度微调视觉缓动，令临近落点的
+ * 同刻音符更像在同一拍抵达。只改变画面位置，t=1 与实际判定时间保持不变。
+ */
+function flightProgress(pad: PadGeom, t: number, h: number): number {
+  const clamped = Math.max(0.02, Math.min(1, t));
+  const path = Math.max(1, Math.hypot(pad.cx - pad.gx, pad.cy - pad.gy));
+  const reference = Math.max(1, TRAVEL_H * h);
+  const compensation = Math.max(0.82, Math.min(1.18, reference / path));
+  return Math.pow(clamped, EASE * compensation);
+}
+
 export interface StageFrame {
   chart: TaikoChart;
   timeMs: number;
@@ -486,7 +498,7 @@ function noteItems(
     const pad = geomOf(part, w, h);
     const g0 = { x: pad.gx, y: pad.gy };
     const at = (tt: number) => {
-      const p = Math.pow(Math.max(0.02, Math.min(1, tt)), EASE);
+      const p = flightProgress(pad, tt, h);
       return {
         p,
         x: g0.x + (pad.cx - g0.x) * p,
@@ -1080,10 +1092,14 @@ function drawCueOutline(
   remainingMs: number,
   w: number,
   h: number,
+  synchronized = false,
 ) {
   const progress = Math.max(0, Math.min(1, 1 - remainingMs / CUE_LEAD_MS));
   const scale = 1.55 - progress * 0.5;
-  const alpha = Math.sin(progress * Math.PI) * 0.55;
+  const arrivalPulse = synchronized && remainingMs < 150
+    ? Math.sin(Math.max(0, Math.min(1, (150 - remainingMs) / 150)) * Math.PI)
+    : 0;
+  const alpha = Math.min(0.72, Math.sin(progress * Math.PI) * 0.48 + arrivalPulse * 0.2);
   if (alpha <= 0.01) return;
 
   const anchor = PAD_ANCHORS[partId];
@@ -1123,7 +1139,8 @@ function cueItems(
   parts: readonly PartId[],
 ): DepthItem[] {
   const allowed = new Set(parts);
-  const nearest = new Map<PartId, number>();
+  const nearest = new Map<PartId, { remaining: number; synchronized: boolean }>();
+  const upcoming: { part: PartId; timeMs: number }[] = [];
   const from = f.timeMs;
   const until = from + CUE_LEAD_MS;
   const notes = f.chart.notes;
@@ -1139,17 +1156,24 @@ function cueItems(
     if (note.timeMs > until) break;
     if (note.note === undefined) continue;
     const part = partOfNote(note.note);
-    if (!part || !allowed.has(part) || nearest.has(part)) continue;
-    nearest.set(part, note.timeMs - from);
+    if (!part || !allowed.has(part)) continue;
+    upcoming.push({ part, timeMs: note.timeMs });
   }
-  return [...nearest].map(([part, remaining]) => ({
+  for (const note of upcoming) {
+    if (nearest.has(note.part)) continue;
+    const synchronized = upcoming.some(
+      (other) => other.part !== note.part && Math.abs(other.timeMs - note.timeMs) <= CHORD_TOL_MS,
+    );
+    nearest.set(note.part, { remaining: note.timeMs - from, synchronized });
+  }
+  return [...nearest].map(([part, cue]) => ({
     depth: CUE_DEPTH,
-    draw: () => drawCueOutline(ctx, part, remaining, w, h),
+    draw: () => drawCueOutline(ctx, part, cue.remaining, w, h, cue.synchronized),
   }));
 }
 
 /** 同刻音符的分组容差（毫秒） */
-const CHORD_TOL_MS = 15;
+const CHORD_TOL_MS = 30;
 
 /** 同刻音符的混色光柱：单线连接，带轻柔外辉光与清晰亮芯。 */
 function chordItems(
@@ -1194,7 +1218,7 @@ function chordItems(
       const pad = geomOf(part, w, h);
       const t = 1 - ((n.timeMs - f.timeMs) * f.speed) / LEAD_MS;
       if (t <= 0.02 || t >= 1) continue;
-      const p = Math.pow(Math.max(0.02, Math.min(1, t)), EASE);
+      const p = flightProgress(pad, t, h);
       const rx = Math.max(3, Math.min(w, h) * 0.05 * (0.18 + 0.82 * p));
       const anchor = PAD_ANCHORS[part];
       progress = p;
@@ -1213,7 +1237,9 @@ function chordItems(
     i = j;
     if (group.length < 2) continue;
     group.sort((a, b) => a.x - b.x);
-    const alpha = (0.46 + 0.3 * progress) * Math.min(1, progress * 8);
+    const remainingMs = Math.max(0, t0 - f.timeMs);
+    const arriveFade = Math.min(1, remainingMs / 100);
+    const alpha = (0.16 + 0.08 * progress) * Math.min(1, progress * 8) * arriveFade;
     const pts = group;
 
     const edgeDistance = (
@@ -1250,7 +1276,8 @@ function chordItems(
           gradient.addColorStop(0, hexToRgba(a.color, alpha));
           gradient.addColorStop(1, hexToRgba(b.color, alpha));
           ctx.strokeStyle = gradient;
-          ctx.lineWidth = Math.max(6, h * 0.009);
+          const averageRadius = (a.rx + b.rx) * 0.5;
+          ctx.lineWidth = Math.max(3, averageRadius * 0.42);
           const dx = b.x - a.x;
           const dy = b.y - a.y;
           const distance = Math.max(0.001, Math.hypot(dx, dy));
@@ -1264,7 +1291,7 @@ function chordItems(
           const bx = b.x - nx * endOffset;
           const by = b.y - ny * endOffset;
           ctx.shadowColor = a.color;
-          ctx.shadowBlur = GLOW && QUALITY_TIER !== "low" ? 15 : 0;
+          ctx.shadowBlur = GLOW && QUALITY_TIER === "high" ? 8 : 0;
           ctx.beginPath();
           ctx.moveTo(ax, ay);
           ctx.lineTo(bx, by);
@@ -1272,8 +1299,8 @@ function chordItems(
 
           ctx.shadowBlur = 0;
           ctx.strokeStyle = gradient;
-          ctx.globalAlpha = 0.9;
-          ctx.lineWidth = Math.max(2, h * 0.0032);
+          ctx.globalAlpha = 0.58;
+          ctx.lineWidth = Math.max(1.4, averageRadius * 0.13);
           ctx.beginPath();
           ctx.moveTo(ax, ay);
           ctx.lineTo(bx, by);
