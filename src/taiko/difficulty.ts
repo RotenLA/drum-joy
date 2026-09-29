@@ -175,13 +175,93 @@ function pedalHolds(emits: Emit[], diff: Difficulty, endStep: number): HoldSeg[]
   return segs;
 }
 
+/**
+ * 真实打击时间对齐。
+ *
+ * 谱面音符的位置来自量化网格，但时间优先回填原 MIDI 同部件的真实 note-on 毫秒：
+ * 1) 同部件 ±1 格内有真实击打 → 直接用它的时间（和鼓分轨波峰完全同步）；
+ * 2) 同格任意部件有真实击打 → 用它的时间（同一瞬间）；
+ * 3) 低难度为了好打补出来的音符 → 用当前小节内前后真实击打做局部线性插值；
+ * 4) 都没有 → 退回 tempo map 网格时间。
+ * 任何一步与网格时间偏差超过阈值时，一律回退网格，避免跟着脏音符跑偏。
+ */
+class HitAligner {
+  private byPartStep = new Map<string, number>();
+  private byStep = new Map<number, number>();
+  private steps: number[] = [];
+
+  constructor(
+    private midi: ParsedMidi,
+    private clean: CleanedMidi,
+  ) {
+    for (const h of clean.hits) {
+      const key = `${h.step}:${h.part}`;
+      const prev = this.byPartStep.get(key);
+      if (prev === undefined || h.timeMs < prev) this.byPartStep.set(key, h.timeMs);
+      const at = this.byStep.get(h.step);
+      if (at === undefined || h.timeMs < at) this.byStep.set(h.step, h.timeMs);
+    }
+    this.steps = [...this.byStep.keys()].sort((a, b) => a - b);
+  }
+
+  private grid(step: number): number {
+    return tickToMs(this.midi, step * this.clean.stepTicks);
+  }
+
+  /** 一格的毫秒长度（按该处 tempo 估算） */
+  private stepMs(step: number): number {
+    const a = this.grid(step);
+    const b = this.grid(step + 1);
+    return Math.max(1, b - a);
+  }
+
+  private interpolate(step: number): number | null {
+    const bar = this.clean.stepsPerBar;
+    let lo: number | null = null;
+    let hi: number | null = null;
+    for (const s of this.steps) {
+      if (s <= step) lo = s;
+      else {
+        hi = s;
+        break;
+      }
+    }
+    if (lo === null || hi === null || hi === lo) return null;
+    if (step - lo > bar || hi - step > bar) return null;
+    const a = this.byStep.get(lo)!;
+    const b = this.byStep.get(hi)!;
+    return a + ((b - a) * (step - lo)) / (hi - lo);
+  }
+
+  timeOf(step: number, part: PartId): number {
+    const grid = this.grid(step);
+    const tol = this.stepMs(step) * 1.5;
+    const accept = (t: number | undefined | null) =>
+      t !== undefined && t !== null && Math.abs(t - grid) <= tol ? t : null;
+
+    const same =
+      accept(this.byPartStep.get(`${step}:${part}`)) ??
+      accept(this.byPartStep.get(`${step - 1}:${part}`)) ??
+      accept(this.byPartStep.get(`${step + 1}:${part}`));
+    if (same !== null) return same;
+
+    const atStep = accept(this.byStep.get(step));
+    if (atStep !== null) return atStep;
+
+    const lerp = accept(this.interpolate(step));
+    if (lerp !== null) return lerp;
+
+    return grid;
+  }
+}
+
 function emitsToNotes(
   emits: Emit[],
   midi: ParsedMidi,
   clean: CleanedMidi,
   allowParts: readonly PartId[],
   offsetMs: number,
-  diff: Difficulty,
+  aligner: HitAligner,
 ): TaikoNote[] {
   const allow = new Set(allowParts);
   const seen = new Set<string>();
@@ -191,8 +271,7 @@ function emitsToNotes(
     const key = `${e.step}:${e.part}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    // 节奏型音符全部落在测速后 tempo map 的网格上
-    const timeMs = tickToMs(midi, e.step * clean.stepTicks) + offsetMs;
+    const timeMs = aligner.timeOf(e.step, e.part) + offsetMs;
     if (timeMs < 0) continue;
     notes.push({
       timeMs,
@@ -204,6 +283,7 @@ function emitsToNotes(
   notes.sort((a, b) => a.timeMs - b.timeMs);
   return notes;
 }
+
 
 function holdsToNotes(
   segs: HoldSeg[],
