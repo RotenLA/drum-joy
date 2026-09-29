@@ -50,6 +50,13 @@
       "when": 1790647462344,
       "tag": "0006_add_playlist_background",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790648248200,
+      "tag": "0007_deprecate_playlist_background",
+      "breakpoints": true
     }
   ]
 }
