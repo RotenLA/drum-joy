@@ -114,8 +114,18 @@ function candidateScore(
   }
   const precision = grid / Math.max(1, gridWeight);
   const coverage = grid / Math.max(0.001, onsetTotal);
+  const peakIntervals: number[] = [];
+  let previousPeak = -1;
+  for (let i = from + 1; i < to - 1; i++) {
+    const value = envelope[i] ?? 0;
+    if (value < 0.3 || value < (envelope[i - 1] ?? 0) || value < (envelope[i + 1] ?? 0)) continue;
+    if (previousPeak >= 0 && i - previousPeak >= 8 && i - previousPeak <= 80) peakIntervals.push(i - previousPeak);
+    previousPeak = i;
+  }
+  const pulseBpm = peakIntervals.length >= 4 ? normalizeBpm((60 * ENVELOPE_HZ) / median(peakIntervals)) : 0;
+  const pulseFit = pulseBpm > 0 ? Math.max(0, 1 - Math.abs(bpm - pulseBpm) / 12) : 0;
   // precision 防止高 BPM 网格乱撞，coverage 则用于解开半速/双速歧义。
-  return periodicity * 0.32 + precision * 0.2 + Math.min(1, coverage) * 0.48;
+  return periodicity * 0.27 + precision * 0.18 + Math.min(1, coverage) * 0.35 + pulseFit * 0.2;
 }
 
 function bestTempo(envelope: Float32Array, midi: ParsedMidi, from: number, to: number) {
