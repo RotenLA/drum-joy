@@ -5,7 +5,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
-import { fetchLibrary, decodeStoredSong, type LibrarySong, type LibraryTag } from "./songLibrary";
+import { decodeStoredSong, type LibrarySong, type LibraryTag } from "./songLibrary";
+import { currentLibrarySnapshot, loadLibraryOnce } from "./librarySession";
 import { cancelDownload, downloadSong, readStoredAny, scanDownloads, useDownloads } from "./songDownloads";
 import { LeaderboardDialog } from "./LeaderboardDialog";
 import { songPlayer } from "./player";
@@ -160,13 +161,14 @@ export function SongPicker({
 }) {
   const song = useSong();
   const { tr } = useLanguage();
-  const [library, setLibrary] = useState<LibrarySong[]>([]);
-  const [tags, setTags] = useState<LibraryTag[]>([]);
+  const initialLibrary = currentLibrarySnapshot();
+  const [library, setLibrary] = useState<LibrarySong[]>(() => initialLibrary?.songs ?? []);
+  const [tags, setTags] = useState<LibraryTag[]>(() => initialLibrary?.tags ?? []);
   const [favs, setFavs] = useState<string[]>([]);
   /** 当前打开的歌单：null=歌单列表；"fav"=我的收藏；"untagged"=未分类；其余为标签 id */
   const [openList, setOpenList] = useState<string | null>(null);
   const [listErr, setListErr] = useState<string | null>(null);
-  const [listing, setListing] = useState(true);
+  const [listing, setListing] = useState(initialLibrary === null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [bests, setBests] = useState<BestMap>({});
   const [loadingId, setLoadingId] = useState<string | null>(null);
@@ -184,7 +186,7 @@ export function SongPicker({
   useEffect(() => {
     void (async () => {
       try {
-        const lib = await fetchLibrary();
+        const lib = await loadLibraryOnce();
         setLibrary(lib.songs);
         setTags(lib.tags);
       } catch {

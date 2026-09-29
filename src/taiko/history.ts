@@ -15,6 +15,8 @@ import {
 const KEY = "taiko.history.v1";
 const IMPORTED_KEY = "taiko.history.imported.v1";
 const MAX = 100;
+let playDataPromise: Promise<{ history: HistoryEntry[]; bests: BestMap; synced: boolean }> | null = null;
+let favoritesPromise: Promise<string[]> | null = null;
 
 export type { PlayBest };
 
@@ -103,6 +105,12 @@ export async function addHistory(
         .reduce((m, h) => Math.max(m, h.score ?? 0), 0);
       newBest = entry.completed !== false && (entry.score ?? 0) > prevBest && prev.some((h) => h.songId === entry.songId && h.difficulty === entry.difficulty);
       localStorage.setItem(KEY, JSON.stringify([entry, ...prev].slice(0, MAX)));
+      if (playDataPromise) {
+        playDataPromise = playDataPromise.then((cached) => {
+          const history = [entry, ...cached.history].slice(0, MAX);
+          return { ...cached, history, bests: localBests(history) };
+        });
+      }
     } catch {
       // 存储不可用时忽略
     }
@@ -162,7 +170,7 @@ function localBests(list: HistoryEntry[]): BestMap {
 }
 
 /** 读取历史与最佳成绩：有账号走云端（首次合并本机记录），否则本机 */
-export async function loadPlayData(): Promise<{
+async function fetchPlayData(): Promise<{
   history: HistoryEntry[];
   bests: BestMap;
   synced: boolean;
@@ -189,6 +197,11 @@ export async function loadPlayData(): Promise<{
     console.warn("[history] 云端读取失败，使用本机", e);
     return { history: local, bests: localBests(local), synced: false };
   }
+}
+
+export function loadPlayData(): Promise<{ history: HistoryEntry[]; bests: BestMap; synced: boolean }> {
+  playDataPromise ??= fetchPlayData();
+  return playDataPromise;
 }
 
 /** 难度解锁：轻松/入门常开；标准需入门全连击；困难需标准全连击 */
@@ -223,7 +236,7 @@ function writeLocalFavs(ids: string[]) {
 }
 
 /** 读取收藏（最新收藏在前）；有账号时首次把本机收藏合并到云端 */
-export async function loadFavorites(): Promise<string[]> {
+async function fetchFavorites(): Promise<string[]> {
   const local = readLocalFavs();
   const uid = getHostUserId();
   if (!uid) return local;
@@ -241,9 +254,15 @@ export async function loadFavorites(): Promise<string[]> {
   }
 }
 
+export function loadFavorites(): Promise<string[]> {
+  favoritesPromise ??= fetchFavorites();
+  return favoritesPromise;
+}
+
 export async function setFavorite(songId: string, on: boolean): Promise<void> {
   const cur = readLocalFavs().filter((x) => x !== songId);
   writeLocalFavs(on ? [songId, ...cur] : cur);
+  favoritesPromise = Promise.resolve(on ? [songId, ...cur] : cur);
   const uid = getHostUserId();
   if (!uid) return;
   try {

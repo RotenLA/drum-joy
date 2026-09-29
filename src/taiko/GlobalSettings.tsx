@@ -150,31 +150,6 @@ export function GlobalSettings({
         </span>
       </div>
 
-      {onSecretUnlock && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">
-            {tr("实验室", "Laboratory")}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            type="button"
-            onClick={() => {
-              const tap = labTapRef.current;
-              const now = Date.now();
-              tap.count = now - tap.at > 4000 ? 1 : tap.count + 1;
-              tap.at = now;
-              if (tap.count < 12) return;
-              tap.count = 0;
-              onSecretUnlock();
-            }}
-            className="h-8 min-w-24 rounded-md border-[var(--taiko-line)] px-3 text-xs text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
-          >
-            {tr("实验室", "Laboratory")}
-          </Button>
-        </div>
-      )}
-
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">
           {tr("下落速度", "Fall speed")}
@@ -185,7 +160,21 @@ export function GlobalSettings({
             variant="outline"
             size="sm"
             type="button"
-            onClick={() => onSpeedChange(value)}
+            onClick={() => {
+              onSpeedChange(value);
+              const tap = labTapRef.current;
+              if (value !== 1.5 || !onSecretUnlock) {
+                tap.count = 0;
+                tap.at = 0;
+                return;
+              }
+              const now = Date.now();
+              tap.count = now - tap.at > 4000 ? 1 : tap.count + 1;
+              tap.at = now;
+              if (tap.count < 12) return;
+              tap.count = 0;
+              onSecretUnlock();
+            }}
             className={`h-8 min-w-14 rounded-md px-3 text-xs tabular-nums ${
               speed === value
                 ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"

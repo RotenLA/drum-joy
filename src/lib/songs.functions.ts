@@ -26,6 +26,18 @@ export interface LibraryTag {
   name: string;
 }
 
+/** 轻量曲库版本；应用每次全新打开只查询一次。 */
+export const getLibraryRevision = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
+    .from("library_revision")
+    .select("version")
+    .eq("id", true)
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "曲库版本读取失败");
+  return { version: Number(data.version) };
+});
+
 export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
