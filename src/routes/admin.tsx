@@ -242,7 +242,7 @@ function AdminPage() {
       paths[target.key] = target.path;
       sizes[target.key] = source.size;
     }
-    const midiPath = paths.midi;
+    const midiPath = paths["midi"];
     if (!midiPath) throw new Error("MIDI 上传结果缺失");
     setBusy(`写入《${songTitle}》…`);
     await save({ data: {
