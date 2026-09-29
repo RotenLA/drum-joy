@@ -64,6 +64,13 @@
       "when": 1790651449623,
       "tag": "0008_add_library_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790665462999,
+      "tag": "0009_tighten_public_tag_revision_policies",
+      "breakpoints": true
     }
   ]
 }
