@@ -78,8 +78,10 @@ export function cleanMidi(midi: ParsedMidi, opts: CleanOptions = {}): CleanedMid
   for (const ev of midi.notes) {
     const part = GM_TO_PART[ev.note];
     if (!part) continue;
-    // 降噪之一：底鼓 / 军鼓的极弱事件基本是低频轰鸣或串音
+    // 降噪之一：底鼓 / 军鼓 / 通鼓的极弱事件基本是低频轰鸣或串音
     if ((part === "kick" || part === "snare") && ev.velocity < WEAK_DRUM_VELOCITY) continue;
+    if (TOM_PARTS.has(part) && ev.velocity < WEAK_TOM_VELOCITY) continue;
+
     const step = Math.round(ev.tick / stepTicks);
     if (step < 0) continue;
     const key = `${step}:${part}`;
