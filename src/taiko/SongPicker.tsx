@@ -41,6 +41,7 @@ function playlistBackground(key: string, index: number): string {
 const DETAIL_SKEW = -8;
 
 function detailSlotTop(): number {
+  if (window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches) return 72;
   return Math.max(112, Math.min(160, window.innerHeight * 0.2));
 }
 
