@@ -195,18 +195,21 @@ export type Database = {
       }
       song_tags: {
         Row: {
+          background_path: string | null
           created_at: string
           id: string
           name: string
           sort_order: number
         }
         Insert: {
+          background_path?: string | null
           created_at?: string
           id?: string
           name: string
           sort_order?: number
         }
         Update: {
+          background_path?: string | null
           created_at?: string
           id?: string
           name?: string

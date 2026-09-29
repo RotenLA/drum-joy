@@ -1,6 +1,6 @@
 /**
  * 游玩屏内的歌单层：舞台在背后虚化，首页横向展示歌单，
- * 进入后使用居中的左右双栏浏览歌曲与详情。
+ * 进入后使用 Phigros 式纵向吸附歌曲轨道浏览歌曲与详情。
  * 卡片可鼠标拖拽 / 触摸 / 滚轮左右滑动，两端留白让最外侧歌曲也能滑到画面中间。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -165,6 +165,8 @@ export function SongPicker({
   const loadedSongId = song.songId && song.midi && hasAnyStem(song.stems) ? song.songId : null;
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const detailScrollRef = useRef<HTMLDivElement | null>(null);
+  const detailScrollTimerRef = useRef<number | null>(null);
   const dragRef = useRef({ down: false, startX: 0, startScroll: 0, moved: 0 });
 
   useEffect(() => {
@@ -234,14 +236,14 @@ export function SongPicker({
     return library.filter((x) => x.tagIds.includes(key));
   };
   const playlists = useMemo(() => {
-    const out: { key: string; name: string; count: number }[] = [];
+    const out: { key: string; name: string; count: number; backgroundUrl: string | null }[] = [];
     const favoriteCount = listSongs("fav").length;
     const historyCount = listSongs("history").length;
-    if (favoriteCount) out.push({ key: "fav", name: tr("我的收藏", "Favorites"), count: favoriteCount });
-    if (historyCount) out.push({ key: "history", name: tr("历史", "History"), count: historyCount });
-    for (const t of tags) out.push({ key: t.id, name: t.name, count: library.filter((x) => x.tagIds.includes(t.id)).length });
+    if (favoriteCount) out.push({ key: "fav", name: tr("我的收藏", "Favorites"), count: favoriteCount, backgroundUrl: null });
+    if (historyCount) out.push({ key: "history", name: tr("历史", "History"), count: historyCount, backgroundUrl: null });
+    for (const t of tags) out.push({ key: t.id, name: t.name, count: library.filter((x) => x.tagIds.includes(t.id)).length, backgroundUrl: t.backgroundUrl });
     const un = library.filter((x) => x.tagIds.length === 0).length;
-    if (un) out.push({ key: "untagged", name: tr("未分类", "Uncategorized"), count: un });
+    if (un) out.push({ key: "untagged", name: tr("未分类", "Uncategorized"), count: un, backgroundUrl: null });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [library, tags, favs, history, tr]);
@@ -322,6 +324,8 @@ export function SongPicker({
     [library, openList, favs, history],
   );
   const selected = activeSongs.find((x) => x.id === selectedId) ?? null;
+  const activePlaylist = playlists.find((item) => item.key === openList) ?? null;
+  const activePlaylistIndex = Math.max(0, playlists.findIndex((item) => item.key === openList));
   // 难度被锁时回落到入门
   useEffect(() => {
     if (selected && !isUnlocked(bests, selected.id, song.difficulty)) song.setSong({ difficulty: "beginner" });
@@ -334,6 +338,42 @@ export function SongPicker({
     const el = box.querySelector<HTMLElement>('[data-active="1"]');
     if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [selectedId, activeSongs.length]);
+
+  const settleDetailSelection = useCallback(() => {
+    const box = detailScrollRef.current;
+    if (!box) return;
+    const center = box.scrollTop + box.clientHeight / 2;
+    let nearest: { id: string; distance: number; element: HTMLElement } | null = null;
+    for (const element of Array.from(box.querySelectorAll<HTMLElement>("[data-song-id]"))) {
+      const distance = Math.abs(element.offsetTop + element.offsetHeight / 2 - center);
+      if (!nearest || distance < nearest.distance) {
+        nearest = { id: element.dataset["songId"] ?? "", distance, element };
+      }
+    }
+    if (!nearest?.id) return;
+    const item = activeSongs.find((candidate) => candidate.id === nearest?.id);
+    if (item && item.id !== selectedId) pickSong(item);
+    nearest.element.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeSongs, pickSong, selectedId]);
+
+  const onDetailScroll = () => {
+    if (detailScrollTimerRef.current !== null) window.clearTimeout(detailScrollTimerRef.current);
+    detailScrollTimerRef.current = window.setTimeout(settleDetailSelection, 110);
+  };
+
+  useEffect(() => () => {
+    if (detailScrollTimerRef.current !== null) window.clearTimeout(detailScrollTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (!openList || !selectedId) return;
+    const frame = window.requestAnimationFrame(() => {
+      detailScrollRef.current
+        ?.querySelector<HTMLElement>(`[data-song-id="${selectedId}"]`)
+        ?.scrollIntoView({ block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [openList, selectedId]);
 
   // 鼠标拖拽横向滑动（拖动超过阈值则吞掉后续 click）
   const onPointerDown = (e: React.PointerEvent) => {
@@ -448,6 +488,9 @@ export function SongPicker({
                     : CARD_GRADIENTS[i % CARD_GRADIENTS.length],
               }}
             >
+              {pl.backgroundUrl && (
+                <img src={pl.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              )}
               <span className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,12,18,0.05), rgba(10,12,18,0.72))" }} />
               <span className="relative z-10 flex h-full w-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
                 <span className="flex min-w-0 flex-col gap-1">
@@ -461,35 +504,55 @@ export function SongPicker({
           ))}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 items-center justify-center px-5 pb-5 pt-1">
-          <div className="flex h-[min(82%,620px)] w-[min(84vw,1160px)] min-w-0 gap-5 overflow-hidden rounded-lg border border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] p-5 shadow-2xl backdrop-blur-[18px]">
-            <div className="flex w-[36%] min-w-[220px] shrink-0 flex-col overflow-hidden">
-              <div className="flex h-11 shrink-0 items-center border-b border-[var(--taiko-glass-line)] px-3 text-sm">
-                <span className="truncate font-semibold text-[var(--taiko-accent)]">
-                  {playlists.find((p) => p.key === openList)?.name ?? ""}
-                </span>
+        <div
+          className="relative flex min-h-0 flex-1 overflow-hidden"
+          style={{ background: activePlaylist?.backgroundUrl ? undefined : CARD_GRADIENTS[activePlaylistIndex % CARD_GRADIENTS.length] }}
+        >
+          {activePlaylist?.backgroundUrl && (
+            <img src={activePlaylist.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          )}
+          <div className="absolute inset-0 bg-[rgba(7,7,9,0.5)] backdrop-blur-[3px]" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,6,9,0.94)_0%,rgba(8,8,11,0.7)_42%,rgba(8,8,11,0.18)_100%)]" />
+
+          <div className="relative z-10 grid h-full min-h-0 w-full grid-cols-[minmax(250px,43%)_minmax(0,1fr)] gap-[clamp(16px,4vw,64px)] px-[clamp(14px,4vw,64px)] pb-3">
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <div className="shrink-0 pb-1 pl-5 text-xs font-semibold tracking-[0.18em] text-[rgba(255,255,255,0.62)]">
+                {activePlaylist?.name ?? ""}
               </div>
-              <div className="taiko-scroll min-h-0 flex-1 overflow-y-auto p-1.5">
-                {activeSongs.map((item) => {
+              <div
+                ref={detailScrollRef}
+                onScroll={onDetailScroll}
+                className="taiko-scroll min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto py-[32vh] pr-3"
+              >
+                {activeSongs.map((item, index) => {
                   const on = item.id === selectedId;
                   return (
                     <Button
                       key={item.id}
+                      data-song-id={item.id}
                       variant="ghost"
                       type="button"
-                      onClick={() => pickSong(item)}
-                      className={`mb-1 flex h-auto w-full flex-col items-stretch rounded-md px-3 py-2 text-left transition-colors ${
+                      onClick={() => {
+                        pickSong(item);
+                        detailScrollRef.current?.querySelector<HTMLElement>(`[data-song-id="${item.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }}
+                      className={`mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] snap-center flex-col items-stretch justify-center overflow-hidden rounded-sm border-l-4 px-5 text-left shadow-lg transition-[width,transform,background-color,border-color] duration-200 ${
                         on
-                          ? "bg-[rgba(255,140,0,0.18)] ring-1 ring-[var(--taiko-accent)]"
-                          : "hover:bg-[rgba(255,255,255,0.08)]"
+                          ? "w-[calc(100%-1rem)] -translate-x-3 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.9)] text-[var(--taiko-paper)]"
+                          : "w-[82%] border-[rgba(255,255,255,0.4)] bg-[rgba(15,16,20,0.66)] text-[rgba(255,255,255,0.84)] hover:bg-[rgba(25,26,31,0.82)]"
                       }`}
+                      style={{ transform: `${on ? "translateX(-0.75rem) " : ""}skewX(-8deg)` }}
                     >
-                      <span className={`truncate text-sm font-semibold ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.9)]"}`}>
-                        {item.title}
-                      </span>
-                      <span className="truncate text-[11px] tabular-nums text-[rgba(255,255,255,0.55)]">
-                        {item.artist ? `${item.artist} · ` : ""}
-                        {fmtTime(item.durationMs)} · BPM {item.bpm}
+                      <span className="block min-w-0" style={{ transform: "skewX(8deg)" }}>
+                        <span className="flex items-baseline gap-3">
+                          <span className={`w-6 shrink-0 text-[11px] tabular-nums ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.42)]"}`}>
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <span className="truncate text-sm font-semibold sm:text-base">{item.title}</span>
+                        </span>
+                        <span className={`ml-9 block truncate text-[10px] ${on ? "text-[rgba(15,12,10,0.62)]" : "text-[rgba(255,255,255,0.48)]"}`}>
+                          {item.artist ?? tr("未知艺人", "Unknown artist")}
+                        </span>
                       </span>
                     </Button>
                   );
@@ -497,10 +560,10 @@ export function SongPicker({
               </div>
             </div>
 
-            <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden border-l border-[var(--taiko-glass-line)] pl-5">
+            <div className="relative flex min-h-0 min-w-0 items-center overflow-hidden">
               {!selected ? (
                 <p className="m-auto text-sm text-[rgba(255,255,255,0.6)]">
-                  {tr("从左侧选择一首歌", "Pick a song on the left")}
+                  {tr("选择一首歌", "Pick a song")}
                 </p>
               ) : (() => {
                 const item = selected;
@@ -510,8 +573,14 @@ export function SongPicker({
                 const fav = favs.includes(item.id);
                 const locked = !isUnlocked(bests, item.id, song.difficulty);
                 return (
-                  <div className="taiko-scroll relative flex h-full flex-col gap-3 overflow-y-auto pr-1">
-                    <div className="flex items-start gap-2">
+                  <div key={item.id} className="taiko-scroll relative flex max-h-full w-full max-w-[620px] flex-col gap-3 overflow-y-auto px-1 py-4">
+                    {activePlaylist?.backgroundUrl && (
+                      <div className="relative mb-1 aspect-[16/7] w-full max-w-[560px] overflow-hidden border border-[var(--taiko-glass-line)] shadow-2xl">
+                        <img src={activePlaylist.backgroundUrl} alt="" className="h-full w-full object-cover" />
+                        <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent,rgba(5,5,7,0.36))]" />
+                      </div>
+                    )}
+                    <div className="flex items-start gap-2 border-l-4 border-[var(--taiko-accent)] pl-4">
                       <div className="min-w-0 flex-1">
                         <HorizontalTitle title={item.title} />
                         <span className="block truncate text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
@@ -542,7 +611,7 @@ export function SongPicker({
                         <Heart size={17} className={fav ? "fill-[#ff5a6e] text-[#ff5a6e]" : "text-[rgba(255,255,255,0.75)]"} />
                       </Button>
                     </div>
-                    <div className="my-auto">
+                    <div className="my-1 bg-[rgba(8,8,11,0.42)] px-4 py-3 backdrop-blur-[12px]">
                       <CardControls songId={item.id} bests={bests} />
                     </div>
                     <div className="flex justify-end">
