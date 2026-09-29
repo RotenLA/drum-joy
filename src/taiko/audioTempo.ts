@@ -170,7 +170,12 @@ function stableSegments(envelope: Float32Array, midi: ParsedMidi): TempoSegment[
     if (!previous) {
       out.push({ ...current, timeMs: 0 });
     } else if (agrees && Math.abs(previous.bpm - current.bpm) > 5 && current.confidence >= 0.12) {
-      out.push({ ...current, bpm: Math.round(((current.bpm + next.bpm) * 0.5) * 10) / 10 });
+      out.push({
+        ...current,
+        // 滑窗判断代表窗口中心，变速边界放在中心而非窗口起点，避免提前半窗切速。
+        timeMs: current.timeMs + WINDOW_SECONDS * 500,
+        bpm: Math.round(((current.bpm + next.bpm) * 0.5) * 10) / 10,
+      });
     }
   }
   return out;
@@ -194,6 +199,10 @@ function retimeMidi(source: ParsedMidi, segments: TempoSegment[]): ParsedMidi {
   const notes = source.notes.map((note) => ({ ...note, timeMs: tickToMs(shell, note.tick) }));
   const lastSourceTick = source.notes.reduce((max, note) => Math.max(max, note.tick), 0);
   return { ...shell, notes, durationMs: tickToMs(shell, lastSourceTick) };
+}
+
+export function applyConstantTempo(source: ParsedMidi, bpm: number): ParsedMidi {
+  return retimeMidi(source, [{ timeMs: 0, bpm: normalizeBpm(bpm), confidence: 1 }]);
 }
 
 export function analyzeAudioTempo(buffer: AudioBuffer, midi: ParsedMidi): TempoAnalysis {

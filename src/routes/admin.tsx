@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { parseMidi } from "@/taiko/midiFile";
 import { buildAllCharts, midiFingerprint } from "@/taiko/adminChartBuild";
-import { decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
+import { applyConstantTempo, decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
 import {
   groupImportFiles,
   type FolderImportSong,
@@ -403,6 +403,39 @@ function AdminPage() {
     await refresh();
   };
 
+  const setManualTempo = async (row: AdminSongRow) => {
+    const raw = prompt(`输入《${row.title}》确认后的 BPM（80–180）`, String(Number(row.bpm)));
+    if (raw === null) return;
+    const bpm = Number(raw);
+    if (!Number.isFinite(bpm) || bpm < 80 || bpm > 180) {
+      setNote("BPM 必须在 80–180 之间");
+      return;
+    }
+    setBusy(`按 ${bpm} BPM 更新《${row.title}》…`);
+    try {
+      const { url } = await midiUrlOf({ data: { id: row.id } });
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("MIDI 下载失败");
+      const adjusted = applyConstantTempo(parseMidi(await response.arrayBuffer()), bpm);
+      const fingerprint = midiFingerprint(adjusted);
+      const charts = buildAllCharts(adjusted, row.title);
+      await replaceTempo({
+        data: {
+          songId: row.id,
+          bpm: Math.round(bpm * 10) / 10,
+          fingerprint,
+          charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
+        },
+      });
+      setTempoResults((current) => ({ ...current, [row.id]: `已人工确认 ${Math.round(bpm * 10) / 10} BPM` }));
+      await refresh();
+    } catch (error) {
+      setNote(`人工更新失败：${(error as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (signedIn === null) {
     return <div className="p-8 text-sm text-[var(--taiko-ink)]/60">载入中…</div>;
   }
@@ -745,6 +778,13 @@ function AdminPage() {
                 className="border border-[var(--taiko-line)] px-2 py-1 text-xs hover:border-[var(--taiko-accent)] disabled:opacity-50"
               >
                 重算速度
+              </button>
+              <button
+                onClick={() => void setManualTempo(s)}
+                disabled={batchRunning || busy !== null}
+                className="border border-[var(--taiko-line)] px-2 py-1 text-xs hover:border-[var(--taiko-accent)] disabled:opacity-50"
+              >
+                人工确认 BPM
               </button>
               <button
                 onClick={() => {
