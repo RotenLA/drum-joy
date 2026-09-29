@@ -567,7 +567,7 @@ export function SongPicker({
                 <div
                   ref={detailScrollRef}
                   onScroll={onDetailScroll}
-                  className="taiko-detail-scroll absolute inset-0 z-20 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
+                  className="taiko-detail-scroll absolute inset-0 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
                 >
                 {activeSongs.map((item, index) => {
                   const on = item.id === selectedId;

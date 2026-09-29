@@ -10,8 +10,7 @@ import { VISIBLE_PARTS, type LayoutMode, type PartId } from "./laneLayouts";
 import { noteForPart, type MidiChartOptions } from "./midiChart";
 import { tickToMs, type ParsedMidi } from "./midiFile";
 import { cleanMidi, type CleanedMidi, type CleanHit } from "./midiClean";
-import { buildSkeleton, hasNear, type BarSkeleton, type Skeleton } from "./skeleton";
-import { matchPattern } from "./patternLib";
+import { buildSkeleton, type Skeleton } from "./skeleton";
 
 export type Difficulty = "easy" | "beginner" | "standard" | "hard";
 
@@ -103,114 +102,6 @@ const HAND_PRIORITY: Partial<Record<PartId, number>> = {
   floorTom: 5,
 };
 const MAX_HANDS_AT_ONCE = 2;
-
-// ================= 入门 =================
-
-function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number): Emit[] {
-  const out: Emit[] = [];
-  const beats = stepsPerBar / stepsPerBeat;
-
-  if (bar.isFill) {
-    // 轻松 / 入门过门：用允许出现的军鼓 + 踩镲收尾，避免地通被难度过滤后整拍变空。
-    const start = stepsPerBar - stepsPerBeat;
-    const n = bar.noteCount >= 8 ? 3 : 2;
-    for (let k = 0; k < n; k++) {
-      out.push({
-        // 三下也必须保持连续八分；原先把一拍三等分后吸附到 16 分网格，
-        // 会变成 0、1、3 格（十六分 + 八分），视觉和听感都不均匀。
-        step: start + k * (stepsPerBeat / 2),
-        part: "snare",
-        velocity: 100,
-      });
-    }
-    for (let s = 0; s < stepsPerBar; s += stepsPerBeat) {
-      out.push({ step: s, part: "hihat", velocity: 90 });
-    }
-    out.push({ step: 0, part: "kick", velocity: 110 });
-    return out;
-  }
-
-  for (let b = 0; b < beats; b++) {
-    const local = b * stepsPerBeat;
-    // 军鼓：正拍（多在 2、4 拍）
-    const s = hasNear(bar, "snare", local, stepsPerBeat / 2);
-    if (s !== null) out.push({ step: local, part: "snare", velocity: bar.vel.snare?.[s] ?? 100 });
-    // 底鼓：只允许正拍。原谱正拍上/紧邻有底鼓就落一下；
-    // 只有切分底鼓（差半拍）时，仅在这一拍没有军鼓时才吸附过来，避免变成四踩。
-    const exact = hasNear(bar, "kick", local, 1);
-    const near = exact ?? (s === null ? hasNear(bar, "kick", local, stepsPerBeat / 2) : null);
-    if (near !== null)
-      out.push({ step: local, part: "kick", velocity: bar.vel.kick?.[near] ?? 100 });
-  }
-
-  // 偶尔的反拍军鼓：原谱在八分反拍有很强的军鼓时，每 4 小节最多保留一次
-  if (bar.index % 4 === 3) {
-    for (const s of bar.slots.snare ?? []) {
-      if (s % stepsPerBeat === stepsPerBeat / 2 && (bar.vel.snare?.[s] ?? 0) >= 105) {
-        out.push({ step: s, part: "snare", velocity: bar.vel.snare?.[s] ?? 105 });
-        break;
-      }
-    }
-  }
-
-  // 踩镲：以原曲脉冲为依据；乐句后半允许八分推进，但不把整段机械铺满。
-  if (bar.hatDiv !== 0) {
-    const div = bar.hatDiv === 16 && bar.index % 4 >= 2 ? stepsPerBeat / 2 : stepsPerBeat;
-    for (let s = 0; s < stepsPerBar; s += div) out.push({ step: s, part: "hihat", velocity: 90 });
-  }
-
-  return out;
-}
-
-// ================= 标准 =================
-
-function standardBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number): Emit[] {
-  const out: Emit[] = [];
-  const cymbalPart: PartId = bar.ridePrimary ? "ride" : "hihat";
-
-  if (bar.isFill) {
-    // 过门小节不套模板：保留原始细节（量化后）并轻度简化
-    for (const part of Object.keys(bar.slots) as PartId[]) {
-      if (part === "hihat" && (bar.slots.hihat?.length ?? 0) > 4) continue;
-      for (const s of bar.slots[part]!) {
-        out.push({ step: s, part, velocity: bar.vel[part]?.[s] ?? 100 });
-      }
-    }
-    return out;
-  }
-
-  const pattern = matchPattern(bar, stepsPerBar);
-  if (!pattern) {
-    for (const part of Object.keys(bar.slots) as PartId[]) {
-      for (const s of bar.slots[part]!) {
-        out.push({ step: s, part, velocity: bar.vel[part]?.[s] ?? 100 });
-      }
-    }
-    return out;
-  }
-
-  for (const s of pattern.kick)
-    out.push({ step: s, part: "kick", velocity: bar.vel.kick?.[s] ?? 105 });
-  for (const s of pattern.snare)
-    out.push({ step: s, part: "snare", velocity: bar.vel.snare?.[s] ?? 105 });
-
-  const div = bar.hatDiv === 0 ? 0 : bar.hatDiv === 16 ? 1 : bar.hatDiv === 8 ? 2 : 4;
-  const useDiv = div === 0 ? (pattern.hatDiv === 16 ? 1 : pattern.hatDiv === 8 ? 2 : 4) : div;
-  if (bar.hatDiv !== 0) {
-    for (let s = 0; s < stepsPerBar; s += useDiv) {
-      const open = cymbalPart === "hihat" && bar.openHat.some((o) => Math.abs(o - s) <= 1);
-      out.push({ step: s, part: cymbalPart, velocity: open ? 100 : 90, open });
-    }
-  }
-
-  // 原曲的吊镲落点叠加回来（乐句首的重音）
-  for (const s of bar.slots.crash ?? []) {
-    out.push({ step: s, part: "crash", velocity: bar.vel.crash?.[s] ?? 110 });
-  }
-  // 原曲的踏板踩镲不再单独出音符：左脚改由「闭镲长音符」统一表示
-
-  return out;
-}
 
 // ================= 困难 =================
 
