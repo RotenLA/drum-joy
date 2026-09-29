@@ -588,6 +588,11 @@ export function FallScreen({
                 ((statsRef.current.perfect + statsRef.current.good * 0.5) /
                   (statsRef.current.perfect + statsRef.current.good + statsRef.current.miss)) *
                   100,
+                {
+                  progress: frameChart.durationMs > 0 ? (t / frameChart.durationMs) * 100 : 0,
+                  completed: ph === "ended",
+                  fullCombo: ph === "ended" && statsRef.current.miss === 0,
+                },
               )
             : null,
         // 未开始（idle）时不画音符，只显示鼓阵
@@ -822,7 +827,11 @@ export function FallScreen({
 
             <div className="flex items-center gap-4">
               <p className="text-5xl font-black text-[var(--taiko-accent)]">
-                {ratingOfAccuracy(acc)}
+                {ratingOfAccuracy(acc, {
+                  progress: 100,
+                  completed: true,
+                  fullCombo: totalJudged > 0 && judged.miss === 0,
+                })}
               </p>
               <p className="text-3xl font-bold tabular-nums text-white">
                 {String(scoreRef.current).padStart(7, "0")}

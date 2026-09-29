@@ -201,19 +201,13 @@ function sourceEmits(clean: CleanedMidi, diff: Difficulty): Emit[] {
     });
   }
 
-  // 低难度仍以原谱落点为准：保留强音、正拍与每拍最重要的一次弱音，避免整段被滤空。
-  const strongestByBeat = new Map<string, CleanHit>();
-  for (const hit of hits) {
-    const beat = Math.floor(hit.step / clean.stepsPerBeat);
-    const key = `${beat}:${hit.part}`;
-    const previous = strongestByBeat.get(key);
-    if (!previous || hit.velocity > previous.velocity) strongestByBeat.set(key, hit);
-  }
+  // 轻松只保留整拍，不出现八分/十六分切分；入门以整拍和八分为主，
+  // 十六分位置仅保留非常明确的重音。这里只筛选，最终时间仍取原 MIDI timeMs。
   const selected = hits.filter((hit) => {
-    const onBeat = hit.step % clean.stepsPerBeat === 0;
-    const strong = hit.velocity >= (diff === "easy" ? 92 : 78);
-    const beat = Math.floor(hit.step / clean.stepsPerBeat);
-    return onBeat || strong || strongestByBeat.get(`${beat}:${hit.part}`) === hit;
+    const local = ((hit.step - clean.phaseSteps) % clean.stepsPerBeat + clean.stepsPerBeat) % clean.stepsPerBeat;
+    if (diff === "easy") return local === 0;
+    const onEighth = local % 2 === 0;
+    return onEighth || hit.velocity >= 112;
   });
   return selected.map((hit) => {
     const emit: Emit = { step: hit.step, part: hit.part, velocity: hit.velocity, timeMs: hit.timeMs };

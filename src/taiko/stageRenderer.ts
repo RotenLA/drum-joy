@@ -163,6 +163,20 @@ export interface StageFrame {
   } | null;
 }
 
+const RATING_LEVEL: Readonly<Record<string, number>> = { C: 0, B: 1, A: 2, S: 3, SS: 4, SSS: 5 };
+
+function ratingLevelOf(rating: string | null | undefined): number {
+  return rating ? (RATING_LEVEL[rating] ?? 0) : 0;
+}
+
+let reduceMotionCache: boolean | null = null;
+function reducedMotion(): boolean {
+  if (reduceMotionCache === null) {
+    reduceMotionCache = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  }
+  return reduceMotionCache;
+}
+
 interface Particle {
   x: number;
   y: number;
@@ -389,7 +403,7 @@ function cachedGrad(key: string, make: () => CanvasGradient): CanvasGradient {
   return g;
 }
 
-function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number, parts: readonly PartId[]) {
+function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number, parts: readonly PartId[], growth = 0) {
   ensureGradCache(ctx, w, h);
   ctx.save();
   ctx.lineWidth = 1.5;
@@ -406,6 +420,89 @@ function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number, parts: r
     ctx.beginPath();
     ctx.moveTo(p.gx, p.gy);
     ctx.lineTo(p.cx, p.cy);
+    ctx.stroke();
+    if (growth >= 3 && QUALITY_TIER !== "low") {
+      const color = PART_BY_ID[id].color;
+      const pulse = reducedMotion() ? 0.45 : 0.34 + 0.16 * Math.sin(performance.now() / 720 + p.cx * 0.01);
+      ctx.strokeStyle = hexToRgba(color, Math.min(0.32, pulse * growth * 0.07));
+      ctx.lineWidth = growth >= 4 ? 2.5 : 1.8;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = GLOW ? 4 + growth * 2 : 0;
+      ctx.beginPath();
+      ctx.moveTo(p.gx, p.gy);
+      ctx.lineTo(p.cx, p.cy);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+  }
+  ctx.restore();
+}
+
+/** 评级越高，舞台中心的光照越完整；不改变音符与鼓面的可读性。 */
+function drawRatingLight(ctx: CanvasRenderingContext2D, w: number, h: number, level: number, now: number) {
+  if (level < 3 || QUALITY_TIER === "low") return;
+  const moving = reducedMotion() ? 0 : Math.sin(now / 1400) * w * 0.08;
+  const alpha = QUALITY_TIER === "high" ? 0.025 + level * 0.012 : 0.02 + level * 0.008;
+  const light = ctx.createRadialGradient(w * 0.5 + moving, h * 0.42, 0, w * 0.5 + moving, h * 0.42, h * 0.72);
+  light.addColorStop(0, `rgba(255,210,132,${alpha})`);
+  light.addColorStop(0.5, `rgba(105,176,255,${alpha * 0.7})`);
+  light.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = light;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
+
+/** 按鼓件自身颜色绘制常驻成长环，和命中闪光分离。 */
+function drawRatingRing(
+  ctx: CanvasRenderingContext2D,
+  id: PartId,
+  w: number,
+  h: number,
+  level: number,
+  now: number,
+) {
+  if (level < 1) return;
+  const pad = geomOf(id, w, h);
+  const anchor = PAD_ANCHORS[id];
+  const color = PART_BY_ID[id].color;
+  const phase = reducedMotion() ? 0.5 : (Math.sin(now / (900 - level * 70) + pad.cx * 0.012) + 1) / 2;
+  const alpha = 0.1 + level * 0.035 + phase * 0.06;
+  const scale = 1.03 + phase * (0.015 + level * 0.006);
+  ctx.save();
+  ctx.translate(pad.cx, pad.cy);
+  ctx.strokeStyle = hexToRgba(color, alpha);
+  ctx.lineWidth = Math.max(1.2, pad.rx * (0.022 + level * 0.004));
+  ctx.shadowColor = color;
+  ctx.shadowBlur = GLOW ? level * 3 + phase * 5 : 0;
+  ctx.beginPath();
+  if (anchor.square) {
+    const th = id === "kick" ? -PEDAL_TILT : PEDAL_TILT;
+    ctx.scale(1, 0.42);
+    ctx.rotate(th);
+    const r = pad.rx * scale;
+    ctx.roundRect(-r, -r, r * 2, r * 2, r * 0.24);
+  } else {
+    const angle = noteAngle(id, pad);
+    ctx.ellipse(0, 0, pad.rx * scale, pad.ry * scale, angle, 0, Math.PI * 2);
+  }
+  ctx.stroke();
+  if (level >= 2 && QUALITY_TIER === "high") {
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = Math.min(0.75, alpha * 2.2);
+    ctx.strokeStyle = "rgba(255,255,255,0.82)";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    if (anchor.square) {
+      const r = pad.rx * scale;
+      const sweep = reducedMotion() ? 0 : ((now / 900 + pad.cx * 0.01) % 1) * r * 6 - r * 3;
+      ctx.moveTo(Math.max(-r, sweep), -r);
+      ctx.lineTo(Math.min(r, sweep + r * 0.7), -r);
+    } else {
+      const start = reducedMotion() ? -Math.PI * 0.8 : (now / 900 + pad.cx * 0.01) % (Math.PI * 2);
+      ctx.ellipse(0, 0, pad.rx * scale, pad.ry * scale, noteAngle(id, pad), start, start + Math.PI * (0.28 + level * 0.04));
+    }
     ctx.stroke();
   }
   ctx.restore();
@@ -1607,10 +1704,12 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   drawBackground(ctx, w, h);
   const v = stageViewport(w, h);
   const parts = f.parts ?? DRUM_PARTS.map((p) => p.id);
+  const growth = ratingLevelOf(f.rating);
 
   ctx.save();
   ctx.translate(v.x, v.y);
-  drawLanes(ctx, v.w, v.h, parts);
+  drawRatingLight(ctx, v.w, v.h, growth, f.now);
+  drawLanes(ctx, v.w, v.h, parts, growth);
 
   // 固定层级队列：连续色带 → 在途音符 → 全部实体鼓面 → 到达自身鼓面的音符 → 缩圈。
   // 不再使用飞行位置切换层级，因此任意交叉路径经过鼓面边缘都不会突然前后跳动。
@@ -1629,6 +1728,12 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
       depth: PAD_ANCHORS[id].cy,
       draw: () => drawPad(ctx, id, intensity, v.w, v.h, miss),
     });
+    if (growth > 0) {
+      items.push({
+        depth: PAD_ANCHORS[id].cy + 0.005,
+        draw: () => drawRatingRing(ctx, id, v.w, v.h, growth, f.now),
+      });
+    }
     if (intensity > 0 && QUALITY_TIER !== "low") {
       items.push({
         depth: PAD_ANCHORS[id].cy + 0.01,
