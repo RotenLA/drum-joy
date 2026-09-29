@@ -231,7 +231,7 @@ export function analyzeAudioTempo(buffer: AudioBuffer, midi: ParsedMidi): TempoA
   return {
     bpm,
     confidence,
-    status: confidence >= 0.12 ? "confident" : "review",
+    status: confidence >= 0.12 && segments.some((segment) => segment.confidence > 0) ? "confident" : "review",
     segments,
     midi: retimeMidi(midi, segments),
   };
