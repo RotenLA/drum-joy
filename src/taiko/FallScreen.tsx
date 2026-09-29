@@ -820,6 +820,7 @@ export function FallScreen({
                 onSpeedChange={(next) => onSpeedChange?.(next)}
                 fallMode={fallMode}
                 onFallModeChange={(next) => onFallModeChange?.(next)}
+                onSecretUnlock={onSecretUnlock}
               />
             </div>
           </div>
