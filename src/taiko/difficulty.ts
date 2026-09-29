@@ -1,6 +1,6 @@
 /**
  * 四档难度均从原始 GM 鼓 MIDI 筛选；量化网格只参与结构分析和限密度，
- * 保留下来的音符始终使用上传 MIDI 自带的精确 timeMs，不按推算 BPM 重排。
+ * 网格来自上传 MIDI 的 tick 与 tempo map；轻松/入门稳定吸附，标准/困难只修正小偏差。
  */
 import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
 import { VISIBLE_PARTS, type LayoutMode, type PartId } from "./laneLayouts";
@@ -82,7 +82,7 @@ interface Emit {
   step: number;
   part: PartId;
   velocity: number;
-  /** 原始 MIDI note-on 时间；最终音符优先使用，绝不按推算 BPM 重排。 */
+  /** 原始 MIDI note-on 时间；最终按难度决定保留或吸附到 tempo map 网格。 */
   timeMs?: number;
   /** 踩镲为开镲（此刻左脚必须松开，长音符要断开） */
   open?: boolean;
@@ -333,6 +333,7 @@ function emitsToNotes(
   clean: CleanedMidi,
   allowParts: readonly PartId[],
   offsetMs: number,
+  diff: Difficulty,
 ): TaikoNote[] {
   const allow = new Set(allowParts);
   const seen = new Set<string>();
@@ -342,7 +343,11 @@ function emitsToNotes(
     const key = `${e.step}:${e.part}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const timeMs = (e.timeMs ?? tickToMs(midi, e.step * clean.stepTicks)) + offsetMs;
+    const gridTimeMs = tickToMs(midi, e.step * clean.stepTicks);
+    const sourceTimeMs = e.timeMs ?? gridTimeMs;
+    const forceGrid = diff === "easy" || diff === "beginner";
+    const snapSmallDeviation = Math.abs(sourceTimeMs - gridTimeMs) <= 35;
+    const timeMs = (forceGrid || snapSmallDeviation ? gridTimeMs : sourceTimeMs) + offsetMs;
     if (timeMs < 0) continue;
     notes.push({
       timeMs,
@@ -406,7 +411,7 @@ export function buildPlayChart(
   const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);
 
   const notes = [
-    ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset),
+    ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, diff),
     ...holdsToNotes(holds, midi, clean, offset),
   ].sort((a, b) => a.timeMs - b.timeMs);
 

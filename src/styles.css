@@ -246,14 +246,56 @@
     --safe-left: max(0.5rem, env(safe-area-inset-left));
   }
 
+  .taiko-picker-header {
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+  }
+
+  .taiko-picker-header button {
+    height: 2rem;
+  }
+
+  .taiko-detail-layout {
+    grid-template-columns: minmax(220px, 40%) minmax(0, 1fr);
+    gap: clamp(0.75rem, 2.5vw, 1.75rem);
+    padding-right: clamp(1rem, 3vw, 2.5rem);
+    padding-left: clamp(1rem, 3vw, 2.5rem);
+    padding-bottom: 0.375rem;
+  }
+
+  .taiko-detail-list {
+    height: min(96%, 430px);
+  }
+
+  .taiko-detail-slot {
+    top: 4.5rem;
+    height: 2.75rem;
+  }
+
+  .taiko-detail-scroll-list {
+    padding-top: 4.5rem;
+  }
+
+  .taiko-detail-row {
+    height: 2.75rem;
+    margin-bottom: 0.375rem;
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .taiko-detail-card {
+    width: min(46vw, 480px);
+    height: min(88%, 350px);
+  }
+
   .taiko-song-detail {
-    padding-top: 0.75rem;
-    padding-bottom: 0.75rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
   }
 
   .taiko-song-detail-controls {
-    min-height: 8.5rem;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
+    min-height: 7.5rem;
+    padding-top: 0;
+    padding-bottom: 0;
   }
 }
