@@ -245,4 +245,15 @@
     --safe-bottom: max(0.375rem, env(safe-area-inset-bottom));
     --safe-left: max(0.5rem, env(safe-area-inset-left));
   }
+
+  .taiko-song-detail {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .taiko-song-detail-controls {
+    min-height: 10rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+  }
 }

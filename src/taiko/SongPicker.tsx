@@ -577,7 +577,7 @@ export function SongPicker({
                 const fav = favs.includes(item.id);
                 const locked = !isUnlocked(bests, item.id, song.difficulty);
                 return (
-                  <div key={item.id} className="taiko-scroll relative z-10 mx-auto flex h-full w-[88%] flex-col overflow-y-auto px-1 py-6" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
+                  <div key={item.id} className="taiko-song-detail taiko-scroll relative z-10 mx-auto flex h-full w-[88%] flex-col overflow-y-auto px-1 py-6" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                     <div className="flex shrink-0 justify-end gap-2">
                       <Button
                         type="button"
@@ -601,7 +601,7 @@ export function SongPicker({
                         <Heart size={17} className={fav ? "fill-[#ff5a6e] text-[#ff5a6e]" : "text-[rgba(255,255,255,0.75)]"} />
                       </Button>
                     </div>
-                    <div className="my-auto flex min-h-[230px] items-center justify-center py-3">
+                    <div className="taiko-song-detail-controls my-auto flex min-h-[230px] items-center justify-center py-3">
                       <CardControls songId={item.id} bests={bests} />
                     </div>
                     <div className="flex shrink-0 items-end justify-between gap-5 border-l-4 border-[var(--taiko-accent)] py-1 pl-4">
