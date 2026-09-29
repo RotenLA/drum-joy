@@ -690,7 +690,7 @@ export function FallScreen({
           }}
           aria-label={tr("全局设置", "Global settings")}
           title={tr("全局设置", "Global settings")}
-          className="absolute left-3 top-3 z-[60] h-9 w-9 rounded-md border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[rgba(255,255,255,0.76)] backdrop-blur-[18px] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+          className="taiko-global-settings absolute left-3 top-3 z-[60] h-9 w-9 rounded-md border-[var(--taiko-glass-line)] bg-[var(--taiko-glass)] text-[rgba(255,255,255,0.76)] backdrop-blur-[18px] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
         >
           <Settings size={16} />
         </Button>

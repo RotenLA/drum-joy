@@ -255,6 +255,13 @@
     height: 2rem;
   }
 
+  .taiko-global-settings {
+    top: var(--safe-top);
+    left: var(--safe-left);
+    width: 2rem;
+    height: 2rem;
+  }
+
   .taiko-detail-layout {
     grid-template-columns: minmax(220px, 40%) minmax(0, 1fr);
     gap: clamp(0.75rem, 2.5vw, 1.75rem);
