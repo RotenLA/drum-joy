@@ -15,7 +15,7 @@ import { latencyMeter } from "./latencyMeter";
 import { debugLog } from "./debugLog";
 import { useLanguage } from "./i18n";
 import { SongPicker } from "./SongPicker";
-import { Pause, Settings, SlidersHorizontal, X } from "lucide-react";
+import { Pause, Settings, X } from "lucide-react";
 import { GlobalSettings } from "./GlobalSettings";
 import { Button } from "@/components/ui/button";
 
@@ -75,7 +75,6 @@ export function FallScreen({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [mixerOpen, setMixerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
