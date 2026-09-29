@@ -71,6 +71,13 @@
       "when": 1790665462999,
       "tag": "0009_tighten_public_tag_revision_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790667746410,
+      "tag": "0010_add_song_tag_english_name",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,2 @@
+ALTER TABLE public.song_tags ADD COLUMN IF NOT EXISTS name_en text;
+COMMENT ON COLUMN public.song_tags.name_en IS 'Required English playlist name for bilingual player display; legacy rows may remain null until edited.';

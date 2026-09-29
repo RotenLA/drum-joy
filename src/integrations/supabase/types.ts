@@ -217,6 +217,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          name_en: string | null
           sort_order: number
         }
         Insert: {
@@ -224,6 +225,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          name_en?: string | null
           sort_order?: number
         }
         Update: {
@@ -231,6 +233,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          name_en?: string | null
           sort_order?: number
         }
         Relationships: []
