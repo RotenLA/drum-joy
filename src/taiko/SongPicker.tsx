@@ -562,7 +562,7 @@ export function SongPicker({
               <div className="relative min-h-0 flex-1">
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-1 right-4 top-[clamp(112px,20vh,160px)] z-10 h-[clamp(48px,9vh,72px)] -translate-x-3 rounded-lg border-l-4 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.84)] shadow-lg"
+                  className="pointer-events-none absolute left-1 right-4 top-[clamp(112px,20vh,160px)] z-30 h-[clamp(48px,9vh,72px)] -translate-x-3 rounded-lg border-l-4 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.84)] shadow-lg"
                 />
                 <div
                   ref={detailScrollRef}
@@ -580,9 +580,9 @@ export function SongPicker({
                       onClick={() => {
                         pickSong(item);
                       }}
-                      className={`relative mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] w-[82%] flex-col items-stretch justify-center overflow-visible rounded-lg border-l-4 border-[rgba(255,255,255,0.34)] bg-transparent px-5 text-left shadow-lg transition-colors duration-200 ${on ? "text-[var(--taiko-paper)]" : "text-[rgba(255,255,255,0.84)]"}`}
+                      className={`relative mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] w-[82%] flex-col items-stretch justify-center overflow-visible rounded-lg border-l-4 border-[rgba(255,255,255,0.34)] bg-transparent px-5 text-left shadow-lg transition-colors duration-200 ${on ? "z-40 text-[var(--taiko-paper)]" : "z-20 text-[rgba(255,255,255,0.84)]"}`}
                     >
-                      <span aria-hidden="true" className="absolute inset-0 z-0 rounded-lg bg-[rgba(15,16,20,0.56)] transition-colors hover:bg-[rgba(25,26,31,0.72)]" />
+                      <span aria-hidden="true" className={`absolute inset-0 z-0 rounded-lg transition-colors ${on ? "bg-transparent" : "bg-[rgba(15,16,20,0.56)] hover:bg-[rgba(25,26,31,0.72)]"}`} />
                       <span className="relative z-20 block min-w-0" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                         <span className="flex items-baseline gap-3">
                           <span className={`w-6 shrink-0 text-[11px] tabular-nums ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.42)]"}`}>
