@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      library_revision: {
+        Row: {
+          id: boolean
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          id?: boolean
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          id?: boolean
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       play_bests: {
         Row: {
           best_accuracy: number

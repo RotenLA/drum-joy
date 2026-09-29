@@ -45,6 +45,24 @@ function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<
   );
 }
 
+async function removeOldSongVersions(songId: string, keepKey: string): Promise<void> {
+  const db = await openDb();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(STORE, "readwrite");
+    const store = transaction.objectStore(STORE);
+    const request = store.getAllKeys();
+    request.onsuccess = () => {
+      for (const raw of request.result) {
+        const key = String(raw);
+        if (key !== keepKey && key.startsWith(`${songId}|`)) store.delete(raw);
+      }
+    };
+    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+}
+
 // ---------- 状态 store ----------
 interface DlState {
   /** 已下载的 key 集合 */
@@ -169,11 +187,15 @@ export async function downloadSong(song: LibrarySong): Promise<boolean> {
     };
     try {
       await tx("readwrite", (st) => st.put(rec));
+      await removeOldSongVersions(song.id, rec.key);
     } catch {
       memoryFallback.set(rec.key, rec);
     }
-    const done = new Set(state.done);
+    const done = new Set([...state.done].filter((key) => !key.startsWith(`${song.id}|`) || key === rec.key));
     done.add(rec.key);
+    for (const key of memoryFallback.keys()) {
+      if (key !== rec.key && key.startsWith(`${song.id}|`)) memoryFallback.delete(key);
+    }
     if (controller === ctrl) controller = null;
     emit({ done, activeId: null, percent: 0 });
     return true;
