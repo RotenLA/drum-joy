@@ -9,6 +9,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { parseMidi } from "@/taiko/midiFile";
 import { buildAllCharts, midiFingerprint } from "@/taiko/adminChartBuild";
 import {
+  groupImportFiles,
+  type FolderImportSong,
+  type ImportFileKey,
+} from "@/taiko/adminFolderImport";
+import {
   adminLogin,
   adminLogout,
   adminStatus,
@@ -129,6 +134,9 @@ function AdminPage() {
   const stemInputs = useRef<Record<string, File | null>>({});
   const [midiFile, setMidiFile] = useState<File | null>(null);
   const [stemsPicked, setStemsPicked] = useState(0);
+  const [folderSongs, setFolderSongs] = useState<FolderImportSong[]>([]);
+  const [folderIgnored, setFolderIgnored] = useState<string[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
 
   const refresh = useCallback(async () => {
     const res = await list();
@@ -195,6 +203,63 @@ function AdminPage() {
     );
   }, [songs, query, tagMap, tagFilter]);
 
+  const uploadOne = async (
+    songTitle: string,
+    songArtist: string,
+    files: Partial<Record<ImportFileKey, File>>,
+    tagIds: string[],
+  ) => {
+    const midi = files.midi;
+    if (!midi) throw new Error("缺少 MIDI");
+    for (const field of STEM_FIELDS) if (!files[field.key]) throw new Error(`缺少 ${field.label}`);
+    setBusy(`解析《${songTitle}》并生成四档谱面…`);
+    const parsed = parseMidi(await midi.arrayBuffer());
+    const charts = buildAllCharts(parsed, songTitle);
+    const fingerprint = midiFingerprint(parsed);
+    let durationMs = parsed.durationMs;
+    for (const field of STEM_FIELDS) {
+      const file = files[field.key];
+      if (file) durationMs = Math.max(durationMs, await audioDurationMs(file));
+    }
+    const uploadFiles = [...STEM_FIELDS.map((field) => ({ key: field.key, file: files[field.key] })), { key: "midi" as const, file: midi }];
+    const completeFiles = uploadFiles.filter((item): item is { key: ImportFileKey; file: File } => item.file instanceof File);
+    const targets = await signUploads({
+      data: {
+        folder: songTitle.replace(/\s+/g, "-").toLowerCase(),
+        files: completeFiles.map(({ key, file }) => ({ key, ext: file.name.split(".").pop() ?? (key === "midi" ? "mid" : "mp3") })),
+      },
+    });
+    const paths: Record<string, string> = {};
+    const sizes: Record<string, number> = {};
+    for (let i = 0; i < targets.targets.length; i++) {
+      const target = targets.targets[i];
+      if (!target) continue;
+      const source = completeFiles.find((item) => item.key === target.key)?.file;
+      if (!source) throw new Error(`${target.key} 文件不存在`);
+      setBusy(`上传《${songTitle}》${target.key}（${i + 1}/${targets.targets.length}）…`);
+      const { error } = await supabase.storage.from("songs").uploadToSignedUrl(target.path, target.token, source);
+      if (error) throw new Error(`${target.key} 上传失败：${error.message}`);
+      paths[target.key] = target.path;
+      sizes[target.key] = source.size;
+    }
+    const midiPath = paths.midi;
+    if (!midiPath) throw new Error("MIDI 上传结果缺失");
+    setBusy(`写入《${songTitle}》…`);
+    await save({ data: {
+      title: songTitle,
+      artist: songArtist.trim() || null,
+      durationMs,
+      bpm: Math.round(parsed.bpm * 100) / 100,
+      tsNum: parsed.timeSignature[0],
+      tsDen: parsed.timeSignature[1],
+      fingerprint,
+      paths: { vocals: paths.vocals ?? null, bass: paths.bass ?? null, drums: paths.drums ?? null, other: paths.other ?? null, midi: midiPath },
+      sizes,
+      charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
+      tagIds,
+    } });
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const files = stemInputs.current;
@@ -203,79 +268,14 @@ function AdminPage() {
       setNote("请填写标题并选择鼓 MIDI");
       return;
     }
-    const missing = STEM_FIELDS.filter((f) => !files[f.key]);
+    const missing = STEM_FIELDS.filter((field) => !files[field.key]);
     if (missing.length) {
-      setNote(`缺少分轨：${missing.map((m) => m.label).join("、")}`);
+      setNote(`缺少分轨：${missing.map((item) => item.label).join("、")}`);
       return;
     }
-    setBusy("准备上传…");
     setNote(null);
     try {
-      // 1. 解析 MIDI，生成四档谱面
-      setBusy("解析 MIDI 并生成四档谱面…");
-      const midiBuf = await midi.arrayBuffer();
-      const parsed = parseMidi(midiBuf);
-      const charts = buildAllCharts(parsed, title.trim());
-      const fingerprint = midiFingerprint(parsed);
-
-      // 2. 时长（取最长的一条分轨）
-      setBusy("读取音频时长…");
-      let durationMs = parsed.durationMs;
-      for (const f of STEM_FIELDS) {
-        const file = files[f.key];
-        if (!file) continue;
-        durationMs = Math.max(durationMs, await audioDurationMs(file));
-      }
-
-      // 3. 申请上传直链并直传
-      const targets = await signUploads({
-        data: {
-          folder: title.trim().replace(/\s+/g, "-").toLowerCase(),
-          files: [
-            ...STEM_FIELDS.map((f) => ({ key: f.key, ext: (files[f.key]!.name.split(".").pop() ?? "mp3") })),
-            { key: "midi", ext: midi.name.split(".").pop() ?? "mid" },
-          ],
-        },
-      });
-
-      const paths: Record<string, string> = {};
-      const sizes: Record<string, number> = {};
-      let idx = 0;
-      for (const t of targets.targets) {
-        idx++;
-        const file = t.key === "midi" ? midi : files[t.key]!;
-        setBusy(`上传 ${t.key}（${idx}/${targets.targets.length}）…`);
-        const { error } = await supabase.storage
-          .from("songs")
-          .uploadToSignedUrl(t.path, t.token, file);
-        if (error) throw new Error(`${t.key} 上传失败：${error.message}`);
-        paths[t.key] = t.path;
-        sizes[t.key] = file.size;
-      }
-
-      // 4. 入库
-      setBusy("写入曲库…");
-      await save({
-        data: {
-          title: title.trim(),
-          artist: artist.trim() || null,
-          durationMs,
-          bpm: Math.round(parsed.bpm * 100) / 100,
-          tsNum: parsed.timeSignature[0],
-          tsDen: parsed.timeSignature[1],
-          fingerprint,
-          paths: {
-            vocals: paths["vocals"] ?? null,
-            bass: paths["bass"] ?? null,
-            drums: paths["drums"] ?? null,
-            other: paths["other"] ?? null,
-            midi: paths["midi"]!,
-          },
-          sizes,
-          charts: charts.map((c) => ({ difficulty: c.difficulty, chart: c.chart })),
-          tagIds: uploadTags,
-        },
-      });
+      await uploadOne(title.trim(), artist, { ...files, midi }, uploadTags);
       setNote(`《${title.trim()}》已入库，四档谱面已生成`);
       setTitle("");
       setArtist("");
@@ -289,6 +289,28 @@ function AdminPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  const runBatch = async (onlyKey?: string) => {
+    const queue = folderSongs.filter((song) => song.status !== "invalid" && song.status !== "done" && (!onlyKey || song.key === onlyKey));
+    if (!queue.length) return;
+    setBatchRunning(true);
+    setNote(null);
+    let completed = 0;
+    for (const song of queue) {
+      setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "uploading", error: undefined } : item));
+      try {
+        await uploadOne(song.title.trim(), "", song.files, uploadTags);
+        completed++;
+        setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "done", error: undefined } : item));
+      } catch (error) {
+        setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "failed", error: (error as Error).message } : item));
+      }
+    }
+    setBatchRunning(false);
+    setBusy(null);
+    setNote(`批量导入完成：成功 ${completed} 首，失败 ${queue.length - completed} 首`);
+    await refresh();
   };
 
   const regen = async (row: AdminSongRow) => {
