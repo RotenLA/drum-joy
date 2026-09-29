@@ -71,14 +71,13 @@ const EASY: Gen = (c) => {
     for (const b of beatsOf(c)) out.push([b * c.spb, "hihat"]);
     out.push([(bb[bb.length - 1] ?? 0) * c.spb, "snare"]);
   } else {
-    const eighths = c.level === 2 || c.variant;
+    const eighths = c.level === 2 && c.variant;
     for (const b of beatsOf(c)) {
       out.push([b * c.spb, "hihat"]);
       if (eighths && !bb.includes(b)) out.push([b * c.spb + c.spb / 2, "hihat"]);
     }
     for (const b of bb) out.push([b * c.spb, "snare"]);
     // 偶尔正拍军鼓：乐句尾最后一拍加一下
-    if (c.variant && c.beats >= 4) out.push([(c.beats - 2) * c.spb, "snare"]);
   }
   return out;
 };
@@ -86,7 +85,7 @@ const EASY: Gen = (c) => {
 const BEGINNER: Gen = (c) => {
   const out: Array<[number, PartId, number?]> = [];
   const bb = backbeats(c);
-  const eighthHat = c.level >= 1;
+  const eighthHat = c.level === 2;
   for (const b of beatsOf(c)) {
     out.push([b * c.spb, "hihat"]);
     if (eighthHat) out.push([b * c.spb + c.spb / 2, "hihat"]);
@@ -97,7 +96,7 @@ const BEGINNER: Gen = (c) => {
     return out;
   }
   for (const b of bb) out.push([b * c.spb, "snare"]);
-  const kicks = c.variant || c.level === 2 ? pickKick(c, kickCandidates(c, false)) : kickCandidates(c, false)[1]!;
+  const kicks = kickCandidates(c, false)[1]!;
   for (const k of kicks) out.push([(k * c.spb) / 2, "kick"]);
   return out;
 };
@@ -111,7 +110,7 @@ const STANDARD: Gen = (c) => {
     if (c.level >= 1) out.push([b * c.spb + c.spb / 2, cym]);
   }
   for (const b of c.level === 0 ? bb.slice(-1) : bb) out.push([b * c.spb, "snare"]);
-  const kicks = c.level === 0 ? [0] : pickKick(c, kickCandidates(c, true));
+  const kicks = c.level === 0 ? [0] : pickKick(c, kickCandidates(c, c.level === 2));
   for (const k of kicks) out.push([(k * c.spb) / 2, "kick"]);
   if (c.bar.isPhraseStart && c.level >= 1 && (c.bar.slots.crash?.length ?? 0) > 0) out.push([0, "crash", 115]);
   for (const s of c.bar.openHat) if (!c.ride && s % (c.spb / 2) === 0) out.push([s, "hihat", 100]);
@@ -130,9 +129,6 @@ const HARD: Gen = (c) => {
       perBeat.set(b, (perBeat.get(b) ?? 0) + 1);
       out.push([s, "kick"]);
     }
-    if (c.bar.hatDiv === 16 && !c.ride) {
-      for (const b of beatsOf(c)) for (const q of [1, 3]) out.push([b * c.spb + q, "hihat", 80]);
-    }
   }
   return out;
 };
@@ -141,7 +137,7 @@ const GEN: Record<PatternDifficulty, Gen> = { easy: EASY, beginner: BEGINNER, st
 
 /** 乐句尾过门：替换小节后半段 */
 function fill(c: BarCtx, diff: PatternDifficulty, base: Array<[number, PartId, number?]>) {
-  const beats = diff === "easy" || diff === "beginner" ? 1 : 2;
+  const beats = diff === "hard" ? 2 : 1;
   const from = Math.max(0, c.beats - beats) * c.spb;
   const keep = base.filter(([s, p]) => s < from || p === "kick");
   const div = diff === "easy" ? c.spb : diff === "beginner" || diff === "standard" ? c.spb / 2 : c.spb / 4;
@@ -194,7 +190,7 @@ export function patternEmits(sk: Skeleton, diff: PatternDifficulty, beatsPerBar:
       variant: phraseEnd && bar.index % 8 === 7,
     };
     let hits = GEN[diff](c);
-    const doFill = bar.isFill || (phraseEnd && nextPhraseStart && bar.index % 8 === 7 && level >= 1);
+    const doFill = (diff === "hard" && bar.isFill) || (phraseEnd && nextPhraseStart && bar.index % 8 === 7 && level >= 1);
     if (doFill) hits = fill(c, diff, hits);
     const seen = new Set<string>();
     for (const [local, part, vel] of hits) {

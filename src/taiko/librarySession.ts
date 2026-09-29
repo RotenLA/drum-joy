@@ -10,6 +10,27 @@ export interface LibrarySnapshot {
 
 let sessionSnapshot: LibrarySnapshot | null = null;
 let sessionPromise: Promise<LibrarySnapshot> | null = null;
+let lastCheckAt = 0;
+const RECHECK_MS = 5 * 60 * 1000;
+const listeners = new Set<(s: LibrarySnapshot) => void>();
+
+/** 曲库在回前台复查后发生变化时通知（选歌页订阅） */
+export function onLibraryChanged(fn: (s: LibrarySnapshot) => void): () => void {
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
+/** Unity 退出再进常只是隐藏网页：回前台超过 5 分钟再轻量对比一次版本 */
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || !sessionSnapshot) return;
+    if (Date.now() - lastCheckAt < RECHECK_MS) return;
+    const prev = sessionSnapshot;
+    sessionSnapshot = null;
+    sessionPromise = null;
+    void loadLibraryOnce().then((s) => { if (s.version !== prev.version) listeners.forEach((f) => f(s)); }).catch(() => { sessionSnapshot = prev; });
+  });
+}
 
 function readSnapshot(): LibrarySnapshot | null {
   if (typeof localStorage === "undefined") return null;
@@ -38,6 +59,7 @@ export function currentLibrarySnapshot(): LibrarySnapshot | null {
 export function loadLibraryOnce(): Promise<LibrarySnapshot> {
   if (sessionSnapshot) return Promise.resolve(sessionSnapshot);
   if (sessionPromise) return sessionPromise;
+  lastCheckAt = Date.now();
   sessionPromise = (async () => {
     const cached = readSnapshot();
     try {

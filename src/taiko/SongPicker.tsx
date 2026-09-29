@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSong } from "./songStore";
 import { decodeStoredSong, type LibrarySong, type LibraryTag } from "./songLibrary";
-import { currentLibrarySnapshot, loadLibraryOnce } from "./librarySession";
+import { currentLibrarySnapshot, loadLibraryOnce, onLibraryChanged } from "./librarySession";
 import { cancelDownload, downloadSong, readStoredAny, scanDownloads, useDownloads } from "./songDownloads";
 import { LeaderboardDialog } from "./LeaderboardDialog";
 import { songPlayer } from "./player";
@@ -207,11 +207,13 @@ export function SongPicker({
         setListing(false);
       }
     })();
+    const off = onLibraryChanged((lib) => { setLibrary(lib.songs); setTags(lib.tags); });
     void loadFavorites().then(setFavs);
     void loadPlayData().then((r) => {
       setHistory(r.history);
       setBests(r.bests);
     });
+    return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
