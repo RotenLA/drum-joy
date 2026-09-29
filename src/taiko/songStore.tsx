@@ -96,8 +96,10 @@ export function SongProvider({ children }: { children: ReactNode }) {
     difficulty: "easy",
     mix: { ...DEFAULT_MIX },
     audioLeadMs: 0,
+    audioAlignMs: 0,
     chart: null,
   });
+
 
   // hydration 后再读本地设置，避免 SSR 不一致
   useEffect(() => {
