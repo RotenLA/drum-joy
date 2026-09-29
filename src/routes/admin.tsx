@@ -769,7 +769,7 @@ function AdminPage() {
                     : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60"
                 }`}
               >
-                {s.published ? "已上架" : "未上架 · 待确认"}
+                {s.published ? "已上架" : "已下架"}
               </button>
               <button
                 onClick={() => void regen(s)}
