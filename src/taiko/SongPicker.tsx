@@ -531,7 +531,7 @@ export function SongPicker({
                 style={cardStyle}
               >
                 <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
-                <div className="relative z-10 flex h-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
+                <div className="relative z-10 flex h-full min-w-0 flex-col justify-end py-6 pl-6 pr-10" style={{ transform: "skewX(9deg)" }}>
                   <div className="flex min-w-0 items-end justify-between gap-5">
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <HorizontalTitle title={pl.name} />
@@ -546,7 +546,7 @@ export function SongPicker({
                         const first = listSongs(pl.key)[0];
                         setSelectedId(first?.id ?? null);
                       }}
-                      className="h-11 shrink-0 gap-2 rounded-md bg-[var(--taiko-accent)] px-5 text-sm font-semibold text-[var(--taiko-paper)] hover:scale-[1.03]"
+                      className="h-12 min-w-[9rem] shrink-0 gap-2 rounded-md bg-[var(--taiko-accent)] px-6 text-base font-semibold tracking-[0.15em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04]"
                     >
                       {tr("进入", "Enter")}
                       <ChevronRight size={17} />
