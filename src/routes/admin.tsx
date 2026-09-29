@@ -223,7 +223,7 @@ function AdminPage() {
     const sourceMidi = parseMidi(await midi.arrayBuffer());
     setBusy(`分析《${songTitle}》音频速度…`);
     const tempo = await decodeAndAnalyzeTempo(files["drums"] ?? files["other"] ?? files["bass"] ?? files["vocals"]!, sourceMidi);
-    if (tempo.status === "review") throw new Error(`速度置信度不足（推算 BPM ${tempo.bpm}），请检查音频或 MIDI`);
+    const needsReview = tempo.status === "review";
     const parsed = tempo.midi;
     const charts = buildAllCharts(parsed, songTitle);
     const fingerprint = chartVersionFingerprint(parsed);
@@ -268,7 +268,9 @@ function AdminPage() {
       sizes,
       charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
       tagIds,
+      published: !needsReview,
     } });
+    return { needsReview, bpm: tempo.bpm };
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -286,8 +288,10 @@ function AdminPage() {
     }
     setNote(null);
     try {
-      await uploadOne(title.trim(), artist, { ...files, midi }, uploadTags);
-      setNote(`《${title.trim()}》已入库，四档谱面已生成`);
+      const result = await uploadOne(title.trim(), artist, { ...files, midi }, uploadTags);
+      setNote(result.needsReview
+        ? `《${title.trim()}》已上传但暂未上架：速度待确认（推算 ${result.bpm} BPM），请在下方曲库点「人工确认 BPM」`
+        : `《${title.trim()}》已入库，四档谱面已生成`);
       setTitle("");
       setArtist("");
       setUploadTags([]);
@@ -303,7 +307,7 @@ function AdminPage() {
   };
 
   const runBatch = async (onlyKey?: string) => {
-    const queue = folderSongs.filter((song) => song.status !== "invalid" && song.status !== "done" && (!onlyKey || song.key === onlyKey));
+    const queue = folderSongs.filter((song) => song.status !== "invalid" && song.status !== "done" && song.status !== "review" && (!onlyKey || song.key === onlyKey));
     if (!queue.length) return;
     setBatchRunning(true);
     setNote(null);
@@ -315,12 +319,12 @@ function AdminPage() {
         return { ...rest, status: "uploading" };
       }));
       try {
-        await uploadOne(song.title.trim(), "", song.files, uploadTags);
+        const result = await uploadOne(song.title.trim(), "", song.files, uploadTags);
         completed++;
         setFolderSongs((current) => current.map((item) => {
           if (item.key !== song.key) return item;
           const { error: _error, ...rest } = item;
-          return { ...rest, status: "done" };
+          return result.needsReview ? { ...rest, status: "review", reviewBpm: result.bpm } : { ...rest, status: "done" };
         }));
       } catch (error) {
         setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, status: "failed", error: (error as Error).message } : item));
@@ -427,6 +431,7 @@ function AdminPage() {
           charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
         },
       });
+      if (!row.published) await update({ data: { id: row.id, published: true } });
       setTempoResults((current) => ({ ...current, [row.id]: `已人工确认 ${Math.round(bpm * 10) / 10} BPM` }));
       await refresh();
     } catch (error) {
@@ -535,7 +540,7 @@ function AdminPage() {
                 <div key={song.key} className="grid grid-cols-[minmax(160px,1fr)_100px_220px] items-center gap-3 border-b border-[var(--taiko-line)]/60 py-2 text-xs">
                   <input
                     value={song.title}
-                    disabled={song.status === "uploading" || song.status === "done"}
+                    disabled={song.status === "uploading" || song.status === "done" || song.status === "review"}
                     onChange={(event) => setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, title: event.target.value } : item))}
                     className="min-w-0 border border-[var(--taiko-line)] bg-transparent px-2 py-1.5 text-base outline-none focus:border-[var(--taiko-accent)] disabled:opacity-60"
                   />
@@ -549,6 +554,7 @@ function AdminPage() {
                     {song.status === "ready" && <span className="text-[var(--taiko-accent)]">可以导入</span>}
                     {song.status === "uploading" && <span>正在导入…</span>}
                     {song.status === "done" && <span className="text-emerald-400">已完成</span>}
+                    {song.status === "review" && <span className="min-w-0 flex-1 truncate text-amber-400" title="已入库但未上架，请在曲库点「人工确认 BPM」">已上传 · 速度待确认（推算 {song.reviewBpm} BPM）</span>}
                     {song.status === "failed" && (
                       <>
                         <span className="min-w-0 flex-1 truncate text-red-400" title={song.error}>失败：{song.error}</span>
@@ -763,7 +769,7 @@ function AdminPage() {
                     : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/60"
                 }`}
               >
-                {s.published ? "已上架" : "已下架"}
+                {s.published ? "已上架" : "未上架 · 待确认"}
               </button>
               <button
                 onClick={() => void regen(s)}

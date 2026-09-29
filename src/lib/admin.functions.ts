@@ -95,6 +95,7 @@ export interface SaveSongInput {
     midi: string;
   };
   sizes: Record<string, number>;
+  published?: boolean;
   charts: { difficulty: string; chart: unknown }[];
   tagIds?: string[];
 }
@@ -121,6 +122,7 @@ export const saveSong = createServerFn({ method: "POST" })
         other_path: data.paths.other,
         midi_path: data.paths.midi,
         sizes: data.sizes,
+        published: data.published ?? true,
       })
       .select("id")
       .single();

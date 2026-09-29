@@ -20,7 +20,8 @@ export interface FolderImportSong {
   files: Partial<Record<ImportFileKey, File>>;
   duplicates: ImportFileKey[];
   missing: ImportFileKey[];
-  status: "ready" | "invalid" | "uploading" | "done" | "failed";
+  status: "ready" | "invalid" | "uploading" | "done" | "review" | "failed";
+  reviewBpm?: number;
   error?: string;
 }
 
