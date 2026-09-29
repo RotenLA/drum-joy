@@ -314,8 +314,8 @@ export function SongPicker({
           songId: item.id,
           offsetMs: 0,
           phaseBeatOffset: 0,
-          bpm: Math.round(loaded.midi.bpm * 100) / 100,
-          timeSignature: loaded.midi.timeSignature,
+          bpm: item.bpm,
+          timeSignature: item.timeSignature,
           audioLeadMs: leadMs,
           chart: null,
         });

@@ -313,7 +313,6 @@ const DENSITY_LIMIT: Record<Difficulty, number> = {
 
 /** 一秒滑窗限密度：保留脚、强拍与强音，优先移除弱的连续手击。 */
 function limitDensity(emits: Emit[], diff: Difficulty, clean: CleanedMidi): Emit[] {
-  const stepsPerSecond = Math.max(1, (clean.bpm / 60) * clean.stepsPerBeat);
   const limit = Math.ceil(DENSITY_LIMIT[diff]);
   const sorted = emits.slice().sort((a, b) => a.step - b.step || b.velocity - a.velocity);
   const kept: Emit[] = [];
@@ -324,7 +323,11 @@ function limitDensity(emits: Emit[], diff: Difficulty, clean: CleanedMidi): Emit
     return (foot ? 80 : 0) + (onBeat ? 60 : 0) + emit.velocity;
   };
   for (const e of sorted) {
-    const recent = kept.filter((item) => item.step > e.step - stepsPerSecond && item.step <= e.step);
+    const atMs = tickToMs(clean.sourceMidi, e.step * clean.stepTicks);
+    const recent = kept.filter((item) => {
+      const itemMs = tickToMs(clean.sourceMidi, item.step * clean.stepTicks);
+      return itemMs > atMs - 1000 && itemMs <= atMs;
+    });
     if (recent.length < limit) {
       kept.push(e);
       continue;

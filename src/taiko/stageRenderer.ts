@@ -1284,8 +1284,10 @@ function chordItems(
           const nx = dx / distance;
           const ny = dy / distance;
           const gap = Math.max(1.5, h * 0.002);
-          const startOffset = Math.min(distance * 0.45, edgeDistance(a, nx, ny) + gap);
-          const endOffset = Math.min(distance * 0.45, edgeDistance(b, -nx, -ny) + gap);
+          const startOffset = edgeDistance(a, nx, ny) + gap;
+          const endOffset = edgeDistance(b, -nx, -ny) + gap;
+          // 两个轮廓已接触或重叠时不画线，避免退回中心后穿过色块。
+          if (startOffset + endOffset >= distance - 0.5) continue;
           const ax = a.x + nx * startOffset;
           const ay = a.y + ny * startOffset;
           const bx = b.x - nx * endOffset;

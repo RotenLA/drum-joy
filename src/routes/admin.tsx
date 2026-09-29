@@ -7,7 +7,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { parseMidi } from "@/taiko/midiFile";
-import { buildAllCharts, midiFingerprint } from "@/taiko/adminChartBuild";
+import { buildAllCharts, chartVersionFingerprint } from "@/taiko/adminChartBuild";
+import { applyConstantTempo, decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
 import {
   groupImportFiles,
   type FolderImportSong,
@@ -20,8 +21,10 @@ import {
   createUploadTargets,
   deleteSong,
   getSongMidiUrl,
+  getSongAnalysisAssets,
   listAllSongs,
   replaceCharts,
+  replaceTempoAndCharts,
   saveSong,
   updateSong,
   listTags,
@@ -63,6 +66,7 @@ interface AdminSongRow {
   bpm: number;
   ts_num: number;
   ts_den: number;
+  midi_fingerprint: string;
   published: boolean;
   created_at: string;
 }
@@ -104,7 +108,9 @@ function AdminPage() {
   const update = useServerFn(updateSong);
   const remove = useServerFn(deleteSong);
   const midiUrlOf = useServerFn(getSongMidiUrl);
+  const analysisAssetsOf = useServerFn(getSongAnalysisAssets);
   const regenerate = useServerFn(replaceCharts);
+  const replaceTempo = useServerFn(replaceTempoAndCharts);
   const fetchTags = useServerFn(listTags);
   const addTag = useServerFn(createTag);
   const renTag = useServerFn(renameTag);
@@ -137,6 +143,7 @@ function AdminPage() {
   const [folderSongs, setFolderSongs] = useState<FolderImportSong[]>([]);
   const [folderIgnored, setFolderIgnored] = useState<string[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
+  const [tempoResults, setTempoResults] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
     const res = await list();
@@ -213,9 +220,13 @@ function AdminPage() {
     if (!midi) throw new Error("缺少 MIDI");
     for (const field of STEM_FIELDS) if (!files[field.key]) throw new Error(`缺少 ${field.label}`);
     setBusy(`解析《${songTitle}》并生成四档谱面…`);
-    const parsed = parseMidi(await midi.arrayBuffer());
+    const sourceMidi = parseMidi(await midi.arrayBuffer());
+    setBusy(`分析《${songTitle}》音频速度…`);
+    const tempo = await decodeAndAnalyzeTempo(files["drums"] ?? files["other"] ?? files["bass"] ?? files["vocals"]!, sourceMidi);
+    if (tempo.status === "review") throw new Error(`速度置信度不足（推算 BPM ${tempo.bpm}），请检查音频或 MIDI`);
+    const parsed = tempo.midi;
     const charts = buildAllCharts(parsed, songTitle);
-    const fingerprint = midiFingerprint(parsed);
+    const fingerprint = chartVersionFingerprint(parsed);
     let durationMs = parsed.durationMs;
     for (const field of STEM_FIELDS) {
       const file = files[field.key];
@@ -249,7 +260,7 @@ function AdminPage() {
       title: songTitle,
       artist: songArtist.trim() || null,
       durationMs,
-      bpm: Math.round(parsed.bpm * 100) / 100,
+      bpm: tempo.bpm,
       tsNum: parsed.timeSignature[0],
       tsDen: parsed.timeSignature[1],
       fingerprint,
@@ -331,13 +342,95 @@ function AdminPage() {
       await regenerate({
         data: {
           songId: row.id,
-          fingerprint: midiFingerprint(parsed),
+          fingerprint: chartVersionFingerprint(parsed),
           charts: charts.map((c) => ({ difficulty: c.difficulty, chart: c.chart })),
         },
       });
       setNote(`《${row.title}》四档谱面已重建`);
     } catch (err) {
       setNote(`重建失败：${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const analyzeExisting = async (onlyId?: string) => {
+    const queue = songs.filter((song) => !onlyId || song.id === onlyId);
+    if (!queue.length || batchRunning) return;
+    setBatchRunning(true);
+    setNote(null);
+    let changed = 0;
+    let failed = 0;
+    for (let index = 0; index < queue.length; index++) {
+      const row = queue[index];
+      if (!row) continue;
+      setBusy(`分析《${row.title}》速度（${index + 1}/${queue.length}）…`);
+      setTempoResults((current) => ({ ...current, [row.id]: "分析中…" }));
+      try {
+        const assets = await analysisAssetsOf({ data: { id: row.id } });
+        const [midiResponse, audioResponse] = await Promise.all([fetch(assets.midiUrl), fetch(assets.audioUrl)]);
+        if (!midiResponse.ok || !audioResponse.ok) throw new Error("歌曲资源下载失败");
+        const sourceMidi = parseMidi(await midiResponse.arrayBuffer());
+        const audioBlob = await audioResponse.blob();
+        const analysis = await decodeAndAnalyzeTempo(new File([audioBlob], `${row.title}.audio`, { type: audioBlob.type }), sourceMidi);
+        if (analysis.status === "review") throw new Error(`置信度不足，建议人工检查 BPM ${analysis.bpm}`);
+        const fingerprint = chartVersionFingerprint(analysis.midi);
+        const differs = Math.abs(Number(row.bpm) - analysis.bpm) >= 0.1 || row.midi_fingerprint !== fingerprint;
+        if (differs) {
+          const charts = buildAllCharts(analysis.midi, row.title);
+          await replaceTempo({
+            data: {
+              songId: row.id,
+              bpm: analysis.bpm,
+              fingerprint,
+              charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
+            },
+          });
+          changed++;
+        }
+        setTempoResults((current) => ({
+          ...current,
+          [row.id]: `${Number(row.bpm)} → ${analysis.bpm} BPM · ${analysis.segments.length} 段 · ${Math.round(analysis.confidence * 100)}%${differs ? " · 已更新" : " · 无变化"}`,
+        }));
+      } catch (error) {
+        failed++;
+        setTempoResults((current) => ({ ...current, [row.id]: `失败：${(error as Error).message}` }));
+      }
+    }
+    setBatchRunning(false);
+    setBusy(null);
+    setNote(`速度分析完成：更新 ${changed} 首，失败 ${failed} 首`);
+    await refresh();
+  };
+
+  const setManualTempo = async (row: AdminSongRow) => {
+    const raw = prompt(`输入《${row.title}》确认后的 BPM（80–180）`, String(Number(row.bpm)));
+    if (raw === null) return;
+    const bpm = Number(raw);
+    if (!Number.isFinite(bpm) || bpm < 80 || bpm > 180) {
+      setNote("BPM 必须在 80–180 之间");
+      return;
+    }
+    setBusy(`按 ${bpm} BPM 更新《${row.title}》…`);
+    try {
+      const { url } = await midiUrlOf({ data: { id: row.id } });
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("MIDI 下载失败");
+      const adjusted = applyConstantTempo(parseMidi(await response.arrayBuffer()), bpm);
+      const fingerprint = chartVersionFingerprint(adjusted);
+      const charts = buildAllCharts(adjusted, row.title);
+      await replaceTempo({
+        data: {
+          songId: row.id,
+          bpm: Math.round(bpm * 10) / 10,
+          fingerprint,
+          charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
+        },
+      });
+      setTempoResults((current) => ({ ...current, [row.id]: `已人工确认 ${Math.round(bpm * 10) / 10} BPM` }));
+      await refresh();
+    } catch (error) {
+      setNote(`人工更新失败：${(error as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -630,12 +723,22 @@ function AdminPage() {
         </div>
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-medium">曲库（{songs.length}）</h2>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索标题或艺人"
-            className="w-56 border border-[var(--taiko-line)] bg-transparent px-3 py-1.5 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
-          />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={batchRunning || busy !== null || songs.length === 0}
+              onClick={() => void analyzeExisting()}
+              className="border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-3 py-1.5 text-xs text-[var(--taiko-accent)] disabled:opacity-40"
+            >
+              {batchRunning ? "正在逐首分析…" : "批量分析速度"}
+            </button>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索标题或艺人"
+              className="w-56 border border-[var(--taiko-line)] bg-transparent px-3 py-1.5 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+            />
+          </div>
         </div>
         <div className="flex flex-col divide-y divide-[var(--taiko-line)]">
           {filtered.map((s) => (
@@ -670,6 +773,20 @@ function AdminPage() {
                 重新生成谱面
               </button>
               <button
+                onClick={() => void analyzeExisting(s.id)}
+                disabled={batchRunning || busy !== null}
+                className="border border-[var(--taiko-line)] px-2 py-1 text-xs hover:border-[var(--taiko-accent)] disabled:opacity-50"
+              >
+                重算速度
+              </button>
+              <button
+                onClick={() => void setManualTempo(s)}
+                disabled={batchRunning || busy !== null}
+                className="border border-[var(--taiko-line)] px-2 py-1 text-xs hover:border-[var(--taiko-accent)] disabled:opacity-50"
+              >
+                人工确认 BPM
+              </button>
+              <button
                 onClick={() => {
                   if (confirm(`删除《${s.title}》？`)) void remove({ data: { id: s.id } }).then(refresh);
                 }}
@@ -678,6 +795,7 @@ function AdminPage() {
                 删除
               </button>
             </div>
+            {tempoResults[s.id] && <p className="mt-1 pl-1 text-[11px] text-[var(--taiko-ink)]/55">{tempoResults[s.id]}</p>}
             <div className="mt-1 flex flex-wrap items-center gap-1.5 pl-1">
               {(tagMap[s.id] ?? []).map((id) => {
                 const t = tags.find((x) => x.id === id);

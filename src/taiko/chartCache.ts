@@ -43,6 +43,15 @@ export function midiFingerprint(midi: ParsedMidi): string {
   return (h >>> 0).toString(36);
 }
 
+/** 云端谱面/下载版本：内容指纹之外纳入重新推算后的变速表。 */
+export function chartVersionFingerprint(midi: ParsedMidi): string {
+  let version = midiFingerprint(midi);
+  for (const tempo of midi.tempos) {
+    version += `.${tempo.tick.toString(36)}-${Math.round(tempo.usPerQuarter).toString(36)}`;
+  }
+  return version;
+}
+
 function readCache(): CacheFile {
   if (typeof localStorage === "undefined") return {};
   try {
