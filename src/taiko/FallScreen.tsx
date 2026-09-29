@@ -778,7 +778,6 @@ export function FallScreen({
             onExit={onExit}
             onStartTutorial={() => setTutorialOpen(true)}
             exitLabel={exitLabel}
-            onSecretUnlock={onSecretUnlock}
           />
 
         )}
