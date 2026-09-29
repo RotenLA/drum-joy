@@ -11,6 +11,8 @@ import { cancelDownload, downloadSong, readStoredAny, scanDownloads, useDownload
 import { LeaderboardDialog } from "./LeaderboardDialog";
 import { songPlayer } from "./player";
 import { emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
+import { audioAlignMs } from "./audioAlign";
+
 import { useLanguage } from "./i18n";
 import { isUnlocked, loadFavorites, loadPlayData, setFavorite, type BestMap, type HistoryEntry } from "./history";
 import { CardControls } from "./CardControls";
