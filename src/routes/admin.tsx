@@ -448,7 +448,11 @@ function AdminPage() {
                   />
                   <span className="tabular-nums text-[var(--taiko-ink)]/60">{Object.keys(song.files).length}/5</span>
                   <div className="flex min-w-0 items-center gap-2">
-                    {song.status === "invalid" && <span className="text-red-400">{song.missing.length ? `缺 ${song.missing.join("、")}` : `重复 ${song.duplicates.join("、")}`}</span>}
+                    {song.status === "invalid" && (
+                      <span className="text-red-400">
+                        {[song.missing.length ? `缺 ${song.missing.join("、")}` : "", song.duplicates.length ? `重复 ${song.duplicates.join("、")}` : ""].filter(Boolean).join("；")}
+                      </span>
+                    )}
                     {song.status === "ready" && <span className="text-[var(--taiko-accent)]">可以导入</span>}
                     {song.status === "uploading" && <span>正在导入…</span>}
                     {song.status === "done" && <span className="text-emerald-400">已完成</span>}

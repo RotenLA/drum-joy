@@ -12,6 +12,7 @@ const SUFFIXES: Record<string, ImportFileKey> = {
   other: "other",
   midi: "midi",
 };
+const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "ogg", "m4a", "aac", "flac"]);
 
 export interface FolderImportSong {
   key: string;
@@ -45,7 +46,9 @@ export function groupImportFiles(files: File[]): FolderImportResult {
       continue;
     }
     const title = base.slice(0, split).trim();
-    if (!title || (key === "midi" && !/\.midi?$/i.test(file.name))) {
+    const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const validFormat = key === "midi" ? extension === "mid" || extension === "midi" : AUDIO_EXTENSIONS.has(extension);
+    if (!title || !validFormat) {
       ignored.push(file.name);
       continue;
     }
