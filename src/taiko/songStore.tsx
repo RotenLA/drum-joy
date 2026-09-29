@@ -56,7 +56,10 @@ export interface SongState {
   mix: MixState;
   /** 音频开头空白长度（毫秒）：播放时跳过，谱面同步平移 */
   audioLeadMs: number;
+  /** 鼓轨真实第一声与 MIDI 首个鼓点的时间差（毫秒）：谱面再平移这个值咬合第一拍 */
+  audioAlignMs: number;
   chart: TaikoChart | null;
+
 }
 
 export interface SongContextValue extends SongState {
