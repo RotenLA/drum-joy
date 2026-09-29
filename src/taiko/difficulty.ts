@@ -314,20 +314,28 @@ const DENSITY_LIMIT: Record<Difficulty, number> = {
 /** 一秒滑窗限密度：保留脚、强拍与强音，优先移除弱的连续手击。 */
 function limitDensity(emits: Emit[], diff: Difficulty, clean: CleanedMidi): Emit[] {
   const stepsPerSecond = Math.max(1, (clean.bpm / 60) * clean.stepsPerBeat);
-  const limit = DENSITY_LIMIT[diff];
+  const limit = Math.ceil(DENSITY_LIMIT[diff]);
   const sorted = emits.slice().sort((a, b) => a.step - b.step || b.velocity - a.velocity);
   const kept: Emit[] = [];
+  const importance = (emit: Emit) => {
+    const local = ((emit.step - clean.phaseSteps) % clean.stepsPerBar + clean.stepsPerBar) % clean.stepsPerBar;
+    const onBeat = local % clean.stepsPerBeat === 0;
+    const foot = emit.part === "kick" || emit.part === "pedalHat";
+    return (foot ? 80 : 0) + (onBeat ? 60 : 0) + emit.velocity;
+  };
   for (const e of sorted) {
-    const recent = kept.filter((x) => x.step > e.step - stepsPerSecond && x.step <= e.step);
+    const recent = kept.filter((item) => item.step > e.step - stepsPerSecond && item.step <= e.step);
     if (recent.length < limit) {
       kept.push(e);
       continue;
     }
-    const local = ((e.step - clean.phaseSteps) % clean.stepsPerBar + clean.stepsPerBar) % clean.stepsPerBar;
-    const essential = e.part === "kick" || e.part === "pedalHat" || e.velocity >= BIG_VELOCITY || local % clean.stepsPerBeat === 0;
-    if (essential) kept.push(e);
+    const weakest = recent.reduce((candidate, item) => importance(item) < importance(candidate) ? item : candidate);
+    if (importance(e) > importance(weakest)) {
+      const index = kept.indexOf(weakest);
+      if (index >= 0) kept.splice(index, 1, e);
+    }
   }
-  return kept;
+  return kept.sort((a, b) => a.step - b.step || b.velocity - a.velocity);
 }
 
 // ================= 组装 =================
