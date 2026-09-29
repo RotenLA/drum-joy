@@ -81,9 +81,11 @@ export const hasAnyStem = (stems: StemMap): boolean => STEM_KINDS.some((k) => st
 const SILENCE_THRESHOLD = 10 ** (-24 / 20);
 /** 裁切时往前保留的余量，避免削掉音头 */
 const LEAD_GUARD_MS = 30;
+/** 鼓轨真实起振阈值：第一下鼓通常远高于底噪，用更高的门限避开气口/底噪 */
+const ONSET_THRESHOLD = 10 ** (-18 / 20);
 
-/** 单轨开头空白长度（毫秒）：首个超过静音阈值的样本时刻 */
-export function leadSilenceMs(buffer: AudioBuffer): number {
+/** 单轨开头空白长度（毫秒）：首个超过给定阈值的样本时刻 */
+export function leadSilenceMs(buffer: AudioBuffer, threshold = SILENCE_THRESHOLD): number {
   const sr = buffer.sampleRate;
   // 以 5ms 为一窗做粗扫，命中后在窗内细找，兼顾精度与速度
   const win = Math.max(1, Math.round(sr * 0.005));
@@ -94,7 +96,7 @@ export function leadSilenceMs(buffer: AudioBuffer): number {
     const end = Math.min(len, start + win);
     for (const data of chans) {
       for (let i = start; i < end; i++) {
-        if (Math.abs(data[i]!) > SILENCE_THRESHOLD) return (i / sr) * 1000;
+        if (Math.abs(data[i]!) > threshold) return (i / sr) * 1000;
       }
     }
   }
@@ -115,3 +117,20 @@ export function stemsLeadMs(stems: StemMap): number {
   if (!Number.isFinite(min)) return 0;
   return Math.max(0, Math.round(min - LEAD_GUARD_MS));
 }
+
+/**
+ * 鼓轨第一声真实出声时刻（原始文件时间轴，毫秒）。
+ * 没有鼓轨时退回最早出声的一轨；用于把谱面第一块咬到真实鼓声上。
+ */
+export function drumsOnsetMs(stems: StemMap): number | null {
+  const drums = stems.drums;
+  if (drums) return leadSilenceMs(drums.buffer, ONSET_THRESHOLD);
+  let min = Infinity;
+  for (const k of STEM_KINDS) {
+    const t = stems[k];
+    if (!t) continue;
+    min = Math.min(min, leadSilenceMs(t.buffer, ONSET_THRESHOLD));
+  }
+  return Number.isFinite(min) ? min : null;
+}
+
