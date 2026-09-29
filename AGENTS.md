@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 
 - Startup watchdog: root component marks booted on mount (covers every route); overlay only on mobile/Unity, never on Preview/desktop, and only when an error was captured — avoids false "Failed to start".
+- Playlist artwork is optional and stored as a private `songs` bucket path on `song_tags`; player reads use short-lived signed URLs so existing playlists need no migration data.
