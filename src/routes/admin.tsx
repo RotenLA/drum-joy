@@ -397,6 +397,82 @@ function AdminPage() {
       )}
 
       <section className="border border-[var(--taiko-line)] p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-medium">导入文件夹</h2>
+            <p className="mt-1 text-xs text-[var(--taiko-ink)]/50">
+              文件名：歌名_vocals / bass / drums / other / midi，歌名可包含下划线
+            </p>
+          </div>
+          <label className="cursor-pointer border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-4 py-2 text-sm text-[var(--taiko-accent)]">
+            选择文件夹
+            <input
+              ref={(input) => {
+                if (input) input.setAttribute("webkitdirectory", "");
+              }}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                const result = groupImportFiles(Array.from(event.target.files ?? []));
+                setFolderSongs(result.songs);
+                setFolderIgnored(result.ignored);
+                setNote(result.songs.length ? `识别到 ${result.songs.length} 首歌，请检查后开始导入` : "没有识别到符合命名规则的歌曲");
+                event.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+
+        {folderSongs.length > 0 && (
+          <div className="mt-4">
+            <div className="mb-2 grid grid-cols-[minmax(160px,1fr)_100px_220px] gap-3 border-b border-[var(--taiko-line)] pb-2 text-xs text-[var(--taiko-ink)]/45">
+              <span>识别出的歌名</span><span>文件</span><span>状态</span>
+            </div>
+            <div className="max-h-72 overflow-y-auto taiko-scroll">
+              {folderSongs.map((song) => (
+                <div key={song.key} className="grid grid-cols-[minmax(160px,1fr)_100px_220px] items-center gap-3 border-b border-[var(--taiko-line)]/60 py-2 text-xs">
+                  <input
+                    value={song.title}
+                    disabled={song.status === "uploading" || song.status === "done"}
+                    onChange={(event) => setFolderSongs((current) => current.map((item) => item.key === song.key ? { ...item, title: event.target.value } : item))}
+                    className="min-w-0 border border-[var(--taiko-line)] bg-transparent px-2 py-1.5 text-base outline-none focus:border-[var(--taiko-accent)] disabled:opacity-60"
+                  />
+                  <span className="tabular-nums text-[var(--taiko-ink)]/60">{Object.keys(song.files).length}/5</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {song.status === "invalid" && <span className="text-red-400">{song.missing.length ? `缺 ${song.missing.join("、")}` : `重复 ${song.duplicates.join("、")}`}</span>}
+                    {song.status === "ready" && <span className="text-[var(--taiko-accent)]">可以导入</span>}
+                    {song.status === "uploading" && <span>正在导入…</span>}
+                    {song.status === "done" && <span className="text-emerald-400">已完成</span>}
+                    {song.status === "failed" && (
+                      <>
+                        <span className="min-w-0 flex-1 truncate text-red-400" title={song.error}>失败：{song.error}</span>
+                        <button type="button" disabled={batchRunning} onClick={() => void runBatch(song.key)} className="shrink-0 border border-[var(--taiko-line)] px-2 py-1 hover:border-[var(--taiko-accent)] disabled:opacity-40">重试</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {folderIgnored.length > 0 && (
+              <p className="mt-2 text-xs text-amber-300/80" title={folderIgnored.join("\n")}>另有 {folderIgnored.length} 个文件因后缀或格式无法识别</p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                disabled={batchRunning || busy !== null || !folderSongs.some((song) => song.status === "ready" || song.status === "failed")}
+                onClick={() => void runBatch()}
+                className="border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-4 py-2 text-sm text-[var(--taiko-accent)] disabled:opacity-40"
+              >
+                {batchRunning ? "正在逐首导入…" : "导入全部可用歌曲"}
+              </button>
+              <span className="text-xs text-[var(--taiko-ink)]/50">使用下方已选标签；歌曲将逐首处理，避免页面卡死</span>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="border border-[var(--taiko-line)] p-4">
         <h2 className="mb-3 text-sm font-medium">上传新歌</h2>
         <form onSubmit={submit} className="flex flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-2">
