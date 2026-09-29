@@ -58,19 +58,12 @@ function Index() {
 
 const UPGRADE_COPY: Record<string, { title: string; body: string; exit: string }> = {
   "zh-CN": { title: "系统浏览器组件版本过低", body: "请升级 Android System WebView、Chrome 或系统后重试。", exit: "退出" },
-  "zh-TW": { title: "系統瀏覽器元件版本過低", body: "請升級 Android System WebView、Chrome 或系統後重試。", exit: "退出" },
   en: { title: "System browser component is too old", body: "Update Android System WebView, Chrome, or your system, then try again.", exit: "Exit" },
-  ja: { title: "システムのブラウザ部品が古すぎます", body: "Android System WebView、Chrome、またはシステムを更新してください。", exit: "終了" },
-  ko: { title: "시스템 브라우저 구성 요소가 너무 오래되었습니다", body: "Android System WebView, Chrome 또는 시스템을 업데이트한 후 다시 시도하세요.", exit: "종료" },
-  fr: { title: "Le composant navigateur est trop ancien", body: "Mettez à jour Android System WebView, Chrome ou le système, puis réessayez.", exit: "Quitter" },
-  de: { title: "Die Browser-Komponente ist zu alt", body: "Aktualisieren Sie Android System WebView, Chrome oder das System und versuchen Sie es erneut.", exit: "Beenden" },
-  it: { title: "Il componente browser è troppo vecchio", body: "Aggiorna Android System WebView, Chrome o il sistema, poi riprova.", exit: "Esci" },
-  es: { title: "El componente del navegador es demasiado antiguo", body: "Actualiza Android System WebView, Chrome o el sistema y vuelve a intentarlo.", exit: "Salir" },
 };
 
 function UnsupportedBrowser({ engine }: { engine: number }) {
-  const raw = new URLSearchParams(window.location.search).get("lang")?.toLowerCase() ?? "zh-cn";
-  const key = raw === "zh" || raw.startsWith("zh-cn") || raw.startsWith("zh-hans") ? "zh-CN" : raw.startsWith("zh-tw") || raw.startsWith("zh-hant") || raw.startsWith("zh-hk") ? "zh-TW" : raw.split("-")[0] ?? "zh-CN";
+  const raw = new URLSearchParams(window.location.search).get("lang")?.toLowerCase() ?? "en";
+  const key = raw.startsWith("zh") ? "zh-CN" : "en";
   const copy = UPGRADE_COPY[key] ?? UPGRADE_COPY["en"] ?? {
     title: "System browser component is too old",
     body: "Please update your system browser component and try again.",

@@ -152,7 +152,7 @@ export function TutorialOverlay({ onLeave, gestureHits = false }: { onLeave: () 
       {step.targets && <p className="mt-5 text-sm text-[rgba(255,255,255,0.62)]">{labels.progress}: {progress} / {needed}</p>}
       {step.kind === "parts" && <p className="mt-5 text-sm text-[rgba(255,255,255,0.62)]">{labels.progress}: {touched.size} / {VISIBLE_PARTS.nine.length}</p>}
       <div className="mt-7 flex flex-wrap gap-2">
-        {index > 0 && <Button variant="outline" onClick={goBack} className="h-9 min-w-24 border-[var(--taiko-glass-line)] bg-transparent px-4 text-sm text-[var(--taiko-ink)]">{language.startsWith("zh") ? (language === "zh-TW" ? "上一步" : "上一步") : "Back"}</Button>}
+        {index > 0 && <Button variant="outline" onClick={goBack} className="h-9 min-w-24 border-[var(--taiko-glass-line)] bg-transparent px-4 text-sm text-[var(--taiko-ink)]">{language === "zh-CN" ? "上一步" : "Back"}</Button>}
         <Button onClick={advance} disabled={!canNext} className="h-9 min-w-24 bg-[var(--taiko-accent)] px-4 text-sm text-[var(--taiko-paper)] hover:bg-[var(--taiko-accent-2)]">{step.kind === "done" ? labels.finish : labels.next}</Button>
         {step.targets && <Button variant="outline" onClick={reset} className="h-9 min-w-24 border-[var(--taiko-glass-line)] bg-transparent px-4 text-sm text-[var(--taiko-ink)]">{labels.retry}</Button>}
         {step.targets && !passed && <Button variant="ghost" onClick={advance} className="h-9 min-w-24 px-4 text-sm text-[rgba(255,255,255,0.58)]">{labels.skip}</Button>}
