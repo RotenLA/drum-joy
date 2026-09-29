@@ -493,9 +493,6 @@ export function SongPicker({
                     : CARD_GRADIENTS[i % CARD_GRADIENTS.length],
               }}
             >
-              {pl.backgroundUrl && (
-                <img src={pl.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-              )}
               <span className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,12,18,0.05), rgba(10,12,18,0.72))" }} />
               <span className="relative z-10 flex h-full w-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
                 <span className="flex min-w-0 flex-col gap-1">
