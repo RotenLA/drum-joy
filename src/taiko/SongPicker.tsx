@@ -643,10 +643,10 @@ export function SongPicker({
                         <Heart size={17} className={fav ? "fill-[#ff5a6e] text-[#ff5a6e]" : "text-[rgba(255,255,255,0.75)]"} />
                       </Button>
                     </div>
-                    <div className="taiko-song-detail-controls my-auto flex min-h-[150px] items-center justify-center py-1">
+                    <div className="taiko-song-detail-controls my-auto flex min-h-[136px] items-center justify-center py-1">
                       <CardControls songId={item.id} bests={bests} />
                     </div>
-                    <div className="grid shrink-0 grid-cols-[minmax(9rem,1fr)_auto] items-end gap-4 border-l-4 border-[var(--taiko-accent)] py-2 pl-4 pr-1">
+                    <div className="grid shrink-0 grid-cols-[minmax(9rem,1fr)_minmax(7.5rem,9rem)] items-end gap-3 border-l-4 border-[var(--taiko-accent)] py-1.5 pl-4 pr-1">
                       <div className="min-w-0">
                         <HorizontalTitle title={item.title} compact />
                         <span className="block text-[11px] tabular-nums text-[rgba(255,255,255,0.72)]">
@@ -661,7 +661,7 @@ export function SongPicker({
                           else void downloadSong(item);
                         }}
                         disabled={busyThis || (locked && downloaded)}
-                        className="relative h-12 min-w-[9rem] shrink-0 gap-2 overflow-hidden rounded-md bg-[var(--taiko-accent)] px-6 text-base font-semibold tracking-[0.15em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04] disabled:opacity-60"
+                        className="relative h-11 min-w-0 gap-1.5 overflow-hidden rounded-md bg-[var(--taiko-accent)] px-3 text-sm font-semibold text-[var(--taiko-paper)] transition-transform hover:scale-[1.03] disabled:opacity-60"
                       >
                         {busyThis ? <><Loader2 size={16} className="animate-spin" />{tr("准备中", "Loading")}</>
                           : downloading ? <><X size={16} />{dl.percent}%</>
