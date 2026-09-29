@@ -1,6 +1,9 @@
 /**
- * 基础鼓节奏型谱面：MIDI 只提供小节网格、每段疏密、重音位置与过门位置，
- * 实际音符从节奏型库中挑选，同一乐句内重复同一型，只在乐句尾加变化/过门。
+ * 歌曲专属节奏型谱面。
+ *
+ * 流程：清洗后的骨架 → 小节律动聚类（提取这首歌出现频次最高的 2~3 个主干型）
+ * → 四档难度在主干型基础上按各档规则取舍 → 乐句尾变化 / 过门。
+ * 音符时间在 difficulty 层回填原 MIDI 的真实击打毫秒（见 alignEmits）。
  */
 import type { PartId } from "./laneLayouts";
 import type { BarSkeleton, Skeleton } from "./skeleton";
@@ -17,6 +20,14 @@ export interface PatternHit {
 /** 0 安静 / 1 普通 / 2 密集 */
 type Level = 0 | 1 | 2;
 
+/** 一个小节的主干律动（位置单位：八分音符） */
+export interface GrooveTemplate {
+  kick8: number[];
+  snare8: number[];
+  hatDiv: 4 | 8 | 16;
+  count: number;
+}
+
 interface BarCtx {
   beats: number;
   spb: number; // steps per beat (4)
@@ -24,6 +35,7 @@ interface BarCtx {
   bar: BarSkeleton;
   ride: boolean;
   variant: boolean; // 乐句尾小变化
+  groove: GrooveTemplate;
 }
 
 type Gen = (c: BarCtx) => Array<[number, PartId, number?]>;
@@ -33,52 +45,84 @@ const beatsOf = (c: BarCtx) => Array.from({ length: c.beats }, (_, i) => i);
 const backbeats = (c: BarCtx) =>
   c.beats === 3 ? [1, 2] : beatsOf(c).filter((b) => b % 2 === 1);
 
-/** 从候选底鼓型中挑与 MIDI 底鼓最吻合的一个（以八分为单位） */
-function pickKick(c: BarCtx, candidates: number[][]): number[] {
-  const src = c.bar.slots.kick ?? [];
-  if (src.length === 0) return candidates[0]!;
-  let best = candidates[0]!;
-  let bestScore = -Infinity;
-  for (const cand of candidates) {
-    let score = 0;
-    for (const e of cand) {
-      const step = (e * c.spb) / 2;
-      score += src.some((s) => Math.abs(s - step) <= 1) ? 2 : -1;
-    }
-    if (score > bestScore) {
-      bestScore = score;
-      best = cand;
-    }
-  }
-  return best;
+const uniqSort = (xs: number[]) => [...new Set(xs)].sort((a, b) => a - b);
+
+// ================= 律动提取 =================
+
+function defaultGroove(beats: number, level: Level): GrooveTemplate {
+  const bb = beats === 3 ? [1, 2] : Array.from({ length: beats }, (_, i) => i).filter((b) => b % 2 === 1);
+  return {
+    kick8: beats >= 4 ? (level === 2 ? [0, 5] : [0, 4]) : [0],
+    snare8: bb.map((b) => b * 2),
+    hatDiv: level === 2 ? 8 : 4,
+    count: 0,
+  };
 }
 
-function kickCandidates(c: BarCtx, rich: boolean): number[][] {
-  const e = c.beats * 2; // 八分数
-  const base = [0, ...(c.beats >= 4 ? [4] : [])];
-  const list: number[][] = [[0], base];
-  if (c.beats >= 4) {
-    list.push([0, 5], [0, 4, 5]);
-    if (rich) list.push([0, 3, 4], [0, 1, 4], [0, 3, 5], [0, 4, 6]);
+/**
+ * 把每小节的底鼓 / 军鼓 / 镲细分投影到八分网格，按疏密档位统计频次，
+ * 取出现最多的一型作为该档的主干律动 —— 这样每首歌都有自己的律动个性。
+ */
+export function extractGrooves(sk: Skeleton, beats: number): Record<Level, GrooveTemplate> {
+  const spb = sk.stepsPerBeat;
+  const eighth = Math.max(1, spb / 2);
+  const counts = sk.bars.map((b) => b.noteCount).filter((n) => n > 0).sort((a, b) => a - b);
+  const median = counts[Math.floor(counts.length / 2)] ?? 1;
+
+  const tally = new Map<string, GrooveTemplate & { level: Level }>();
+  for (const bar of sk.bars) {
+    if (bar.noteCount === 0 || bar.isFill) continue;
+    const level = levelOf(bar, median, beats);
+    if (level === 0) continue;
+    const to8 = (slots: number[] | undefined) =>
+      uniqSort((slots ?? []).map((s) => Math.round(s / eighth))).filter((s) => s < beats * 2);
+    const kick8 = to8(bar.slots.kick);
+    const snare8 = to8(bar.slots.snare);
+    if (kick8.length === 0 && snare8.length === 0) continue;
+    const hatDiv = bar.hatDiv === 0 ? 4 : bar.hatDiv;
+    const key = `${level}|${kick8.join(",")}|${snare8.join(",")}|${hatDiv}`;
+    const prev = tally.get(key);
+    if (prev) prev.count++;
+    else tally.set(key, { kick8, snare8, hatDiv, count: 1, level });
   }
-  return list.filter((k) => k.every((x) => x < e));
+
+  const best: Record<Level, GrooveTemplate | undefined> = { 0: undefined, 1: undefined, 2: undefined };
+  for (const t of tally.values()) {
+    const cur = best[t.level];
+    if (!cur || t.count > cur.count) best[t.level] = { kick8: t.kick8, snare8: t.snare8, hatDiv: t.hatDiv, count: t.count };
+  }
+
+  const pick = (level: Level): GrooveTemplate => {
+    const found = best[level] ?? best[1] ?? best[2] ?? best[0];
+    if (!found) return defaultGroove(beats, level);
+    return sanitize(found, beats);
+  };
+  return { 0: pick(0), 1: pick(1), 2: pick(2) };
 }
+
+/** 主干型安全化：底鼓必含首拍且不过密，军鼓缺失时补反拍 */
+function sanitize(t: GrooveTemplate, beats: number): GrooveTemplate {
+  const bb = beats === 3 ? [1, 2] : Array.from({ length: beats }, (_, i) => i).filter((b) => b % 2 === 1);
+  let kick8 = uniqSort([0, ...t.kick8]).slice(0, Math.max(2, beats));
+  let snare8 = uniqSort(t.snare8).slice(0, Math.max(2, beats));
+  if (snare8.length === 0) snare8 = bb.map((b) => b * 2);
+  if (kick8.length === 0) kick8 = [0];
+  return { kick8, snare8, hatDiv: t.hatDiv, count: t.count };
+}
+
+const quarterOnly = (xs8: number[]) => uniqSort(xs8.filter((x) => x % 2 === 0));
+
+// ================= 四档生成 =================
 
 const EASY: Gen = (c) => {
   const out: Array<[number, PartId, number?]> = [];
   const bb = backbeats(c);
-  if (c.level === 0) {
-    for (const b of beatsOf(c)) out.push([b * c.spb, "hihat"]);
-    out.push([(bb[bb.length - 1] ?? 0) * c.spb, "snare"]);
-  } else {
-    const eighths = c.level === 2 && c.variant;
-    for (const b of beatsOf(c)) {
-      out.push([b * c.spb, "hihat"]);
-      if (eighths && !bb.includes(b)) out.push([b * c.spb + c.spb / 2, "hihat"]);
-    }
-    for (const b of bb) out.push([b * c.spb, "snare"]);
-    // 偶尔正拍军鼓：乐句尾最后一拍加一下
-  }
+  // 轻松：只用正拍，绝不切分
+  let snares = quarterOnly(c.groove.snare8).map((x) => x / 2);
+  if (snares.length === 0) snares = bb;
+  if (c.level === 0) snares = snares.slice(-1);
+  for (const b of beatsOf(c)) out.push([b * c.spb, "hihat"]);
+  for (const b of snares) out.push([b * c.spb, "snare"]);
   return out;
 };
 
@@ -90,13 +134,16 @@ const BEGINNER: Gen = (c) => {
     out.push([b * c.spb, "hihat"]);
     if (eighthHat) out.push([b * c.spb + c.spb / 2, "hihat"]);
   }
+  let snares = quarterOnly(c.groove.snare8).map((x) => x / 2);
+  if (snares.length === 0) snares = bb;
   if (c.level === 0) {
     out.push([0, "kick"]);
-    out.push([(bb[bb.length - 1] ?? 0) * c.spb, "snare"]);
+    out.push([(snares[snares.length - 1] ?? 0) * c.spb, "snare"]);
     return out;
   }
-  for (const b of bb) out.push([b * c.spb, "snare"]);
-  const kicks = kickCandidates(c, false)[1]!;
+  for (const b of snares) out.push([b * c.spb, "snare"]);
+  // 入门：底鼓尽量少切分，取主干型里的正拍位（首拍必留）
+  const kicks = uniqSort([0, ...quarterOnly(c.groove.kick8)]).slice(0, 2);
   for (const k of kicks) out.push([(k * c.spb) / 2, "kick"]);
   return out;
 };
@@ -105,13 +152,16 @@ const STANDARD: Gen = (c) => {
   const out: Array<[number, PartId, number?]> = [];
   const bb = backbeats(c);
   const cym: PartId = c.ride ? "ride" : "hihat";
+  const eighthCym = c.level >= 1 && c.groove.hatDiv >= 8;
   for (const b of beatsOf(c)) {
     out.push([b * c.spb, cym]);
-    if (c.level >= 1) out.push([b * c.spb + c.spb / 2, cym]);
+    if (eighthCym) out.push([b * c.spb + c.spb / 2, cym]);
   }
-  for (const b of c.level === 0 ? bb.slice(-1) : bb) out.push([b * c.spb, "snare"]);
-  const kicks = c.level === 0 ? [0] : pickKick(c, kickCandidates(c, c.level === 2));
-  for (const k of kicks) out.push([(k * c.spb) / 2, "kick"]);
+  let snare8 = c.groove.snare8;
+  if (snare8.length === 0) snare8 = bb.map((b) => b * 2);
+  for (const s of c.level === 0 ? snare8.slice(-1) : snare8) out.push([(s * c.spb) / 2, "snare"]);
+  const kick8 = c.level === 0 ? [0] : c.groove.kick8;
+  for (const k of kick8.slice(0, 4)) out.push([(k * c.spb) / 2, "kick"]);
   if (c.bar.isPhraseStart && c.level >= 1 && (c.bar.slots.crash?.length ?? 0) > 0) out.push([0, "crash", 115]);
   for (const s of c.bar.openHat) if (!c.ride && s % (c.spb / 2) === 0) out.push([s, "hihat", 100]);
   return out;
@@ -120,7 +170,7 @@ const STANDARD: Gen = (c) => {
 const HARD: Gen = (c) => {
   const out = STANDARD(c);
   const src = c.bar.slots.kick ?? [];
-  // 困难：密集段底鼓更贴近 MIDI（允许十六分，但每拍最多 2 下），镲随 MIDI 细分
+  // 困难：密集段底鼓更贴近 MIDI（允许十六分，但每拍最多 2 下）
   if (c.level === 2) {
     const perBeat = new Map<number, number>();
     for (const s of src) {
@@ -128,6 +178,10 @@ const HARD: Gen = (c) => {
       if ((perBeat.get(b) ?? 0) >= 2) continue;
       perBeat.set(b, (perBeat.get(b) ?? 0) + 1);
       out.push([s, "kick"]);
+    }
+    // 密集段军鼓也吃一次原曲的反拍细分，让副歌更有存在感
+    for (const s of c.bar.slots.snare ?? []) {
+      if (s % (c.spb / 2) === 0) out.push([s, "snare"]);
     }
   }
   return out;
@@ -166,6 +220,7 @@ export function patternEmits(sk: Skeleton, diff: PatternDifficulty, beatsPerBar:
   const counts = bars.map((b) => b.noteCount).filter((n) => n > 0).sort((a, b) => a - b);
   const median = counts[Math.floor(counts.length / 2)] ?? 1;
   const levels = bars.map((b) => levelOf(b, median, beats));
+  const grooves = extractGrooves(sk, beats);
 
   const out: PatternHit[] = [];
   for (let i = 0; i < bars.length; i++) {
@@ -188,6 +243,7 @@ export function patternEmits(sk: Skeleton, diff: PatternDifficulty, beatsPerBar:
       bar,
       ride: diff !== "easy" && diff !== "beginner" && bar.ridePrimary,
       variant: phraseEnd && bar.index % 8 === 7,
+      groove: grooves[level],
     };
     let hits = GEN[diff](c);
     const doFill = (diff === "hard" && bar.isFill) || (phraseEnd && nextPhraseStart && bar.index % 8 === 7 && level >= 1);
