@@ -115,7 +115,7 @@ function candidateScore(
   const precision = grid / Math.max(1, gridWeight);
   const coverage = grid / Math.max(0.001, onsetTotal);
   // precision 防止高 BPM 网格乱撞，coverage 则用于解开半速/双速歧义。
-  return periodicity * 0.55 + precision * 0.25 + Math.min(1, coverage) * 0.2;
+  return periodicity * 0.32 + precision * 0.2 + Math.min(1, coverage) * 0.48;
 }
 
 function bestTempo(envelope: Float32Array, midi: ParsedMidi, from: number, to: number) {
