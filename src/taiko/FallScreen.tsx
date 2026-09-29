@@ -818,7 +818,7 @@ export function FallScreen({
         )}
         {phase === "ended" && (
           <Overlay>
-            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Result</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">{tr("结算", "Result")}</p>
 
             <div className="flex items-center gap-4">
               <p className="text-5xl font-black text-[var(--taiko-accent)]">
