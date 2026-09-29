@@ -42,6 +42,10 @@ export const STEPS_PER_BEAT = 4;
 const WEAK_CYMBAL_VELOCITY = 45;
 /** 底鼓 / 军鼓的噪声门限（AI 分轨常在这个力度以下吐出残响碎音） */
 const WEAK_DRUM_VELOCITY = 38;
+/** 通鼓噪声门限：低频串音常被识别成极弱通鼓 */
+const WEAK_TOM_VELOCITY = 32;
+const TOM_PARTS = new Set<PartId>(["highTom", "midTom", "floorTom"]);
+
 /** 同一部件的最小间隔：更近的判为同一击打的重复触发 */
 const DEBOUNCE_MS = 62;
 /** 单手同刻部件上限（双手） */
