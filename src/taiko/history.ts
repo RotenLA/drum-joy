@@ -108,7 +108,7 @@ export async function addHistory(
       if (playDataPromise) {
         playDataPromise = playDataPromise.then((cached) => {
           const history = [entry, ...cached.history].slice(0, MAX);
-          return { ...cached, history, bests: localBests(history) };
+          return { ...cached, history, bests: mergeBest(cached.bests, entry) };
         });
       }
     } catch {
@@ -132,6 +132,7 @@ export async function addHistory(
 export function clearHistory(): void {
   try {
     localStorage.removeItem(KEY);
+    playDataPromise = null;
   } catch {
     // ignore
   }
