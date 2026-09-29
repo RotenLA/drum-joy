@@ -101,7 +101,10 @@ export function FallScreen({
   const countdownMsRef = useRef(0);
   const countdownBeatsRef = useRef(4);
   const countdownTargetRef = useRef(0);
+  /** 音频时钟唤醒重试次数（挂起时倒计时会卡住） */
+  const resumeTriesRef = useRef(0);
   const beatMsRef = useRef(500);
+
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
   /** 本局是否真正开始演奏过（用于中途退出也记历史） */
