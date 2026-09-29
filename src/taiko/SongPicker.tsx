@@ -361,6 +361,10 @@ export function SongPicker({
     detailScrollTimerRef.current = window.setTimeout(settleDetailSelection, 110);
   };
 
+  useEffect(() => () => {
+    if (detailScrollTimerRef.current !== null) window.clearTimeout(detailScrollTimerRef.current);
+  }, []);
+
   useEffect(() => {
     if (!openList || !selectedId) return;
     const frame = window.requestAnimationFrame(() => {
