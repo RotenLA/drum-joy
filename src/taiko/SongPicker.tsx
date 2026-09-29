@@ -451,7 +451,7 @@ export function SongPicker({
 
   return (
     <div className="absolute inset-0 z-20 flex flex-col bg-[var(--taiko-picker-glass)] backdrop-blur-[16px]">
-      <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-3 pl-14 pr-3 sm:pr-4">
+      <div className="taiko-picker-header grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-3 pl-14 pr-3 sm:pr-4">
         <div className="flex min-w-0 items-center gap-2">
           {openList ? (
             <Button
@@ -572,20 +572,20 @@ export function SongPicker({
         </div>
       ) : (
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          <div className="relative z-10 grid h-full min-h-0 w-full grid-cols-[minmax(250px,43%)_minmax(0,1fr)] items-center gap-[clamp(18px,4vw,66px)] px-[clamp(20px,5vw,76px)] pb-3">
-            <div className="flex h-[min(92%,650px)] min-h-0 min-w-0 flex-col" style={{ transform: `skewX(${DETAIL_SKEW}deg)` }}>
+          <div className="taiko-detail-layout relative z-10 grid h-full min-h-0 w-full grid-cols-[minmax(250px,43%)_minmax(0,1fr)] items-center gap-[clamp(18px,4vw,66px)] px-[clamp(20px,5vw,76px)] pb-3">
+            <div className="taiko-detail-list flex h-[min(92%,650px)] min-h-0 min-w-0 flex-col" style={{ transform: `skewX(${DETAIL_SKEW}deg)` }}>
               <div className="shrink-0 pb-1 pl-8 text-xs font-semibold tracking-[0.18em] text-[rgba(255,255,255,0.62)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                 {activePlaylist?.name ?? ""}
               </div>
               <div className="relative min-h-0 flex-1">
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-1 right-4 top-[clamp(112px,20vh,160px)] z-10 h-[clamp(48px,9vh,72px)] -translate-x-3 rounded-lg border-l-4 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.78)] shadow-lg"
+                  className="taiko-detail-slot pointer-events-none absolute left-1 right-4 top-[clamp(112px,20vh,160px)] z-0 h-[clamp(48px,9vh,72px)] -translate-x-3 rounded-lg border-l-4 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.78)] shadow-lg"
                 />
                 <div
                   ref={detailScrollRef}
                   onScroll={onDetailScroll}
-                  className="taiko-detail-scroll absolute inset-0 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
+                  className="taiko-detail-scroll taiko-detail-scroll-list absolute inset-0 z-10 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
                 >
                 {activeSongs.map((item, index) => {
                   const on = item.id === selectedId;
@@ -598,7 +598,7 @@ export function SongPicker({
                       onClick={() => {
                         pickSong(item);
                       }}
-                      className={`relative z-20 mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] w-[82%] flex-col items-stretch justify-center overflow-visible rounded-lg border-l-4 bg-transparent px-5 text-left shadow-lg transition-colors duration-150 ${on ? "border-transparent text-[var(--taiko-paper)]" : "border-[rgba(255,255,255,0.34)] text-[rgba(255,255,255,0.9)]"}`}
+                      className={`taiko-detail-row relative mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] w-[82%] flex-col items-stretch justify-center overflow-visible rounded-lg border-l-4 bg-transparent px-5 text-left shadow-lg transition-colors duration-150 ${on ? "z-20 border-transparent text-[var(--taiko-paper)]" : "z-10 border-[rgba(255,255,255,0.34)] text-[rgba(255,255,255,0.9)]"}`}
                     >
                       <span aria-hidden="true" className={`absolute inset-0 z-0 rounded-lg transition-colors ${on ? "bg-transparent" : "bg-[rgba(15,16,20,0.56)] hover:bg-[rgba(25,26,31,0.72)]"}`} />
                       <span className="relative z-20 block min-w-0 [text-shadow:0_1px_3px_rgba(0,0,0,0.55)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
@@ -621,7 +621,7 @@ export function SongPicker({
             </div>
 
             <div
-              className="relative flex h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] min-h-0 min-w-0 items-stretch justify-self-center overflow-hidden rounded-lg border border-[var(--taiko-glass-line-strong)] shadow-2xl backdrop-blur-[18px]"
+              className="taiko-detail-card relative flex h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] min-h-0 min-w-0 items-stretch justify-self-center overflow-hidden rounded-lg border border-[var(--taiko-glass-line-strong)] shadow-2xl backdrop-blur-[18px]"
               style={{ transform: `skewX(${DETAIL_SKEW}deg)`, background: activePlaylistBackground }}
             >
               <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
