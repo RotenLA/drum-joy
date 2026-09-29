@@ -168,13 +168,45 @@ export const replaceCharts = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+/** 速度重算：原地更新歌曲元数据与四档谱面，不改变歌曲身份或关联数据。 */
+export const replaceTempoAndCharts = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      songId: string;
+      bpm: number;
+      fingerprint: string;
+      charts: { difficulty: string; chart: unknown }[];
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error: deleteError } = await supabaseAdmin.from("song_charts").delete().eq("song_id", data.songId);
+    if (deleteError) throw new Error(deleteError.message);
+    const { error: chartError } = await supabaseAdmin.from("song_charts").insert(
+      data.charts.map((chart) => ({
+        song_id: data.songId,
+        difficulty: chart.difficulty,
+        midi_fingerprint: data.fingerprint,
+        chart: chart.chart as never,
+      })),
+    );
+    if (chartError) throw new Error(chartError.message);
+    const { error: songError } = await supabaseAdmin
+      .from("songs")
+      .update({ bpm: data.bpm, midi_fingerprint: data.fingerprint })
+      .eq("id", data.songId);
+    if (songError) throw new Error(songError.message);
+    return { ok: true as const };
+  });
+
 /** 后台列表（含未上架） */
 export const listAllSongs = createServerFn({ method: "GET" }).handler(async () => {
   await requireAdmin();
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("songs")
-    .select("id, title, artist, duration_ms, bpm, ts_num, ts_den, published, created_at")
+    .select("id, title, artist, duration_ms, bpm, ts_num, ts_den, midi_fingerprint, published, created_at")
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return { songs: data ?? [] };
@@ -237,6 +269,31 @@ export const getSongMidiUrl = createServerFn({ method: "POST" })
       .createSignedUrl(song.midi_path, 3600);
     if (sErr || !signed) throw new Error(sErr?.message ?? "取链接失败");
     return { url: signed.signedUrl };
+  });
+
+/** 后台速度分析所需资源；优先鼓分轨，无鼓分轨时回退到其他可用分轨。 */
+export const getSongAnalysisAssets = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: song, error } = await supabaseAdmin
+      .from("songs")
+      .select("midi_path, drums_path, other_path, bass_path, vocals_path")
+      .eq("id", data.id)
+      .single();
+    if (error || !song) throw new Error("歌曲不存在");
+    const sign = async (path: string) => {
+      if (/^https?:\/\//i.test(path)) return path;
+      const { data: signed, error: signError } = await supabaseAdmin.storage
+        .from(BUCKET)
+        .createSignedUrl(path, 3600);
+      if (signError || !signed) throw new Error(signError?.message ?? "取链接失败");
+      return signed.signedUrl;
+    };
+    const audioPath = song.drums_path ?? song.other_path ?? song.bass_path ?? song.vocals_path;
+    if (!audioPath) throw new Error("没有可分析的音频分轨");
+    return { midiUrl: await sign(song.midi_path), audioUrl: await sign(audioPath) };
   });
 
 /* ---------------- 自定义标签 ---------------- */
