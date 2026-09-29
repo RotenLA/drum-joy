@@ -66,24 +66,37 @@ export function onsetEnvelope(buffer: AudioBuffer): Float32Array {
   return onset;
 }
 
-function midiAccentAtBeat(midi: ParsedMidi, beat: number): number {
-  const tick = beat * midi.ppq;
-  const radius = midi.ppq / 10;
-  let score = 0;
+function midiAccents(midi: ParsedMidi): Float32Array {
+  const maxBeat = Math.ceil(midi.notes.reduce((max, note) => Math.max(max, note.tick), 0) / midi.ppq) + 2;
+  const accents = new Float32Array(maxBeat);
   for (const note of midi.notes) {
-    if (Math.abs(note.tick - tick) > radius) continue;
+    const beat = Math.round(note.tick / midi.ppq);
+    if (Math.abs(note.tick - beat * midi.ppq) > midi.ppq / 10 || beat < 0 || beat >= accents.length) continue;
     const strength = Math.max(0.2, note.velocity / 127);
-    if (note.note === 35 || note.note === 36) score += 1.3 * strength;
-    else if (note.note === 38 || note.note === 40) score += strength;
-    else if (note.note === 49 || note.note === 57) score += 1.15 * strength;
-    else score += 0.25 * strength;
+    if (note.note === 35 || note.note === 36) accents[beat] = (accents[beat] ?? 0) + 1.3 * strength;
+    else if (note.note === 38 || note.note === 40) accents[beat] = (accents[beat] ?? 0) + strength;
+    else if (note.note === 49 || note.note === 57) accents[beat] = (accents[beat] ?? 0) + 1.15 * strength;
+    else accents[beat] = (accents[beat] ?? 0) + 0.25 * strength;
   }
-  return score;
+  return accents;
+}
+
+function pulseBpmOf(envelope: Float32Array, from: number, to: number): number {
+  const intervals: number[] = [];
+  let previous = -1;
+  for (let i = from + 1; i < to - 1; i++) {
+    const value = envelope[i] ?? 0;
+    if (value < 0.3 || value < (envelope[i - 1] ?? 0) || value < (envelope[i + 1] ?? 0)) continue;
+    if (previous >= 0 && i - previous >= 8 && i - previous <= 80) intervals.push(i - previous);
+    previous = i;
+  }
+  return intervals.length >= 4 ? normalizeBpm((60 * ENVELOPE_HZ) / median(intervals)) : 0;
 }
 
 function candidateScore(
   envelope: Float32Array,
-  midi: ParsedMidi,
+  accents: Float32Array,
+  pulseBpm: number,
   bpm: number,
   from: number,
   to: number,
@@ -108,32 +121,24 @@ function candidateScore(
     const at = Math.round((beat * 60 * ENVELOPE_HZ) / bpm);
     if (at < from || at >= to) continue;
     const local = Math.max(envelope[at] ?? 0, envelope[at - 1] ?? 0, envelope[at + 1] ?? 0);
-    const accent = 0.6 + Math.min(1.8, midiAccentAtBeat(midi, beat));
+    const accent = 0.6 + Math.min(1.8, accents[beat] ?? 0);
     grid += local * accent;
     gridWeight += accent;
   }
   const precision = grid / Math.max(1, gridWeight);
   const coverage = grid / Math.max(0.001, onsetTotal);
-  const peakIntervals: number[] = [];
-  let previousPeak = -1;
-  for (let i = from + 1; i < to - 1; i++) {
-    const value = envelope[i] ?? 0;
-    if (value < 0.3 || value < (envelope[i - 1] ?? 0) || value < (envelope[i + 1] ?? 0)) continue;
-    if (previousPeak >= 0 && i - previousPeak >= 8 && i - previousPeak <= 80) peakIntervals.push(i - previousPeak);
-    previousPeak = i;
-  }
-  const pulseBpm = peakIntervals.length >= 4 ? normalizeBpm((60 * ENVELOPE_HZ) / median(peakIntervals)) : 0;
   const pulseFit = pulseBpm > 0 ? Math.max(0, 1 - Math.abs(bpm - pulseBpm) / 12) : 0;
   // precision 防止高 BPM 网格乱撞，coverage 则用于解开半速/双速歧义。
   return periodicity * 0.27 + precision * 0.18 + Math.min(1, coverage) * 0.35 + pulseFit * 0.2;
 }
 
-function bestTempo(envelope: Float32Array, midi: ParsedMidi, from: number, to: number) {
+function bestTempo(envelope: Float32Array, accents: Float32Array, from: number, to: number) {
   let bestBpm = 120;
   let best = -Infinity;
   let second = -Infinity;
+  const pulseBpm = pulseBpmOf(envelope, from, to);
   for (let bpm = MIN_BPM; bpm <= MAX_BPM; bpm += 0.5) {
-    const score = candidateScore(envelope, midi, bpm, from, to);
+    const score = candidateScore(envelope, accents, pulseBpm, bpm, from, to);
     if (score > best) {
       second = best;
       best = score;
@@ -147,17 +152,18 @@ function bestTempo(envelope: Float32Array, midi: ParsedMidi, from: number, to: n
 }
 
 function stableSegments(envelope: Float32Array, midi: ParsedMidi): TempoSegment[] {
+  const accents = midiAccents(midi);
   const windowSize = WINDOW_SECONDS * ENVELOPE_HZ;
   const hop = WINDOW_HOP_SECONDS * ENVELOPE_HZ;
   if (envelope.length <= windowSize) {
-    const one = bestTempo(envelope, midi, 0, envelope.length);
+    const one = bestTempo(envelope, accents, 0, envelope.length);
     return [{ timeMs: 0, bpm: one.bpm, confidence: one.confidence }];
   }
   const windows: TempoSegment[] = [];
   for (let from = 0; from < envelope.length; from += hop) {
     const to = Math.min(envelope.length, from + windowSize);
     if (to - from < windowSize * 0.55) break;
-    const found = bestTempo(envelope, midi, from, to);
+    const found = bestTempo(envelope, accents, from, to);
     windows.push({ timeMs: (from / ENVELOPE_HZ) * 1000, bpm: found.bpm, confidence: found.confidence });
   }
   const out: TempoSegment[] = [];
