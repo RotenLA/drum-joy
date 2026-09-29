@@ -550,11 +550,11 @@ export function SongPicker({
                     </Button>
                   );
                 })}
-                <div aria-hidden="true" className="h-[45vh]" />
+                <div aria-hidden="true" className="h-[70vh] shrink-0" />
               </div>
             </div>
 
-            <div className="relative flex h-[min(78%,520px)] min-h-0 min-w-0 items-stretch overflow-hidden border border-[var(--taiko-glass-line-strong)] bg-[var(--taiko-glass-strong)] shadow-2xl backdrop-blur-[18px]" style={{ transform: `skewX(${DETAIL_SKEW}deg)` }}>
+            <div className="relative flex h-[min(90%,560px)] min-h-0 min-w-0 items-stretch overflow-hidden border border-[var(--taiko-glass-line-strong)] bg-[var(--taiko-glass-strong)] shadow-2xl backdrop-blur-[18px]" style={{ transform: `skewX(${DETAIL_SKEW}deg)` }}>
               {!selected ? (
                 <p className="m-auto text-sm text-[rgba(255,255,255,0.6)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                   {tr("选择一首歌", "Pick a song")}
@@ -567,7 +567,7 @@ export function SongPicker({
                 const fav = favs.includes(item.id);
                 const locked = !isUnlocked(bests, item.id, song.difficulty);
                 return (
-                  <div key={item.id} className="taiko-scroll relative flex max-h-full w-[calc(100%+5rem)] -translate-x-10 flex-col gap-3 overflow-y-auto px-12 py-5" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
+                  <div key={item.id} className="taiko-scroll relative flex max-h-full w-full flex-col gap-3 overflow-y-auto px-8 py-5" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                     <div className="flex items-start gap-2 border-l-4 border-[var(--taiko-accent)] pl-4">
                       <div className="min-w-0 flex-1">
                         <HorizontalTitle title={item.title} />
