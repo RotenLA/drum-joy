@@ -144,7 +144,8 @@ export function FallScreen({
         },
         song.difficulty,
       ),
-      song.audioLeadMs,
+      // 开头空白 + 第一声鼓真实咬合，两者一起平移
+      song.audioLeadMs + song.audioAlignMs,
     );
   }, [
     song.midi,
@@ -153,7 +154,9 @@ export function FallScreen({
     song.phaseBeatOffset,
     song.difficulty,
     song.audioLeadMs,
+    song.audioAlignMs,
   ]);
+
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
