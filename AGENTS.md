@@ -12,9 +12,11 @@
 - Startup watchdog: root component marks booted on mount (covers every route); overlay only on mobile/Unity, never on Preview/desktop, and only when an error was captured — avoids false "Failed to start".
 - Playlist detail screens always reveal the blurred gameplay stage; `song_tags.background_path` is deprecated and must not be read, written, or exposed in admin UI.
 - Gameplay and tutorial use the stage renderer only; the removed columns mode must not be restored or read from saved settings.
-- Auto charts are deterministic, phrase-aware, and density-limited; Easy/Beginner snap to their allowed grids, Standard/Hard snap only within 35ms, and existing cloud charts change only through explicit regeneration.
+- Auto charts are generated from a basic drum-groove pattern library per difficulty; MIDI only supplies bar grid, per-phrase density, accents and fills, and all note times sit on the tempo-map grid — keeps charts playable and aligned.
 - Ratings use strict shared thresholds; live grades are progress-gated, SSS requires 99.5% plus a completed full combo, and stage intensity follows the live grade.
 - Admin folder import groups by the final underscore suffix and uploads songs sequentially to avoid browser memory spikes.
 - The player checks the lightweight library revision once per page session and reuses cached library, favorites, and play data for all in-app returns.
 - Song BPM metadata is inferred from audio plus MIDI structure in the 80–180 range; chart timing follows the difficulty snap rule and the MIDI tempo map, while MIDI remains the GM-part and time-signature source.
 - On low-height landscape screens, Settings, Exit/Back, and Tutorial share the same safe-area top line and 2rem height so Unity WebView chrome stays aligned.
+
+- The song picker remembers the open playlist in session memory so leaving a song returns to that playlist; a page reload starts at the home screen.
