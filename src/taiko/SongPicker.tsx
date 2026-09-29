@@ -34,7 +34,7 @@ const CARD_GRADIENTS = [
 function playlistBackground(key: string, index: number): string {
   if (key === "fav") return "var(--taiko-playlist-favorite)";
   if (key === "history") return "var(--taiko-playlist-history)";
-  return CARD_GRADIENTS[Math.max(0, index) % CARD_GRADIENTS.length];
+  return CARD_GRADIENTS[Math.max(0, index) % CARD_GRADIENTS.length] ?? "var(--taiko-playlist-1)";
 }
 
 const DETAIL_SKEW = -8;
