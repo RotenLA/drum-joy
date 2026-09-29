@@ -1,0 +1,1 @@
+COMMENT ON COLUMN public.song_tags.background_path IS 'DEPRECATED: playlist backgrounds are no longer used by the application.';

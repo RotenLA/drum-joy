@@ -22,7 +22,6 @@ import {
   listTags,
   createTag,
   renameTag,
-  setTagBackground,
   deleteTag,
   reorderTags,
   setSongTags,
@@ -104,12 +103,11 @@ function AdminPage() {
   const fetchTags = useServerFn(listTags);
   const addTag = useServerFn(createTag);
   const renTag = useServerFn(renameTag);
-  const saveTagBackground = useServerFn(setTagBackground);
   const delTag = useServerFn(deleteTag);
   const sortTags = useServerFn(reorderTags);
   const linkTags = useServerFn(setSongTags);
 
-  const [tags, setTags] = useState<{ id: string; name: string; background_path: string | null }[]>([]);
+  const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
   const [tagMap, setTagMap] = useState<Record<string, string[]>>({});
   const [newTag, setNewTag] = useState("");
   const [uploadTags, setUploadTags] = useState<string[]>([]);
@@ -156,27 +154,6 @@ function AdminPage() {
     if (j < 0 || j >= ids.length) return;
     [ids[i], ids[j]] = [ids[j]!, ids[i]!];
     void tagAction(() => sortTags({ data: { ids } }));
-  };
-  const uploadTagBackground = async (id: string, file: File) => {
-    setBusy("上传歌单底图…");
-    setNote(null);
-    try {
-      if (!file.type.startsWith("image/")) throw new Error("请选择图片文件");
-      if (file.size > 12 * 1024 * 1024) throw new Error("底图不能超过 12MB");
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const targets = await signUploads({ data: { folder: `playlist-${id}`, files: [{ key: "background", ext }] } });
-      const target = targets.targets[0];
-      if (!target) throw new Error("无法创建上传地址");
-      const { error } = await supabase.storage.from("songs").uploadToSignedUrl(target.path, target.token, file);
-      if (error) throw new Error(error.message);
-      await saveTagBackground({ data: { id, path: target.path } });
-      setNote("歌单底图已更新");
-      await refresh();
-    } catch (err) {
-      setNote(`底图上传失败：${(err as Error).message}`);
-    } finally {
-      setBusy(null);
-    }
   };
   const toggleIn = (arr: string[], id: string) =>
     arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id];
@@ -516,29 +493,6 @@ function AdminPage() {
                 className="min-w-40 flex-1 border border-transparent bg-transparent px-1 py-0.5 text-base hover:border-[var(--taiko-line)] focus:border-[var(--taiko-accent)] focus:outline-none"
               />
               <span className="w-16 text-xs tabular-nums text-[var(--taiko-ink)]/50">{tagCount(t.id)} 首</span>
-              <label className="cursor-pointer border border-[var(--taiko-line)] px-2 py-1 text-xs hover:border-[var(--taiko-accent)]">
-                {t.background_path ? "替换底图" : "上传底图"}
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  disabled={busy !== null}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    e.currentTarget.value = "";
-                    if (file) void uploadTagBackground(t.id, file);
-                  }}
-                />
-              </label>
-              {t.background_path && (
-                <button
-                  type="button"
-                  onClick={() => void tagAction(() => saveTagBackground({ data: { id: t.id, path: null } }))}
-                  className="border border-[var(--taiko-line)] px-2 py-1 text-xs text-[var(--taiko-ink)]/60 hover:border-red-400 hover:text-red-400"
-                >
-                  移除底图
-                </button>
-              )}
               <button onClick={() => moveTag(i, -1)} disabled={i === 0} className="border border-[var(--taiko-line)] px-2 py-1 text-xs disabled:opacity-30">上移</button>
               <button onClick={() => moveTag(i, 1)} disabled={i === tags.length - 1} className="border border-[var(--taiko-line)] px-2 py-1 text-xs disabled:opacity-30">下移</button>
               <button

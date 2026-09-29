@@ -246,7 +246,7 @@ export const listTags = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: tags, error } = await supabaseAdmin
     .from("song_tags")
-    .select("id, name, sort_order, background_path")
+    .select("id, name, sort_order")
     .order("sort_order")
     .order("created_at");
   if (error) throw new Error(error.message);
@@ -290,44 +290,13 @@ export const renameTag = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
-export const setTagBackground = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string; path: string | null }) => ({
-    id: data.id,
-    path: data.path ? String(data.path).slice(0, 500) : null,
-  }))
-  .handler(async ({ data }) => {
-    await requireAdmin();
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: current, error: readError } = await supabaseAdmin
-      .from("song_tags")
-      .select("background_path")
-      .eq("id", data.id)
-      .single();
-    if (readError || !current) throw new Error(readError?.message ?? "标签不存在");
-    const { error } = await supabaseAdmin
-      .from("song_tags")
-      .update({ background_path: data.path })
-      .eq("id", data.id);
-    if (error) throw new Error(error.message);
-    if (current.background_path && current.background_path !== data.path) {
-      await supabaseAdmin.storage.from(BUCKET).remove([current.background_path]);
-    }
-    return { ok: true as const };
-  });
-
 export const deleteTag = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     await requireAdmin();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: tag } = await supabaseAdmin
-      .from("song_tags")
-      .select("background_path")
-      .eq("id", data.id)
-      .maybeSingle();
     const { error } = await supabaseAdmin.from("song_tags").delete().eq("id", data.id);
     if (error) throw new Error(error.message);
-    if (tag?.background_path) await supabaseAdmin.storage.from(BUCKET).remove([tag.background_path]);
     return { ok: true as const };
   });
 

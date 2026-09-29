@@ -24,7 +24,6 @@ export interface LibrarySong {
 export interface LibraryTag {
   id: string;
   name: string;
-  backgroundUrl: string | null;
 }
 
 export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async () => {
@@ -50,16 +49,12 @@ export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async 
     tagIds: [] as string[],
   }));
   const [tagsRes, linksRes] = await Promise.all([
-    supabaseAdmin.from("song_tags").select("id, name, sort_order, background_path").order("sort_order"),
+    supabaseAdmin.from("song_tags").select("id, name, sort_order").order("sort_order"),
     supabaseAdmin.from("song_tag_links").select("song_id, tag_id"),
   ]);
   const byId = new Map(songs.map((s) => [s.id, s]));
   for (const l of linksRes.data ?? []) byId.get(l.song_id)?.tagIds.push(l.tag_id);
-  const tags: LibraryTag[] = await Promise.all((tagsRes.data ?? []).map(async (t) => {
-    if (!t.background_path) return { id: t.id, name: t.name, backgroundUrl: null };
-    const { data: signed } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(t.background_path, URL_TTL);
-    return { id: t.id, name: t.name, backgroundUrl: signed?.signedUrl ?? null };
-  }));
+  const tags: LibraryTag[] = (tagsRes.data ?? []).map((t) => ({ id: t.id, name: t.name }));
   return { songs, tags };
 });
 

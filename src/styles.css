@@ -162,6 +162,16 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.taiko-detail-scroll {
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.taiko-detail-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* 选歌卡片横向滑动：拖拽 + 触摸，隐藏滚动条 */
 .taiko-hscroll {
   touch-action: pan-x;

@@ -31,6 +31,12 @@ const CARD_GRADIENTS = [
   "linear-gradient(150deg, #33305c 0%, #4d4a86 55%, #211f3c 100%)",
 ];
 
+const DETAIL_SKEW = -8;
+
+function detailSlotTop(): number {
+  return Math.max(112, Math.min(160, window.innerHeight * 0.2));
+}
+
 /** 竖排歌名：过长则在卡片高度内循环滚动 */
 function VerticalTitle({ title }: { title: string }) {
   const boxRef = useRef<HTMLSpanElement | null>(null);
@@ -236,14 +242,14 @@ export function SongPicker({
     return library.filter((x) => x.tagIds.includes(key));
   };
   const playlists = useMemo(() => {
-    const out: { key: string; name: string; count: number; backgroundUrl: string | null }[] = [];
+    const out: { key: string; name: string; count: number }[] = [];
     const favoriteCount = listSongs("fav").length;
     const historyCount = listSongs("history").length;
-    if (favoriteCount) out.push({ key: "fav", name: tr("我的收藏", "Favorites"), count: favoriteCount, backgroundUrl: null });
-    if (historyCount) out.push({ key: "history", name: tr("历史", "History"), count: historyCount, backgroundUrl: null });
-    for (const t of tags) out.push({ key: t.id, name: t.name, count: library.filter((x) => x.tagIds.includes(t.id)).length, backgroundUrl: t.backgroundUrl });
+    if (favoriteCount) out.push({ key: "fav", name: tr("我的收藏", "Favorites"), count: favoriteCount });
+    if (historyCount) out.push({ key: "history", name: tr("历史", "History"), count: historyCount });
+    for (const t of tags) out.push({ key: t.id, name: t.name, count: library.filter((x) => x.tagIds.includes(t.id)).length });
     const un = library.filter((x) => x.tagIds.length === 0).length;
-    if (un) out.push({ key: "untagged", name: tr("未分类", "Uncategorized"), count: un, backgroundUrl: null });
+    if (un) out.push({ key: "untagged", name: tr("未分类", "Uncategorized"), count: un });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [library, tags, favs, history, tr]);
@@ -325,7 +331,6 @@ export function SongPicker({
   );
   const selected = activeSongs.find((x) => x.id === selectedId) ?? null;
   const activePlaylist = playlists.find((item) => item.key === openList) ?? null;
-  const activePlaylistIndex = Math.max(0, playlists.findIndex((item) => item.key === openList));
   // 难度被锁时回落到入门
   useEffect(() => {
     if (selected && !isUnlocked(bests, selected.id, song.difficulty)) song.setSong({ difficulty: "beginner" });
@@ -342,10 +347,10 @@ export function SongPicker({
   const settleDetailSelection = useCallback(() => {
     const box = detailScrollRef.current;
     if (!box) return;
-    const center = box.scrollTop + box.clientHeight / 2;
+    const targetTop = box.scrollTop + detailSlotTop();
     let nearest: { id: string; distance: number; element: HTMLElement } | null = null;
     for (const element of Array.from(box.querySelectorAll<HTMLElement>("[data-song-id]"))) {
-      const distance = Math.abs(element.offsetTop + element.offsetHeight / 2 - center);
+      const distance = Math.abs(element.offsetTop - targetTop);
       if (!nearest || distance < nearest.distance) {
         nearest = { id: element.dataset["songId"] ?? "", distance, element };
       }
@@ -353,7 +358,7 @@ export function SongPicker({
     if (!nearest?.id) return;
     const item = activeSongs.find((candidate) => candidate.id === nearest?.id);
     if (item && item.id !== selectedId) pickSong(item);
-    nearest.element.scrollIntoView({ behavior: "smooth", block: "center" });
+    box.scrollTo({ top: Math.max(0, nearest.element.offsetTop - detailSlotTop()), behavior: "smooth" });
   }, [activeSongs, pickSong, selectedId]);
 
   const onDetailScroll = () => {
@@ -368,9 +373,9 @@ export function SongPicker({
   useEffect(() => {
     if (!openList || !selectedId) return;
     const frame = window.requestAnimationFrame(() => {
-      detailScrollRef.current
-        ?.querySelector<HTMLElement>(`[data-song-id="${selectedId}"]`)
-        ?.scrollIntoView({ block: "center" });
+      const box = detailScrollRef.current;
+      const element = box?.querySelector<HTMLElement>(`[data-song-id="${selectedId}"]`);
+      if (box && element) box.scrollTo({ top: Math.max(0, element.offsetTop - detailSlotTop()), behavior: "smooth" });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [openList, selectedId]);
@@ -488,9 +493,6 @@ export function SongPicker({
                     : CARD_GRADIENTS[i % CARD_GRADIENTS.length],
               }}
             >
-              {pl.backgroundUrl && (
-                <img src={pl.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-              )}
               <span className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,12,18,0.05), rgba(10,12,18,0.72))" }} />
               <span className="relative z-10 flex h-full w-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
                 <span className="flex min-w-0 flex-col gap-1">
@@ -504,25 +506,16 @@ export function SongPicker({
           ))}
         </div>
       ) : (
-        <div
-          className="relative flex min-h-0 flex-1 overflow-hidden"
-          style={{ background: activePlaylist?.backgroundUrl ? undefined : CARD_GRADIENTS[activePlaylistIndex % CARD_GRADIENTS.length] }}
-        >
-          {activePlaylist?.backgroundUrl && (
-            <img src={activePlaylist.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-          )}
-          <div className="absolute inset-0 bg-[rgba(7,7,9,0.5)] backdrop-blur-[3px]" />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,6,9,0.94)_0%,rgba(8,8,11,0.7)_42%,rgba(8,8,11,0.18)_100%)]" />
-
-          <div className="relative z-10 grid h-full min-h-0 w-full grid-cols-[minmax(250px,43%)_minmax(0,1fr)] gap-[clamp(16px,4vw,64px)] px-[clamp(14px,4vw,64px)] pb-3">
-            <div className="flex min-h-0 min-w-0 flex-col">
-              <div className="shrink-0 pb-1 pl-5 text-xs font-semibold tracking-[0.18em] text-[rgba(255,255,255,0.62)]">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <div className="relative z-10 grid h-full min-h-0 w-full grid-cols-[minmax(250px,43%)_minmax(0,1fr)] items-center gap-[clamp(18px,4vw,66px)] px-[clamp(20px,5vw,76px)] pb-3">
+            <div className="flex h-[min(92%,650px)] min-h-0 min-w-0 flex-col" style={{ transform: `skewX(${DETAIL_SKEW}deg)` }}>
+              <div className="shrink-0 pb-1 pl-8 text-xs font-semibold tracking-[0.18em] text-[rgba(255,255,255,0.62)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                 {activePlaylist?.name ?? ""}
               </div>
               <div
                 ref={detailScrollRef}
                 onScroll={onDetailScroll}
-                className="taiko-scroll min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto py-[32vh] pr-3"
+                className="taiko-detail-scroll min-h-0 flex-1 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
               >
                 {activeSongs.map((item, index) => {
                   const on = item.id === selectedId;
@@ -536,14 +529,14 @@ export function SongPicker({
                         pickSong(item);
                         detailScrollRef.current?.querySelector<HTMLElement>(`[data-song-id="${item.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
                       }}
-                      className={`mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] snap-center flex-col items-stretch justify-center overflow-hidden rounded-sm border-l-4 px-5 text-left shadow-lg transition-[width,transform,background-color,border-color] duration-200 ${
+                      className={`mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] flex-col items-stretch justify-center overflow-hidden rounded-sm border-l-4 px-5 text-left shadow-lg transition-[width,transform,background-color,border-color] duration-200 ${
                         on
                           ? "w-[calc(100%-1rem)] -translate-x-3 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.9)] text-[var(--taiko-paper)]"
                           : "w-[82%] border-[rgba(255,255,255,0.4)] bg-[rgba(15,16,20,0.66)] text-[rgba(255,255,255,0.84)] hover:bg-[rgba(25,26,31,0.82)]"
                       }`}
-                      style={{ transform: `${on ? "translateX(-0.75rem) " : ""}skewX(-8deg)` }}
+                      style={{ transform: on ? "translateX(-0.75rem)" : undefined }}
                     >
-                      <span className="block min-w-0" style={{ transform: "skewX(8deg)" }}>
+                      <span className="block min-w-0" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                         <span className="flex items-baseline gap-3">
                           <span className={`w-6 shrink-0 text-[11px] tabular-nums ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.42)]"}`}>
                             {String(index + 1).padStart(2, "0")}
@@ -557,12 +550,13 @@ export function SongPicker({
                     </Button>
                   );
                 })}
+                <div aria-hidden="true" className="h-[80vh] shrink-0" />
               </div>
             </div>
 
-            <div className="relative flex min-h-0 min-w-0 items-center overflow-hidden">
+            <div className="relative flex h-[min(90%,560px)] min-h-0 min-w-0 items-stretch overflow-hidden border border-[var(--taiko-glass-line-strong)] bg-[var(--taiko-glass-strong)] shadow-2xl backdrop-blur-[18px]" style={{ transform: `skewX(${DETAIL_SKEW}deg)` }}>
               {!selected ? (
-                <p className="m-auto text-sm text-[rgba(255,255,255,0.6)]">
+                <p className="m-auto text-sm text-[rgba(255,255,255,0.6)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                   {tr("选择一首歌", "Pick a song")}
                 </p>
               ) : (() => {
@@ -573,13 +567,7 @@ export function SongPicker({
                 const fav = favs.includes(item.id);
                 const locked = !isUnlocked(bests, item.id, song.difficulty);
                 return (
-                  <div key={item.id} className="taiko-scroll relative flex max-h-full w-full max-w-[620px] flex-col gap-3 overflow-y-auto px-1 py-4">
-                    {activePlaylist?.backgroundUrl && (
-                      <div className="relative mb-1 aspect-[16/7] w-full max-w-[560px] overflow-hidden border border-[var(--taiko-glass-line)] shadow-2xl">
-                        <img src={activePlaylist.backgroundUrl} alt="" className="h-full w-full object-cover" />
-                        <div className="absolute inset-0 bg-[linear-gradient(180deg,transparent,rgba(5,5,7,0.36))]" />
-                      </div>
-                    )}
+                  <div key={item.id} className="taiko-scroll relative mx-auto flex max-h-full w-[84%] flex-col gap-3 overflow-y-auto px-1 py-5" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                     <div className="flex items-start gap-2 border-l-4 border-[var(--taiko-accent)] pl-4">
                       <div className="min-w-0 flex-1">
                         <HorizontalTitle title={item.title} />
