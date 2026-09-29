@@ -12,7 +12,7 @@
 - Startup watchdog: root component marks booted on mount (covers every route); overlay only on mobile/Unity, never on Preview/desktop, and only when an error was captured — avoids false "Failed to start".
 - Playlist detail screens always reveal the blurred gameplay stage; `song_tags.background_path` is deprecated and must not be read, written, or exposed in admin UI.
 - Gameplay and tutorial use the stage renderer only; the removed columns mode must not be restored or read from saved settings.
-- Auto charts are generated from a basic drum-groove pattern library per difficulty; MIDI only supplies bar grid, per-phrase density, accents and fills, and all note times sit on the tempo-map grid — keeps charts playable and aligned.
+- Auto charts run a three-stage pipeline: AI drum MIDI is sanitized (velocity gates, 62 ms per-part debounce, two-hand arbitration), per-song groove templates are clustered from the cleaned bars, then each difficulty's notes get their real MIDI hit time back-filled (grid time only as fallback) — removes AI stem noise while staying locked to the audio.
 - Ratings use strict shared thresholds; live grades are progress-gated, SSS requires 99.5% plus a completed full combo, and stage intensity follows the live grade.
 - Admin folder import groups by the final underscore suffix and uploads songs sequentially to avoid browser memory spikes.
 - The player checks the lightweight library revision once per page session and reuses cached library, favorites, and play data for all in-app returns.
