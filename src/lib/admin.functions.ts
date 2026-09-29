@@ -158,13 +158,15 @@ export const replaceCharts = createServerFn({ method: "POST" })
         midi_fingerprint: data.fingerprint,
         chart: c.chart as never,
       })),
-      { onConflict: "song_id,difficulty" },
+      { onConflict: "song_id,difficulty,midi_fingerprint" },
     );
     if (error) throw new Error(error.message);
-    await supabaseAdmin
+    const { error: songError } = await supabaseAdmin
       .from("songs")
       .update({ midi_fingerprint: data.fingerprint })
       .eq("id", data.songId);
+    if (songError) throw new Error(songError.message);
+    await supabaseAdmin.from("song_charts").delete().eq("song_id", data.songId).neq("midi_fingerprint", data.fingerprint);
     return { ok: true as const };
   });
 
@@ -181,7 +183,7 @@ export const replaceTempoAndCharts = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    // 四档逐行原地替换；写入失败时旧谱仍在，不会留下空歌曲。
+    // 先写新版本，再切换歌曲指针，最后删旧版本；任一步写入失败都不会先清空旧谱。
     const { error: chartError } = await supabaseAdmin.from("song_charts").upsert(
       data.charts.map((chart) => ({
         song_id: data.songId,
@@ -189,7 +191,7 @@ export const replaceTempoAndCharts = createServerFn({ method: "POST" })
         midi_fingerprint: data.fingerprint,
         chart: chart.chart as never,
       })),
-      { onConflict: "song_id,difficulty" },
+      { onConflict: "song_id,difficulty,midi_fingerprint" },
     );
     if (chartError) throw new Error(chartError.message);
     const { error: songError } = await supabaseAdmin
@@ -197,6 +199,7 @@ export const replaceTempoAndCharts = createServerFn({ method: "POST" })
       .update({ bpm: data.bpm, midi_fingerprint: data.fingerprint })
       .eq("id", data.songId);
     if (songError) throw new Error(songError.message);
+    await supabaseAdmin.from("song_charts").delete().eq("song_id", data.songId).neq("midi_fingerprint", data.fingerprint);
     return { ok: true as const };
   });
 
