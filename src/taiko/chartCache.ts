@@ -10,8 +10,9 @@ import type { ParsedMidi } from "./midiFile";
 import { buildPlayChart, type Difficulty } from "./difficulty";
 import type { PlayChartOptions } from "./difficulty";
 
-const CACHE_KEY = "taiko.charts.v12";
-const CHART_ALGORITHM_VERSION = "pattern-groove-v2";
+const CACHE_KEY = "taiko.charts.v13";
+const CHART_ALGORITHM_VERSION = "clean-groove-align-v3";
+
 /** 最多保留的歌曲份数（按最近使用淘汰） */
 const MAX_SONGS = 5;
 
