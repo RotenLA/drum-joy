@@ -336,10 +336,12 @@ export function buildPlayChart(
   const lastStep = emits.reduce((m, e) => Math.max(m, e.step), 0);
   const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);
 
+  const aligner = new HitAligner(midi, clean);
   const notes = [
-    ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, diff),
-    ...holdsToNotes(holds, midi, clean, offset),
+    ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, aligner),
+    ...holdsToNotes(holds, midi, clean, offset, aligner),
   ].sort((a, b) => a.timeMs - b.timeMs);
+
 
   const last = notes[notes.length - 1]?.timeMs ?? 0;
   return {
