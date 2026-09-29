@@ -1,5 +1,5 @@
 /**
- * 全局参数：下落速度、下落模式、画质、视觉/判定偏移、自动校准。
+ * 全局参数：下落速度、画质、视觉/判定偏移、自动校准。
  * 一次设置对所有歌曲生效，不随歌曲变化。
  * 难度、手机音色、鼓组在展开的歌曲卡片里设置，此处不重复。
  */
@@ -21,7 +21,6 @@ import { loadKitEnabled, playDrum, subscribeKitEnabled } from "./drumKit";
 import { midiManager } from "./midiInput";
 import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
-import type { FallMode } from "./fallMode";
 import { Button } from "@/components/ui/button";
 
 const CALIB_TARGET = 8;
@@ -30,14 +29,10 @@ const SPEEDS = [0.5, 0.75, 1, 1.5, 2];
 export function GlobalSettings({
   speed,
   onSpeedChange,
-  fallMode,
-  onFallModeChange,
   onSecretUnlock,
 }: {
   speed: number;
   onSpeedChange: (speed: number) => void;
-  fallMode: FallMode;
-  onFallModeChange: (mode: FallMode) => void;
   onSecretUnlock?: (() => void) | undefined;
 }) {
   const { tr, language } = useLanguage();
@@ -198,28 +193,6 @@ export function GlobalSettings({
             }`}
           >
             {value}x
-          </Button>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">
-          {tr("下落模式", "Fall mode")}
-        </span>
-        {(["stage", "columns"] as const).map((mode) => (
-          <Button
-            key={mode}
-            variant="outline"
-            size="sm"
-            type="button"
-            onClick={() => onFallModeChange(mode)}
-            className={`h-8 min-w-24 rounded-md px-3 text-xs ${
-              fallMode === mode
-                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
-                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-accent)]"
-            }`}
-          >
-            {mode === "stage" ? tr("舞台下落", "Stage") : tr("横排下落", "Columns")}
           </Button>
         ))}
       </div>

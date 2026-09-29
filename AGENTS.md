@@ -11,3 +11,4 @@
 
 - Startup watchdog: root component marks booted on mount (covers every route); overlay only on mobile/Unity, never on Preview/desktop, and only when an error was captured — avoids false "Failed to start".
 - Playlist detail screens always reveal the blurred gameplay stage; `song_tags.background_path` is deprecated and must not be read, written, or exposed in admin UI.
+- Gameplay and tutorial use the stage renderer only; the removed columns mode must not be restored or read from saved settings.

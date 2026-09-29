@@ -121,14 +121,14 @@
   --taiko-glass-strong: rgba(24, 19, 16, 0.88);
   --taiko-glass-line: rgba(255, 255, 255, 0.14);
   --taiko-glass-line-strong: rgba(255, 255, 255, 0.34);
-  --taiko-playlist-favorite: linear-gradient(150deg, rgba(92, 36, 48, 0.66) 0%, rgba(138, 51, 69, 0.66) 55%, rgba(52, 20, 28, 0.66) 100%);
-  --taiko-playlist-history: linear-gradient(150deg, rgba(47, 64, 83, 0.66) 0%, rgba(66, 98, 122, 0.66) 55%, rgba(32, 44, 57, 0.66) 100%);
-  --taiko-playlist-1: linear-gradient(150deg, rgba(43, 58, 92, 0.66) 0%, rgba(61, 90, 125, 0.66) 55%, rgba(36, 48, 74, 0.66) 100%);
-  --taiko-playlist-2: linear-gradient(150deg, rgba(74, 47, 79, 0.66) 0%, rgba(107, 63, 99, 0.66) 55%, rgba(46, 31, 52, 0.66) 100%);
-  --taiko-playlist-3: linear-gradient(150deg, rgba(44, 74, 71, 0.66) 0%, rgba(63, 109, 99, 0.66) 55%, rgba(30, 50, 48, 0.66) 100%);
-  --taiko-playlist-4: linear-gradient(150deg, rgba(76, 58, 40, 0.66) 0%, rgba(122, 90, 51, 0.66) 55%, rgba(50, 38, 24, 0.66) 100%);
-  --taiko-playlist-5: linear-gradient(150deg, rgba(51, 48, 92, 0.66) 0%, rgba(77, 74, 134, 0.66) 55%, rgba(33, 31, 60, 0.66) 100%);
-  --taiko-playlist-shade: linear-gradient(180deg, rgba(10, 12, 18, 0.02), rgba(10, 12, 18, 0.28));
+  --taiko-playlist-favorite: linear-gradient(150deg, rgba(92, 36, 48, 0.56) 0%, rgba(138, 51, 69, 0.56) 55%, rgba(52, 20, 28, 0.56) 100%);
+  --taiko-playlist-history: linear-gradient(150deg, rgba(47, 64, 83, 0.56) 0%, rgba(66, 98, 122, 0.56) 55%, rgba(32, 44, 57, 0.56) 100%);
+  --taiko-playlist-1: linear-gradient(150deg, rgba(43, 58, 92, 0.56) 0%, rgba(61, 90, 125, 0.56) 55%, rgba(36, 48, 74, 0.56) 100%);
+  --taiko-playlist-2: linear-gradient(150deg, rgba(74, 47, 79, 0.56) 0%, rgba(107, 63, 99, 0.56) 55%, rgba(46, 31, 52, 0.56) 100%);
+  --taiko-playlist-3: linear-gradient(150deg, rgba(44, 74, 71, 0.56) 0%, rgba(63, 109, 99, 0.56) 55%, rgba(30, 50, 48, 0.56) 100%);
+  --taiko-playlist-4: linear-gradient(150deg, rgba(76, 58, 40, 0.56) 0%, rgba(122, 90, 51, 0.56) 55%, rgba(50, 38, 24, 0.56) 100%);
+  --taiko-playlist-5: linear-gradient(150deg, rgba(51, 48, 92, 0.56) 0%, rgba(77, 74, 134, 0.56) 55%, rgba(33, 31, 60, 0.56) 100%);
+  --taiko-playlist-shade: linear-gradient(180deg, rgba(10, 12, 18, 0.01), rgba(10, 12, 18, 0.22));
 }
 
 @layer base {
@@ -252,7 +252,7 @@
   }
 
   .taiko-song-detail-controls {
-    min-height: 10rem;
+    min-height: 8.5rem;
     padding-top: 0.25rem;
     padding-bottom: 0.25rem;
   }

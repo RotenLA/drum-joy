@@ -537,8 +537,8 @@ export function SongPicker({
                       }}
                       className={`mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] flex-col items-stretch justify-center overflow-hidden rounded-sm border-l-4 px-5 text-left shadow-lg transition-[width,transform,background-color,border-color] duration-200 ${
                         on
-                          ? "w-[calc(100%-1rem)] -translate-x-3 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.9)] text-[var(--taiko-paper)]"
-                          : "w-[82%] border-[rgba(255,255,255,0.4)] bg-[rgba(15,16,20,0.66)] text-[rgba(255,255,255,0.84)] hover:bg-[rgba(25,26,31,0.82)]"
+                          ? "w-[calc(100%-1rem)] -translate-x-3 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.84)] text-[var(--taiko-paper)]"
+                          : "w-[82%] border-[rgba(255,255,255,0.34)] bg-[rgba(15,16,20,0.56)] text-[rgba(255,255,255,0.84)] hover:bg-[rgba(25,26,31,0.72)]"
                       }`}
                       style={{ transform: on ? "translateX(-0.75rem)" : undefined }}
                     >
@@ -561,7 +561,7 @@ export function SongPicker({
             </div>
 
             <div
-              className="relative flex h-[min(90%,560px)] min-h-0 min-w-0 items-stretch overflow-hidden border border-[var(--taiko-glass-line-strong)] shadow-2xl backdrop-blur-[18px]"
+              className="relative flex h-[min(82%,500px)] min-h-0 min-w-0 items-stretch overflow-hidden border border-[var(--taiko-glass-line-strong)] shadow-2xl backdrop-blur-[18px]"
               style={{ transform: `skewX(${DETAIL_SKEW}deg)`, background: activePlaylistBackground }}
             >
               <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
@@ -577,7 +577,7 @@ export function SongPicker({
                 const fav = favs.includes(item.id);
                 const locked = !isUnlocked(bests, item.id, song.difficulty);
                 return (
-                  <div key={item.id} className="taiko-song-detail taiko-scroll relative z-10 mx-auto flex h-full w-[88%] flex-col overflow-y-auto px-1 py-6" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
+                  <div key={item.id} className="taiko-song-detail taiko-scroll relative z-10 mx-auto flex h-full w-[86%] flex-col overflow-y-auto px-2 py-5" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                     <div className="flex shrink-0 justify-end gap-2">
                       <Button
                         type="button"
@@ -601,10 +601,10 @@ export function SongPicker({
                         <Heart size={17} className={fav ? "fill-[#ff5a6e] text-[#ff5a6e]" : "text-[rgba(255,255,255,0.75)]"} />
                       </Button>
                     </div>
-                    <div className="taiko-song-detail-controls my-auto flex min-h-[230px] items-center justify-center py-3">
+                    <div className="taiko-song-detail-controls my-auto flex min-h-[190px] items-center justify-center py-2">
                       <CardControls songId={item.id} bests={bests} />
                     </div>
-                    <div className="flex shrink-0 items-end justify-between gap-5 border-l-4 border-[var(--taiko-accent)] py-1 pl-4">
+                    <div className="flex shrink-0 items-end justify-between gap-6 border-l-4 border-[var(--taiko-accent)] py-2 pl-4 pr-1">
                       <div className="min-w-0 flex-1">
                         <HorizontalTitle title={item.title} />
                         <span className="block truncate text-xs tabular-nums text-[rgba(255,255,255,0.72)]">
