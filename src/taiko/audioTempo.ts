@@ -233,7 +233,8 @@ export function analyzeAudioTempo(buffer: AudioBuffer, midi: ParsedMidi): TempoA
     confidence,
     status: confidence >= 0.12 && segments.some((segment) => segment.confidence > 0) ? "confident" : "review",
     segments,
-    midi: retimeMidi(midi, segments),
+    // BPM 只用于展示和节奏分析；上传的 GM MIDI 已与音频对齐，绝不重排音符时间。
+    midi,
   };
 }
 

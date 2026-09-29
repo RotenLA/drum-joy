@@ -308,7 +308,7 @@ export const listTags = createServerFn({ method: "GET" }).handler(async () => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data: tags, error } = await supabaseAdmin
     .from("song_tags")
-    .select("id, name, sort_order")
+    .select("id, name, name_en, sort_order")
     .order("sort_order")
     .order("created_at");
   if (error) throw new Error(error.message);
@@ -320,10 +320,13 @@ export const listTags = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 export const createTag = createServerFn({ method: "POST" })
-  .inputValidator((data: { name: string }) => ({ name: String(data.name).trim().slice(0, 40) }))
+  .inputValidator((data: { name: string; nameEn: string }) => ({
+    name: String(data.name).trim().slice(0, 40),
+    nameEn: String(data.nameEn).trim().slice(0, 60),
+  }))
   .handler(async ({ data }) => {
     await requireAdmin();
-    if (!data.name) throw new Error("标签名不能为空");
+    if (!data.name || !data.nameEn) throw new Error("中文名和英文名都不能为空");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: last } = await supabaseAdmin
       .from("song_tags")
@@ -333,21 +336,22 @@ export const createTag = createServerFn({ method: "POST" })
       .maybeSingle();
     const { error } = await supabaseAdmin
       .from("song_tags")
-      .insert({ name: data.name, sort_order: (last?.sort_order ?? 0) + 1 });
+      .insert({ name: data.name, name_en: data.nameEn, sort_order: (last?.sort_order ?? 0) + 1 });
     if (error) throw new Error(error.code === "23505" ? "标签已存在" : error.message);
     return { ok: true as const };
   });
 
 export const renameTag = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string; name: string }) => ({
+  .inputValidator((data: { id: string; name: string; nameEn: string }) => ({
     id: data.id,
     name: String(data.name).trim().slice(0, 40),
+    nameEn: String(data.nameEn).trim().slice(0, 60),
   }))
   .handler(async ({ data }) => {
     await requireAdmin();
-    if (!data.name) throw new Error("标签名不能为空");
+    if (!data.name || !data.nameEn) throw new Error("中文名和英文名都不能为空");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("song_tags").update({ name: data.name }).eq("id", data.id);
+    const { error } = await supabaseAdmin.from("song_tags").update({ name: data.name, name_en: data.nameEn }).eq("id", data.id);
     if (error) throw new Error(error.code === "23505" ? "标签已存在" : error.message);
     return { ok: true as const };
   });

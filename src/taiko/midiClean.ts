@@ -14,6 +14,8 @@ export interface CleanHit {
   step: number;
   part: PartId;
   velocity: number;
+  /** 原始 MIDI 事件时间；最终谱面必须使用它，量化 step 仅供分析。 */
+  timeMs: number;
   /** 踩镲为开镲（左脚松开）；其余部件恒为 false */
   open?: boolean;
 }
@@ -63,7 +65,7 @@ export function cleanMidi(midi: ParsedMidi, opts: CleanOptions = {}): CleanedMid
     const open = part === "hihat" && OPEN_HAT_NOTES.has(ev.note);
     // 2) 降噪之一：同一格同一鼓件只留最响的一下（开镲标记做或运算保留）
     if (!prev || ev.velocity > prev.velocity) {
-      byKey.set(key, { step, part, velocity: ev.velocity, open: open || (prev?.open ?? false) });
+      byKey.set(key, { step, part, velocity: ev.velocity, timeMs: ev.timeMs, open: open || (prev?.open ?? false) });
     } else if (open && prev) {
       prev.open = true;
     }
