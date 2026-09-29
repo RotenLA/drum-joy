@@ -1,9 +1,6 @@
 /**
- * 三档难度：入门 / 标准 / 困难。
- * 都不再直接吃原始 MIDI，而是走「量化降噪 → 小节骨架」后重新编写：
- * - 入门（5 分区）：底鼓与军鼓大部分正拍，踩镲八分为主，过门用地通简单收尾
- * - 标准（9 分区）：每小节归类到标准节奏型重写，过门小节保留原始细节
- * - 困难（9 分区）：原样保留 + 手脚交替强化（确定性，同曲每次一致）
+ * 四档难度均从原始 GM 鼓 MIDI 筛选；量化网格只参与结构分析和限密度，
+ * 保留下来的音符始终使用上传 MIDI 自带的精确 timeMs，不按推算 BPM 重排。
  */
 import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
 import { VISIBLE_PARTS, type LayoutMode, type PartId } from "./laneLayouts";
