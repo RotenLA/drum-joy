@@ -129,9 +129,6 @@ const HARD: Gen = (c) => {
       perBeat.set(b, (perBeat.get(b) ?? 0) + 1);
       out.push([s, "kick"]);
     }
-    if (false as boolean) {
-      for (const b of beatsOf(c)) for (const q of [1, 3]) out.push([b * c.spb + q, "hihat", 80]);
-    }
   }
   return out;
 };
