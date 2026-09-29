@@ -213,6 +213,7 @@ export function SongPicker({
       setHistory(r.history);
       setBests(r.bests);
     });
+    return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -23,7 +23,7 @@ export function onLibraryChanged(fn: (s: LibrarySnapshot) => void): () => void {
 /** Unity 退出再进常只是隐藏网页：回前台超过 5 分钟再轻量对比一次版本 */
 if (typeof document !== "undefined") {
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible" || !sessionSnapshot || sessionPromise === null) return;
+    if (document.visibilityState !== "visible" || !sessionSnapshot) return;
     if (Date.now() - lastCheckAt < RECHECK_MS) return;
     const prev = sessionSnapshot;
     sessionSnapshot = null;
