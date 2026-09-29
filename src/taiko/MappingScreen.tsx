@@ -228,7 +228,7 @@ export function MappingScreen({
                   className="inline-block h-3 w-3 rounded-full"
                   style={{ backgroundColor: sel.color }}
                 />
-                <span className="text-sm font-medium">{sel.label}</span>
+                <span className="text-sm font-medium">{tr(sel.label, sel.labelEn)}</span>
                 <span className="ml-auto text-xs tabular-nums text-[var(--taiko-ink)]/45">
                   {tr(
                     `${mappingState[selected].length} 个音符`,
