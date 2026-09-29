@@ -326,6 +326,7 @@ export function SongPicker({
         if (!stored) throw new Error("not downloaded");
         const loaded = await decodeStoredSong(item, stored);
         const leadMs = stemsLeadMs(loaded.stems);
+        const alignMs = audioAlignMs(loaded.stems, loaded.midi);
         songPlayer.setLeadMs(leadMs);
         songPlayer.load(loaded.stems);
         song.setSong({
@@ -339,8 +340,10 @@ export function SongPicker({
           bpm: item.bpm,
           timeSignature: item.timeSignature,
           audioLeadMs: leadMs,
+          audioAlignMs: alignMs,
           chart: null,
         });
+
         // 等 stems 进入全局状态后再开始（见下方 effect）
         setPendingStart(item.id);
       } catch (err) {
