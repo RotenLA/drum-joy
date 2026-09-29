@@ -32,13 +32,16 @@ export function GlobalSettings({
   onSpeedChange,
   fallMode,
   onFallModeChange,
+  onSecretUnlock,
 }: {
   speed: number;
   onSpeedChange: (speed: number) => void;
   fallMode: FallMode;
   onFallModeChange: (mode: FallMode) => void;
+  onSecretUnlock?: (() => void) | undefined;
 }) {
   const { tr, language } = useLanguage();
+  const labTapRef = useRef({ count: 0, at: 0 });
 
   // ---- 画质 ----
   const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
@@ -151,6 +154,31 @@ export function GlobalSettings({
           {tr("所有歌曲通用，只需设置一次", "Applies to every song, set once")}
         </span>
       </div>
+
+      {onSecretUnlock && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">
+            {tr("实验室", "Laboratory")}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            onClick={() => {
+              const tap = labTapRef.current;
+              const now = Date.now();
+              tap.count = now - tap.at > 4000 ? 1 : tap.count + 1;
+              tap.at = now;
+              if (tap.count < 12) return;
+              tap.count = 0;
+              onSecretUnlock();
+            }}
+            className="h-8 min-w-24 rounded-md border-[var(--taiko-line)] px-3 text-xs text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+          >
+            {tr("实验室", "Laboratory")}
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">

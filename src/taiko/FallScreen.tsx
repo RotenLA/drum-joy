@@ -778,7 +778,6 @@ export function FallScreen({
             onExit={onExit}
             onStartTutorial={() => setTutorialOpen(true)}
             exitLabel={exitLabel}
-            onSecretUnlock={onSecretUnlock}
           />
 
         )}
@@ -820,6 +819,7 @@ export function FallScreen({
                 onSpeedChange={(next) => onSpeedChange?.(next)}
                 fallMode={fallMode}
                 onFallModeChange={(next) => onFallModeChange?.(next)}
+                onSecretUnlock={onSecretUnlock}
               />
             </div>
           </div>
