@@ -24,12 +24,18 @@ const fmtTime = (ms: number) => {
 
 /** 卡片底色渐变：按索引循环，整体低饱和，与暗色舞台背景相配 */
 const CARD_GRADIENTS = [
-  "linear-gradient(150deg, #2b3a5c 0%, #3d5a7d 55%, #24304a 100%)",
-  "linear-gradient(150deg, #4a2f4f 0%, #6b3f63 55%, #2e1f34 100%)",
-  "linear-gradient(150deg, #2c4a47 0%, #3f6d63 55%, #1e3230 100%)",
-  "linear-gradient(150deg, #4c3a28 0%, #7a5a33 55%, #322618 100%)",
-  "linear-gradient(150deg, #33305c 0%, #4d4a86 55%, #211f3c 100%)",
+  "var(--taiko-playlist-1)",
+  "var(--taiko-playlist-2)",
+  "var(--taiko-playlist-3)",
+  "var(--taiko-playlist-4)",
+  "var(--taiko-playlist-5)",
 ];
+
+function playlistBackground(key: string, index: number): string {
+  if (key === "fav") return "var(--taiko-playlist-favorite)";
+  if (key === "history") return "var(--taiko-playlist-history)";
+  return CARD_GRADIENTS[Math.max(0, index) % CARD_GRADIENTS.length] ?? "var(--taiko-playlist-1)";
+}
 
 const DETAIL_SKEW = -8;
 
@@ -331,6 +337,10 @@ export function SongPicker({
   );
   const selected = activeSongs.find((x) => x.id === selectedId) ?? null;
   const activePlaylist = playlists.find((item) => item.key === openList) ?? null;
+  const activePlaylistIndex = playlists.findIndex((item) => item.key === openList);
+  const activePlaylistBackground = openList
+    ? playlistBackground(openList, activePlaylistIndex)
+    : CARD_GRADIENTS[0];
   // 难度被锁时回落到入门
   useEffect(() => {
     if (selected && !isUnlocked(bests, selected.id, song.difficulty)) song.setSong({ difficulty: "beginner" });
@@ -486,14 +496,10 @@ export function SongPicker({
               className="relative h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] shrink-0 items-stretch justify-start overflow-hidden rounded-lg border border-[var(--taiko-glass-line)] p-0 text-left shadow-xl transition-all duration-300 hover:border-[var(--taiko-accent)]"
               style={{
                 transform: "skewX(-9deg)",
-                background: pl.key === "fav"
-                  ? "linear-gradient(150deg, #5c2430 0%, #8a3345 55%, #34141c 100%)"
-                  : pl.key === "history"
-                    ? "linear-gradient(150deg, #2f4053 0%, #42627a 55%, #202c39 100%)"
-                    : CARD_GRADIENTS[i % CARD_GRADIENTS.length],
+                 background: playlistBackground(pl.key, i),
               }}
             >
-              <span className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,12,18,0.05), rgba(10,12,18,0.72))" }} />
+              <span className="absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
               <span className="relative z-10 flex h-full w-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
                 <span className="flex min-w-0 flex-col gap-1">
                   <HorizontalTitle title={pl.name} />
@@ -554,9 +560,13 @@ export function SongPicker({
               </div>
             </div>
 
-            <div className="relative flex h-[min(90%,560px)] min-h-0 min-w-0 items-stretch overflow-hidden border border-[var(--taiko-glass-line-strong)] bg-[var(--taiko-glass-strong)] shadow-2xl backdrop-blur-[18px]" style={{ transform: `skewX(${DETAIL_SKEW}deg)` }}>
+            <div
+              className="relative flex h-[min(90%,560px)] min-h-0 min-w-0 items-stretch overflow-hidden border border-[var(--taiko-glass-line-strong)] shadow-2xl backdrop-blur-[18px]"
+              style={{ transform: `skewX(${DETAIL_SKEW}deg)`, background: activePlaylistBackground }}
+            >
+              <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
               {!selected ? (
-                <p className="m-auto text-sm text-[rgba(255,255,255,0.6)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
+                <p className="relative z-10 m-auto text-sm text-[rgba(255,255,255,0.6)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                   {tr("选择一首歌", "Pick a song")}
                 </p>
               ) : (() => {
@@ -567,16 +577,8 @@ export function SongPicker({
                 const fav = favs.includes(item.id);
                 const locked = !isUnlocked(bests, item.id, song.difficulty);
                 return (
-                  <div key={item.id} className="taiko-scroll relative mx-auto flex max-h-full w-[84%] flex-col gap-3 overflow-y-auto px-1 py-5" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
-                    <div className="flex items-start gap-2 border-l-4 border-[var(--taiko-accent)] pl-4">
-                      <div className="min-w-0 flex-1">
-                        <HorizontalTitle title={item.title} />
-                        <span className="block truncate text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
-                          {item.artist ? `${item.artist} · ` : ""}
-                          {fmtTime(item.durationMs)} · BPM {item.bpm} · {item.timeSignature[0]}/{item.timeSignature[1]}
-                          {downloaded ? ` · ${tr("已下载", "Downloaded")}` : ""}
-                        </span>
-                      </div>
+                  <div key={item.id} className="taiko-song-detail taiko-scroll relative z-10 mx-auto flex h-full w-[88%] flex-col overflow-y-auto px-1 py-6" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
+                    <div className="flex shrink-0 justify-end gap-2">
                       <Button
                         type="button"
                         variant="outline"
@@ -599,10 +601,20 @@ export function SongPicker({
                         <Heart size={17} className={fav ? "fill-[#ff5a6e] text-[#ff5a6e]" : "text-[rgba(255,255,255,0.75)]"} />
                       </Button>
                     </div>
-                    <div className="my-1 bg-[rgba(8,8,11,0.42)] px-4 py-3 backdrop-blur-[12px]">
+                    <div className="taiko-song-detail-controls my-auto flex min-h-[230px] items-center justify-center py-3">
                       <CardControls songId={item.id} bests={bests} />
                     </div>
-                    <div className="flex justify-end">
+                    <div className="flex shrink-0 items-end justify-between gap-5 border-l-4 border-[var(--taiko-accent)] py-1 pl-4">
+                      <div className="min-w-0 flex-1">
+                        <HorizontalTitle title={item.title} />
+                        <span className="block truncate text-xs tabular-nums text-[rgba(255,255,255,0.72)]">
+                          {item.artist ? `${item.artist} · ` : ""}
+                          {fmtTime(item.durationMs)} · BPM {item.bpm} · {item.timeSignature[0]}/{item.timeSignature[1]}
+                        </span>
+                        {downloaded && (
+                          <span className="mt-1 block text-xs text-[var(--taiko-accent)]">{tr("已下载", "Downloaded")}</span>
+                        )}
+                      </div>
                       <Button
                         type="button"
                         onClick={() => {
@@ -611,7 +623,7 @@ export function SongPicker({
                           else void downloadSong(item);
                         }}
                         disabled={busyThis || (locked && downloaded)}
-                        className="relative h-10 min-w-[7.5rem] gap-2 overflow-hidden rounded-md bg-[var(--taiko-accent)] px-5 text-sm font-semibold tracking-[0.15em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04] disabled:opacity-60"
+                        className="relative h-12 min-w-[9rem] shrink-0 gap-2 overflow-hidden rounded-md bg-[var(--taiko-accent)] px-6 text-base font-semibold tracking-[0.15em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04] disabled:opacity-60"
                       >
                         {busyThis ? <><Loader2 size={16} className="animate-spin" />{tr("准备中", "Loading")}</>
                           : downloading ? <><X size={16} />{dl.percent}%</>
