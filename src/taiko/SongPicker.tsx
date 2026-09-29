@@ -144,6 +144,9 @@ function HorizontalTitle({ title, compact = false }: { title: string; compact?: 
   );
 }
 
+/** 本次页面会话内记住所在歌单：退出歌曲后回到歌单，刷新页面才回主界面。 */
+const sessionPicker: { openList: string | null; selectedId: string | null } = { openList: null, selectedId: null };
+
 export function SongPicker({
   speed,
   onSpeedChange,
@@ -167,7 +170,14 @@ export function SongPicker({
   const [tags, setTags] = useState<LibraryTag[]>(() => initialLibrary?.tags ?? []);
   const [favs, setFavs] = useState<string[]>([]);
   /** 当前打开的歌单：null=歌单列表；"fav"=我的收藏；"untagged"=未分类；其余为标签 id */
-  const [openList, setOpenList] = useState<string | null>(null);
+  const [openList, setOpenListState] = useState<string | null>(() => sessionPicker.openList);
+  const setOpenList = useCallback((next: string | null | ((cur: string | null) => string | null)) => {
+    setOpenListState((cur) => {
+      const value = typeof next === "function" ? next(cur) : next;
+      sessionPicker.openList = value;
+      return value;
+    });
+  }, []);
   const [listErr, setListErr] = useState<string | null>(null);
   const [listing, setListing] = useState(initialLibrary === null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -207,7 +217,11 @@ export function SongPicker({
 
   const dl = useDownloads();
   const [selectedPlaylistKey, setSelectedPlaylistKey] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedIdState] = useState<string | null>(() => sessionPicker.selectedId);
+  const setSelectedId = useCallback((value: string | null) => {
+    sessionPicker.selectedId = value;
+    setSelectedIdState(value);
+  }, []);
   const [boardFor, setBoardFor] = useState<LibrarySong | null>(null);
   useEffect(() => {
     void scanDownloads();
