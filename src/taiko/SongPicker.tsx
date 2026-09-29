@@ -567,7 +567,7 @@ export function SongPicker({
                 const fav = favs.includes(item.id);
                 const locked = !isUnlocked(bests, item.id, song.difficulty);
                 return (
-                  <div key={item.id} className="taiko-scroll relative flex max-h-full w-full flex-col gap-3 overflow-y-auto px-8 py-5" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
+                  <div key={item.id} className="taiko-scroll relative mx-auto flex max-h-full w-[84%] flex-col gap-3 overflow-y-auto px-1 py-5" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                     <div className="flex items-start gap-2 border-l-4 border-[var(--taiko-accent)] pl-4">
                       <div className="min-w-0 flex-1">
                         <HorizontalTitle title={item.title} />
