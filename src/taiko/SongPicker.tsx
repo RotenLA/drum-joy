@@ -438,7 +438,7 @@ export function SongPicker({
                 const first = listSongs(pl.key)[0];
                 setSelectedId(first?.id ?? null);
               })}
-              className="relative h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] shrink-0 overflow-hidden rounded-lg border border-[var(--taiko-glass-line)] p-0 text-left shadow-xl transition-all duration-300 hover:border-[var(--taiko-accent)]"
+              className="relative h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] shrink-0 items-stretch justify-start overflow-hidden rounded-lg border border-[var(--taiko-glass-line)] p-0 text-left shadow-xl transition-all duration-300 hover:border-[var(--taiko-accent)]"
               style={{
                 transform: "skewX(-9deg)",
                 background: pl.key === "fav"
@@ -449,7 +449,7 @@ export function SongPicker({
               }}
             >
               <span className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,12,18,0.05), rgba(10,12,18,0.72))" }} />
-              <span className="relative z-10 flex h-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
+              <span className="relative z-10 flex h-full w-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
                 <span className="flex min-w-0 flex-col gap-1">
                   <HorizontalTitle title={pl.name} />
                   <span className="text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
