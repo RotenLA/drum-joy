@@ -17,3 +17,4 @@
 - Admin folder import groups by the final underscore suffix and uploads songs sequentially to avoid browser memory spikes.
 - The player checks the lightweight library revision once per page session and reuses cached library, favorites, and play data for all in-app returns.
 - Song BPM metadata is inferred from audio plus MIDI structure in the 80–180 range; chart timing follows the difficulty snap rule and the MIDI tempo map, while MIDI remains the GM-part and time-signature source.
+- On low-height landscape screens, Settings, Exit/Back, and Tutorial share the same safe-area top line and 2rem height so Unity WebView chrome stays aligned.
