@@ -40,6 +40,22 @@ export const STEPS_PER_BEAT = 4;
 
 /** 力度极低的孤立镲片视为误检 */
 const WEAK_CYMBAL_VELOCITY = 45;
+/** 底鼓 / 军鼓的噪声门限（AI 分轨常在这个力度以下吐出残响碎音） */
+const WEAK_DRUM_VELOCITY = 38;
+/** 同一部件的最小间隔：更近的判为同一击打的重复触发 */
+const DEBOUNCE_MS = 62;
+/** 单手同刻部件上限（双手） */
+const MAX_HANDS_AT_ONCE = 2;
+/** 同刻仲裁优先级，数字小的优先保留（串音多发的通鼓最后） */
+const HAND_PRIORITY: Partial<Record<PartId, number>> = {
+  snare: 0,
+  crash: 1,
+  hihat: 2,
+  ride: 3,
+  highTom: 4,
+  midTom: 5,
+  floorTom: 6,
+};
 
 export interface CleanOptions {
   /** 手动相位微调（单位：拍，可正负） */
@@ -58,12 +74,14 @@ export function cleanMidi(midi: ParsedMidi, opts: CleanOptions = {}): CleanedMid
   for (const ev of midi.notes) {
     const part = GM_TO_PART[ev.note];
     if (!part) continue;
+    // 降噪之一：底鼓 / 军鼓的极弱事件基本是低频轰鸣或串音
+    if ((part === "kick" || part === "snare") && ev.velocity < WEAK_DRUM_VELOCITY) continue;
     const step = Math.round(ev.tick / stepTicks);
     if (step < 0) continue;
     const key = `${step}:${part}`;
     const prev = byKey.get(key);
     const open = part === "hihat" && OPEN_HAT_NOTES.has(ev.note);
-    // 2) 降噪之一：同一格同一鼓件只留最响的一下（开镲标记做或运算保留）
+    // 降噪之二：同一格同一鼓件只留最响的一下（开镲标记做或运算保留）
     if (!prev || ev.velocity > prev.velocity) {
       byKey.set(key, { step, part, velocity: ev.velocity, timeMs: ev.timeMs, open: open || (prev?.open ?? false) });
     } else if (open && prev) {
@@ -73,7 +91,7 @@ export function cleanMidi(midi: ParsedMidi, opts: CleanOptions = {}): CleanedMid
 
   let hits = [...byKey.values()].sort((a, b) => a.step - b.step || a.part.localeCompare(b.part));
 
-  // 3) 降噪之二：孤立的极弱镲片丢弃
+  // 2) 降噪之三：孤立的极弱镲片丢弃
   const stepSet = new Set(hits.map((h) => h.step));
   hits = hits.filter((h) => {
     if (h.part !== "crash" && h.part !== "ride") return true;
@@ -81,7 +99,13 @@ export function cleanMidi(midi: ParsedMidi, opts: CleanOptions = {}): CleanedMid
     return stepSet.has(h.step - 1) || stepSet.has(h.step + 1);
   });
 
-  // 4) 相位检测：找出哪个网格位是第 1 拍
+  // 3) 降噪之四：同部件消抖（一次击打被 AI 吐成两下）
+  hits = debounce(hits);
+
+  // 4) 降噪之五：同刻生理仲裁，剔除频谱串音造成的多余通鼓
+  hits = limitSimultaneous(hits);
+
+  // 5) 相位检测：找出哪个网格位是第 1 拍
   const phaseSteps = detectPhase(hits, stepsPerBar, opts.phaseBeatOffset ?? 0);
 
   return {
@@ -96,6 +120,57 @@ export function cleanMidi(midi: ParsedMidi, opts: CleanOptions = {}): CleanedMid
     ppq,
   };
 }
+
+/** 同一部件相邻击打间隔小于阈值时，只保留力度更大的一记 */
+function debounce(hits: CleanHit[]): CleanHit[] {
+  const byPart = new Map<PartId, CleanHit[]>();
+  for (const h of hits) {
+    const list = byPart.get(h.part) ?? [];
+    list.push(h);
+    byPart.set(h.part, list);
+  }
+  const drop = new Set<CleanHit>();
+  for (const list of byPart.values()) {
+    list.sort((a, b) => a.timeMs - b.timeMs);
+    let keep = list[0];
+    for (let i = 1; i < list.length; i++) {
+      const cur = list[i]!;
+      if (keep && cur.timeMs - keep.timeMs < DEBOUNCE_MS) {
+        // 粘连的两记合并：丢掉弱的那一记
+        if (cur.velocity > keep.velocity) {
+          drop.add(keep);
+          keep = cur;
+        } else {
+          drop.add(cur);
+        }
+      } else {
+        keep = cur;
+      }
+    }
+  }
+  return hits.filter((h) => !drop.has(h));
+}
+
+/** 同一网格位上手部件超过两个时按优先级保留 */
+function limitSimultaneous(hits: CleanHit[]): CleanHit[] {
+  const byStep = new Map<number, CleanHit[]>();
+  for (const h of hits) {
+    const list = byStep.get(h.step) ?? [];
+    list.push(h);
+    byStep.set(h.step, list);
+  }
+  const drop = new Set<CleanHit>();
+  for (const list of byStep.values()) {
+    const hands = list.filter((h) => HAND_PRIORITY[h.part] !== undefined);
+    if (hands.length <= MAX_HANDS_AT_ONCE) continue;
+    hands.sort(
+      (a, b) => (HAND_PRIORITY[a.part] ?? 9) - (HAND_PRIORITY[b.part] ?? 9) || b.velocity - a.velocity,
+    );
+    for (const h of hands.slice(MAX_HANDS_AT_ONCE)) drop.add(h);
+  }
+  return hits.filter((h) => !drop.has(h));
+}
+
 
 function detectPhase(hits: CleanHit[], stepsPerBar: number, beatOffset: number): number {
   const beats = stepsPerBar / STEPS_PER_BEAT;
