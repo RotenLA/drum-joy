@@ -178,17 +178,25 @@ function pedalHolds(emits: Emit[], diff: Difficulty, endStep: number): HoldSeg[]
 /**
  * 真实打击时间对齐。
  *
- * 谱面音符的位置来自量化网格，但时间优先回填原 MIDI 同部件的真实 note-on 毫秒：
- * 1) 同部件 ±1 格内有真实击打 → 直接用它的时间（和鼓分轨波峰完全同步）；
- * 2) 同格任意部件有真实击打 → 用它的时间（同一瞬间）；
- * 3) 低难度为了好打补出来的音符 → 用当前小节内前后真实击打做局部线性插值；
+ * 谱面音符的位置来自量化网格，但时间优先回填原 MIDI 的真实 note-on 毫秒。
+ * 关键：同一格（同一拍位）上的所有部件共用一个锚点时刻，绝不各自漂移，
+ * 否则本该同时响的踩镲与军鼓会被拉开几十毫秒，听感变成突兀的 32 分连击。
+ *
+ * 锚点取法：
+ * 1) 本格内真实击打（按军鼓 > 底鼓 > 踩镲 > 其他的主次顺序）；
+ * 2) 相邻 ±1 格的真实击打；
+ * 3) 低难度补出来的音符 → 小节内前后真实击打做局部线性插值；
  * 4) 都没有 → 退回 tempo map 网格时间。
- * 任何一步与网格时间偏差超过阈值时，一律回退网格，避免跟着脏音符跑偏。
+ * 任何一步与网格偏差超过阈值时一律回退网格，避免跟着脏音符跑偏。
  */
+const ANCHOR_PRIORITY: readonly PartId[] = ["snare", "kick", "hihat", "ride", "crash"];
+
 class HitAligner {
   private byPartStep = new Map<string, number>();
   private byStep = new Map<number, number>();
   private steps: number[] = [];
+  /** 每格一个锚点时刻，保证同刻音符严格同时 */
+  private anchors = new Map<number, number>();
 
   constructor(
     private midi: ParsedMidi,
@@ -233,27 +241,66 @@ class HitAligner {
     return a + ((b - a) * (step - lo)) / (hi - lo);
   }
 
-  timeOf(step: number, part: PartId): number {
+  /** 该格的统一锚点时刻（与部件无关） */
+  timeOf(step: number, _part?: PartId): number {
+    const cached = this.anchors.get(step);
+    if (cached !== undefined) return cached;
+
     const grid = this.grid(step);
     const tol = this.stepMs(step) * 1.5;
     const accept = (t: number | undefined | null) =>
       t !== undefined && t !== null && Math.abs(t - grid) <= tol ? t : null;
 
-    const same =
-      accept(this.byPartStep.get(`${step}:${part}`)) ??
-      accept(this.byPartStep.get(`${step - 1}:${part}`)) ??
-      accept(this.byPartStep.get(`${step + 1}:${part}`));
-    if (same !== null) return same;
+    let at: number | null = null;
+    // 本格主次部件 → 本格任意部件 → 相邻格主次部件
+    for (const p of ANCHOR_PRIORITY) {
+      at = accept(this.byPartStep.get(`${step}:${p}`));
+      if (at !== null) break;
+    }
+    at ??= accept(this.byStep.get(step));
+    if (at === null) {
+      for (const p of ANCHOR_PRIORITY) {
+        at =
+          accept(this.byPartStep.get(`${step - 1}:${p}`)) ??
+          accept(this.byPartStep.get(`${step + 1}:${p}`));
+        if (at !== null) break;
+      }
+    }
+    at ??= accept(this.interpolate(step));
 
-    const atStep = accept(this.byStep.get(step));
-    if (atStep !== null) return atStep;
-
-    const lerp = accept(this.interpolate(step));
-    if (lerp !== null) return lerp;
-
-    return grid;
+    const time = at ?? grid;
+    this.anchors.set(step, time);
+    return time;
   }
 }
+
+/** 各难度允许的最小音符间隔（毫秒）：小于这个间隔的两批音符合并到同一时刻 */
+const MIN_GAP_MS: Record<Difficulty, number> = {
+  easy: 180,
+  beginner: 110,
+  standard: 70,
+  hard: 45,
+};
+
+/**
+ * 物理最小间隔门限：把靠得过近的两批音符收拢到同一时刻，
+ * 彻底杜绝轻松/入门出现听感上的 32 分碎音。
+ */
+function enforceMinGap(notes: TaikoNote[], diff: Difficulty): TaikoNote[] {
+  const gap = MIN_GAP_MS[diff];
+  let anchor = -Infinity;
+  for (const n of notes) {
+    if (n.timeMs - anchor < gap) {
+      const shift = anchor - n.timeMs;
+      n.timeMs = anchor;
+      if (n.holdMs !== undefined) n.holdMs = Math.max(1, n.holdMs - shift);
+    } else {
+      anchor = n.timeMs;
+    }
+  }
+  return notes;
+}
+
 
 function emitsToNotes(
   emits: Emit[],
@@ -337,10 +384,14 @@ export function buildPlayChart(
   const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);
 
   const aligner = new HitAligner(midi, clean);
-  const notes = [
-    ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, aligner),
-    ...holdsToNotes(holds, midi, clean, offset, aligner),
-  ].sort((a, b) => a.timeMs - b.timeMs);
+  const notes = enforceMinGap(
+    [
+      ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, aligner),
+      ...holdsToNotes(holds, midi, clean, offset, aligner),
+    ].sort((a, b) => a.timeMs - b.timeMs),
+    diff,
+  );
+
 
 
   const last = notes[notes.length - 1]?.timeMs ?? 0;

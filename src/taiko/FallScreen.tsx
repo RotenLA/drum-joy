@@ -101,7 +101,10 @@ export function FallScreen({
   const countdownMsRef = useRef(0);
   const countdownBeatsRef = useRef(4);
   const countdownTargetRef = useRef(0);
+  /** 音频时钟唤醒重试次数（挂起时倒计时会卡住） */
+  const resumeTriesRef = useRef(0);
   const beatMsRef = useRef(500);
+
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
   const silentStartRef = useRef(0);
   /** 本局是否真正开始演奏过（用于中途退出也记历史） */
@@ -144,7 +147,8 @@ export function FallScreen({
         },
         song.difficulty,
       ),
-      song.audioLeadMs,
+      // 开头空白 + 第一声鼓真实咬合，两者一起平移
+      song.audioLeadMs + song.audioAlignMs,
     );
   }, [
     song.midi,
@@ -153,7 +157,9 @@ export function FallScreen({
     song.phaseBeatOffset,
     song.difficulty,
     song.audioLeadMs,
+    song.audioAlignMs,
   ]);
+
 
   const setPhaseBoth = useCallback((p: Phase) => {
     phaseRef.current = p;
@@ -366,6 +372,18 @@ export function FallScreen({
     countdownTargetRef.current = fromMs;
     // 一次算好绝对起播时刻，倒计时从目标位置前方走来，结束后无缝衔接。
     const ctx = getAudioContext();
+    // 音频时钟被系统挂起时 currentTime 完全停滞，倒计时会卡死在第一个数字上。
+    // 先唤醒，短时间内没醒就重试，超过上限仍不醒才照常往下走。
+    if (ctx.state !== "running") {
+      void ctx.resume().catch(() => undefined);
+      if (resumeTriesRef.current < 12) {
+        resumeTriesRef.current++;
+        const t = window.setTimeout(() => beginCountdownRef.current(fromMs, reset), 120);
+        timersRef.current.push(t);
+        return;
+      }
+    }
+    resumeTriesRef.current = 0;
     const LEAD_SEC = 0.15;
     const songStartSec = ctx.currentTime + LEAD_SEC + countdownMs / 1000;
     countdownStartRef.current = performance.now();
@@ -377,7 +395,23 @@ export function FallScreen({
     for (let i = 0; i < beats; i++) {
       metronomeClick(i === 0, songStartSec - countdownMs / 1000 + (i * beatMs) / 1000);
     }
+    // 兜底：倒计时应当持续前进，600ms 后时钟没动就唤醒音频并重来一次
+    const watchStartCtx = ctx.currentTime;
+    const watch = window.setTimeout(() => {
+      if (phaseRef.current !== "countdown") return;
+      const moved = getAudioContext().currentTime - watchStartCtx;
+      if (moved > 0.2) return;
+      debugLog.push("system", "倒计时时钟停滞，重新唤醒音频");
+      void getAudioContext().resume().catch(() => undefined);
+      beginCountdownRef.current(fromMs, false);
+    }, 600);
+    timersRef.current.push(watch);
   }, [hasAudio, playChart, resetRun, setPhaseBoth]);
+
+  // 重试与兜底都通过 ref 调用最新的 beginCountdown，避免闭包里递归引用自身
+  const beginCountdownRef = useRef(beginCountdown);
+  beginCountdownRef.current = beginCountdown;
+
 
   const start = useCallback(() => beginCountdown(0, true), [beginCountdown]);
 
