@@ -550,7 +550,7 @@ export function SongPicker({
                     </Button>
                   );
                 })}
-                <div aria-hidden="true" className="h-[70vh] shrink-0" />
+                <div aria-hidden="true" className="h-[80vh] shrink-0" />
               </div>
             </div>
 
