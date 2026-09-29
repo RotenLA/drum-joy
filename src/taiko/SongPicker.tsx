@@ -15,7 +15,7 @@ import { useLanguage } from "./i18n";
 import { isUnlocked, loadFavorites, loadPlayData, setFavorite, type BestMap, type HistoryEntry } from "./history";
 import { CardControls } from "./CardControls";
 import type { Difficulty } from "./difficulty";
-import { ArrowLeft, BookOpen, Download, Heart, Loader2, LogOut, Play, Trophy, X } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, Download, Heart, Loader2, LogOut, Play, Trophy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const fmtTime = (ms: number) => {
@@ -204,6 +204,7 @@ export function SongPicker({
   }, []);
 
   const dl = useDownloads();
+  const [selectedPlaylistKey, setSelectedPlaylistKey] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [boardFor, setBoardFor] = useState<LibrarySong | null>(null);
   useEffect(() => {
@@ -343,6 +344,18 @@ export function SongPicker({
   const activePlaylistBackground = openList
     ? playlistBackground(openList, activePlaylistIndex)
     : CARD_GRADIENTS[0];
+  useEffect(() => {
+    setSelectedPlaylistKey((current) => {
+      if (current && playlists.some((playlist) => playlist.key === current)) return current;
+      return playlists[0]?.key ?? null;
+    });
+  }, [playlists]);
+  useEffect(() => {
+    if (openList || !selectedPlaylistKey) return;
+    const box = scrollRef.current;
+    const element = box?.querySelector<HTMLElement>(`[data-playlist-key="${selectedPlaylistKey}"]`);
+    element?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [openList, selectedPlaylistKey]);
   // 难度被锁时回落到入门
   useEffect(() => {
     if (selected && !isUnlocked(bests, selected.id, song.difficulty)) song.setSong({ difficulty: "beginner" });
@@ -485,33 +498,64 @@ export function SongPicker({
               {tr("正在读取曲库…", "Loading library…")}
             </p>
           )}
-          {!listing && playlists.map((pl, i) => (
-            <Button
-              key={pl.key}
-              variant="outline"
-              type="button"
-              onClick={guardClick(() => {
-                setOpenList(pl.key);
-                const first = listSongs(pl.key)[0];
-                setSelectedId(first?.id ?? null);
-              })}
-              className="relative h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] shrink-0 items-stretch justify-start overflow-hidden rounded-lg border border-[var(--taiko-glass-line)] p-0 text-left shadow-xl transition-all duration-300 hover:border-[var(--taiko-accent)]"
-              style={{
-                transform: "skewX(-9deg)",
-                 background: playlistBackground(pl.key, i),
-              }}
-            >
-              <span className="absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
-              <span className="relative z-10 flex h-full w-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
-                <span className="flex min-w-0 flex-col gap-1">
-                  <HorizontalTitle title={pl.name} />
-                  <span className="text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
-                    {pl.count} {tr("首", pl.count === 1 ? "song" : "songs")}
+          {!listing && playlists.map((pl, i) => {
+            const active = pl.key === selectedPlaylistKey;
+            const cardStyle = {
+              transform: "skewX(-9deg)",
+              background: playlistBackground(pl.key, i),
+            };
+            if (!active) {
+              return (
+                <Button
+                  key={pl.key}
+                  data-playlist-key={pl.key}
+                  variant="outline"
+                  type="button"
+                  onClick={guardClick(() => setSelectedPlaylistKey(pl.key))}
+                  aria-label={tr(`选择歌单 ${pl.name}`, `Select playlist ${pl.name}`)}
+                  className="relative h-[min(82%,430px)] w-[clamp(76px,8vw,104px)] shrink-0 items-stretch justify-start overflow-hidden rounded-lg border border-[var(--taiko-glass-line)] p-0 text-left shadow-xl transition-[width,transform,border-color] duration-300 hover:-translate-y-1 hover:border-[var(--taiko-accent)]"
+                  style={cardStyle}
+                >
+                  <span className="absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
+                  <span className="relative z-10 block h-full w-full">
+                    <VerticalTitle title={pl.name} />
                   </span>
-                </span>
-              </span>
-            </Button>
-          ))}
+                </Button>
+              );
+            }
+            return (
+              <div
+                key={pl.key}
+                data-playlist-key={pl.key}
+                className="relative h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] shrink-0 overflow-hidden rounded-lg border border-[var(--taiko-glass-line-strong)] shadow-2xl transition-[width,transform,border-color] duration-300"
+                style={cardStyle}
+              >
+                <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
+                <div className="relative z-10 flex h-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
+                  <div className="flex min-w-0 items-end justify-between gap-5">
+                    <span className="flex min-w-0 flex-1 flex-col gap-1">
+                      <HorizontalTitle title={pl.name} />
+                      <span className="text-xs tabular-nums text-[rgba(255,255,255,0.65)]">
+                        {pl.count} {tr("首", pl.count === 1 ? "song" : "songs")}
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setOpenList(pl.key);
+                        const first = listSongs(pl.key)[0];
+                        setSelectedId(first?.id ?? null);
+                      }}
+                      className="h-11 shrink-0 gap-2 rounded-md bg-[var(--taiko-accent)] px-5 text-sm font-semibold text-[var(--taiko-paper)] hover:scale-[1.03]"
+                    >
+                      {tr("进入", "Enter")}
+                      <ChevronRight size={17} />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
