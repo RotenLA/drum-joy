@@ -19,6 +19,7 @@ export interface CleanHit {
 }
 
 export interface CleanedMidi {
+  sourceMidi: ParsedMidi;
   hits: CleanHit[];
   /** 一个 16 分网格的 tick 数 */
   stepTicks: number;
@@ -82,6 +83,7 @@ export function cleanMidi(midi: ParsedMidi, opts: CleanOptions = {}): CleanedMid
   const phaseSteps = detectPhase(hits, stepsPerBar, opts.phaseBeatOffset ?? 0);
 
   return {
+    sourceMidi: midi,
     hits,
     stepTicks,
     stepsPerBar,

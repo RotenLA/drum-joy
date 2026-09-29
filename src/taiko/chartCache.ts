@@ -40,6 +40,11 @@ export function midiFingerprint(midi: ParsedMidi): string {
     push(n.note);
     push(n.velocity);
   }
+  push(midi.tempos.length);
+  for (const tempo of midi.tempos) {
+    push(tempo.tick);
+    push(Math.round(tempo.usPerQuarter));
+  }
   return (h >>> 0).toString(36);
 }
 
