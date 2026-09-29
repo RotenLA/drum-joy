@@ -290,12 +290,14 @@ function holdsToNotes(
   midi: ParsedMidi,
   clean: CleanedMidi,
   offsetMs: number,
+  aligner: HitAligner,
 ): TaikoNote[] {
   const notes: TaikoNote[] = [];
   for (const s of segs) {
     // 相位微调可能让首个闭镲落在 0 之前，长音符起点夹到曲首
     const startStep = Math.max(0, s.startStep);
-    const startMs = Math.max(0, tickToMs(midi, startStep * clean.stepTicks) + offsetMs);
+    const startMs = Math.max(0, aligner.timeOf(startStep, "pedalHat") + offsetMs);
+
     const endMs = tickToMs(midi, s.endStep * clean.stepTicks) + offsetMs;
     if (endMs <= startMs) continue;
 
@@ -334,10 +336,12 @@ export function buildPlayChart(
   const lastStep = emits.reduce((m, e) => Math.max(m, e.step), 0);
   const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);
 
+  const aligner = new HitAligner(midi, clean);
   const notes = [
-    ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, diff),
-    ...holdsToNotes(holds, midi, clean, offset),
+    ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, aligner),
+    ...holdsToNotes(holds, midi, clean, offset, aligner),
   ].sort((a, b) => a.timeMs - b.timeMs);
+
 
   const last = notes[notes.length - 1]?.timeMs ?? 0;
   return {

@@ -117,14 +117,15 @@ const quarterOnly = (xs8: number[]) => uniqSort(xs8.filter((x) => x % 2 === 0));
 const EASY: Gen = (c) => {
   const out: Array<[number, PartId, number?]> = [];
   const bb = backbeats(c);
-  // 轻松：只用正拍，绝不切分
+  // 轻松：只用正拍，绝不切分；正拍军鼓太少时补足标准反拍
   let snares = quarterOnly(c.groove.snare8).map((x) => x / 2);
-  if (snares.length === 0) snares = bb;
+  if (snares.length < Math.min(2, bb.length)) snares = uniqSort([...snares, ...bb]);
   if (c.level === 0) snares = snares.slice(-1);
   for (const b of beatsOf(c)) out.push([b * c.spb, "hihat"]);
   for (const b of snares) out.push([b * c.spb, "snare"]);
   return out;
 };
+
 
 const BEGINNER: Gen = (c) => {
   const out: Array<[number, PartId, number?]> = [];
