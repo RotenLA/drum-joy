@@ -57,6 +57,13 @@
       "when": 1790648248200,
       "tag": "0007_deprecate_playlist_background",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790651449623,
+      "tag": "0008_add_library_revision",
+      "breakpoints": true
     }
   ]
 }
