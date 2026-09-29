@@ -78,7 +78,7 @@ const EASY: Gen = (c) => {
     }
     for (const b of bb) out.push([b * c.spb, "snare"]);
     // 偶尔正拍军鼓：乐句尾最后一拍加一下
-    if (c.variant && c.beats >= 4) out.push([(c.beats - 1) * c.spb + c.spb / 2 - c.spb / 2, "snare"]);
+    if (c.variant && c.beats >= 4) out.push([(c.beats - 2) * c.spb, "snare"]);
   }
   return out;
 };
