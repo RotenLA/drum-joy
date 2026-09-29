@@ -14,7 +14,7 @@ import { ThereminScreen } from "./theremin/ThereminScreen";
 import { useLanguage } from "./i18n";
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
-const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.5, midiDeviceId: null };
+const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.25, midiDeviceId: null };
 
 
 /** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等；300ms 内去重（开发环境可能双触发） */
