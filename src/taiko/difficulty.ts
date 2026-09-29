@@ -86,6 +86,8 @@ interface Emit {
   step: number;
   part: PartId;
   velocity: number;
+  /** 原始 MIDI note-on 时间；最终音符优先使用，绝不按推算 BPM 重排。 */
+  timeMs?: number;
   /** 踩镲为开镲（此刻左脚必须松开，长音符要断开） */
   open?: boolean;
 }
@@ -231,6 +233,7 @@ function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
       step: h.step,
       part: h.part,
       velocity: h.velocity,
+      timeMs: h.timeMs,
       open: h.open ?? false,
     }));
 
@@ -293,6 +296,46 @@ function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
   }
 
   return kept;
+}
+
+/**
+ * 轻松 / 入门 / 标准都从原始 GM 命中筛选，不再套固定军鼓模板。
+ * 难度只决定保留哪些部件与密度，保留下来的音符始终携带原 MIDI 时间。
+ */
+function sourceEmits(clean: CleanedMidi, diff: Difficulty): Emit[] {
+  const allowed = new Set(NOTE_PARTS[diff]);
+  const hits = clean.hits.filter((hit) => allowed.has(hit.part));
+  if (diff === "standard") {
+    return hits.map((hit) => ({
+      step: hit.step,
+      part: hit.part,
+      velocity: hit.velocity,
+      timeMs: hit.timeMs,
+      open: hit.open,
+    }));
+  }
+
+  // 低难度仍以原谱落点为准：保留强音、正拍与每拍最重要的一次弱音，避免整段被滤空。
+  const strongestByBeat = new Map<string, CleanHit>();
+  for (const hit of hits) {
+    const beat = Math.floor(hit.step / clean.stepsPerBeat);
+    const key = `${beat}:${hit.part}`;
+    const previous = strongestByBeat.get(key);
+    if (!previous || hit.velocity > previous.velocity) strongestByBeat.set(key, hit);
+  }
+  const selected = hits.filter((hit) => {
+    const onBeat = hit.step % clean.stepsPerBeat === 0;
+    const strong = hit.velocity >= (diff === "easy" ? 92 : 78);
+    const beat = Math.floor(hit.step / clean.stepsPerBeat);
+    return onBeat || strong || strongestByBeat.get(`${beat}:${hit.part}`) === hit;
+  });
+  return selected.map((hit) => ({
+    step: hit.step,
+    part: hit.part,
+    velocity: hit.velocity,
+    timeMs: hit.timeMs,
+    open: diff === "easy" || diff === "beginner" ? false : hit.open,
+  }));
 }
 
 /** 踩镲与低通/吊镲/叮叮镲不可同刻：同刻时丢掉踩镲 */
@@ -421,7 +464,7 @@ function emitsToNotes(
     const key = `${e.step}:${e.part}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const timeMs = tickToMs(midi, e.step * clean.stepTicks) + offsetMs;
+    const timeMs = (e.timeMs ?? tickToMs(midi, e.step * clean.stepTicks)) + offsetMs;
     if (timeMs < 0) continue;
     notes.push({
       timeMs,
@@ -473,18 +516,7 @@ export function buildPlayChart(
   const offset = opts.offsetMs ?? 0;
 
   let emits: Emit[];
-  if (diff === "hard") {
-    emits = hardEmits(clean, skeleton);
-  } else {
-    emits = [];
-    for (const bar of skeleton.bars) {
-      const local =
-        diff === "standard"
-          ? standardBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat)
-          : beginnerBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat);
-      for (const e of local) emits.push({ ...e, step: bar.startStep + e.step });
-    }
-  }
+  emits = diff === "hard" ? hardEmits(clean, skeleton) : sourceEmits(clean, diff);
 
   // 轻松 / 入门：全部按闭镲处理（不出开镲）
   if (diff === "easy" || diff === "beginner") {
