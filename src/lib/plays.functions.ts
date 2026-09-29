@@ -137,6 +137,7 @@ export interface BoardRow {
   name: string;
   score: number;
   accuracy: number;
+  fullCombo: boolean;
   me: boolean;
 }
 
@@ -157,7 +158,7 @@ export const getLeaderboard = createServerFn({ method: "POST" })
     const db = await admin();
     const { data: rows } = await db
       .from("play_bests")
-      .select("user_id, player_name, best_score, best_accuracy")
+      .select("user_id, player_name, best_score, best_accuracy, full_combo")
       .eq("song_id", data.songId)
       .eq("difficulty", data.difficulty)
       .gt("best_score", 0)
@@ -168,6 +169,7 @@ export const getLeaderboard = createServerFn({ method: "POST" })
       name: r.player_name || maskId(r.user_id),
       score: r.best_score,
       accuracy: Number(r.best_accuracy),
+      fullCombo: r.full_combo,
       me: !!data.userId && r.user_id === data.userId,
     }));
     let mine: BoardRow | null = top.find((r) => r.me) ?? null;
@@ -176,7 +178,7 @@ export const getLeaderboard = createServerFn({ method: "POST" })
       if (rank) {
         const { data: m } = await db
           .from("play_bests")
-          .select("player_name, best_score, best_accuracy")
+          .select("player_name, best_score, best_accuracy, full_combo")
           .eq("user_id", data.userId)
           .eq("song_id", data.songId)
           .eq("difficulty", data.difficulty)
@@ -187,6 +189,7 @@ export const getLeaderboard = createServerFn({ method: "POST" })
             name: m.player_name || maskId(data.userId),
             score: m.best_score,
             accuracy: Number(m.best_accuracy),
+            fullCombo: m.full_combo,
             me: true,
           };
       }

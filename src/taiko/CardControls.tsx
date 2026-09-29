@@ -61,7 +61,11 @@ export function CardControls({
         ) : currentBest.completed ? (
           <>
             <span className="text-4xl font-black text-[var(--taiko-accent)]">
-              {ratingOfAccuracy(currentBest.accuracy)}
+              {ratingOfAccuracy(currentBest.accuracy, {
+                progress: currentBest.progress,
+                completed: currentBest.completed,
+                fullCombo: currentBest.fullCombo,
+              })}
             </span>
             <span className="flex flex-col items-start">
               <span className="text-xl font-bold tabular-nums text-[rgba(255,255,255,0.96)]">

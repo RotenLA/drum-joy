@@ -43,7 +43,7 @@ export function LeaderboardDialog({
     >
       <span className="font-bold tabular-nums">#{r.rank}</span>
       <span className="truncate">{r.name}</span>
-      <span className="text-center font-black">{ratingOfAccuracy(r.accuracy)}</span>
+      <span className="text-center font-black">{ratingOfAccuracy(r.accuracy, { completed: true, fullCombo: r.fullCombo })}</span>
       <span className="text-right tabular-nums">{r.score.toLocaleString()}</span>
     </div>
   );

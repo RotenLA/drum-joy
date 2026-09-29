@@ -12,7 +12,8 @@
 - Startup watchdog: root component marks booted on mount (covers every route); overlay only on mobile/Unity, never on Preview/desktop, and only when an error was captured — avoids false "Failed to start".
 - Playlist detail screens always reveal the blurred gameplay stage; `song_tags.background_path` is deprecated and must not be read, written, or exposed in admin UI.
 - Gameplay and tutorial use the stage renderer only; the removed columns mode must not be restored or read from saved settings.
-- Auto charts are deterministic, phrase-aware, and density-limited; existing cloud charts change only through explicit regeneration.
+- Auto charts are deterministic, phrase-aware, and density-limited; Easy has no syncopation, Beginner heavily limits it, and existing cloud charts change only through explicit regeneration.
+- Ratings use strict shared thresholds; live grades are progress-gated, SSS requires 99.5% plus a completed full combo, and stage intensity follows the live grade.
 - Admin folder import groups by the final underscore suffix and uploads songs sequentially to avoid browser memory spikes.
 - The player checks the lightweight library revision once per page session and reuses cached library, favorites, and play data for all in-app returns.
 - Song BPM metadata is inferred from audio plus MIDI structure in the 80–180 range, while chart timing and GM parts always preserve uploaded MIDI event times; MIDI remains the time-signature source.

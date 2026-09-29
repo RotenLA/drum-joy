@@ -381,7 +381,21 @@ export function SongPicker({
     box.scrollTo({ top: Math.max(0, nearest.element.offsetTop - detailSlotTop()), behavior: "smooth" });
   }, [activeSongs, pickSong, selectedId]);
 
+  const syncDetailSelection = useCallback(() => {
+    const box = detailScrollRef.current;
+    if (!box) return;
+    const targetTop = box.scrollTop + detailSlotTop();
+    let nearest: { id: string; distance: number } | null = null;
+    for (const element of Array.from(box.querySelectorAll<HTMLElement>("[data-song-id]"))) {
+      const id = element.dataset["songId"] ?? "";
+      const distance = Math.abs(element.offsetTop - targetTop);
+      if (id && (!nearest || distance < nearest.distance)) nearest = { id, distance };
+    }
+    if (nearest && nearest.id !== selectedId) setSelectedId(nearest.id);
+  }, [selectedId]);
+
   const onDetailScroll = () => {
+    syncDetailSelection();
     if (detailScrollTimerRef.current !== null) window.clearTimeout(detailScrollTimerRef.current);
     detailScrollTimerRef.current = window.setTimeout(settleDetailSelection, 110);
   };
@@ -562,7 +576,7 @@ export function SongPicker({
               <div className="relative min-h-0 flex-1">
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-1 right-4 top-[clamp(112px,20vh,160px)] z-30 h-[clamp(48px,9vh,72px)] -translate-x-3 rounded-lg border-l-4 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.84)] shadow-lg"
+                  className="pointer-events-none absolute left-1 right-4 top-[clamp(112px,20vh,160px)] z-10 h-[clamp(48px,9vh,72px)] -translate-x-3 rounded-lg border-l-4 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.78)] shadow-lg"
                 />
                 <div
                   ref={detailScrollRef}
@@ -580,10 +594,10 @@ export function SongPicker({
                       onClick={() => {
                         pickSong(item);
                       }}
-                      className={`relative mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] w-[82%] flex-col items-stretch justify-center overflow-visible rounded-lg border-l-4 border-[rgba(255,255,255,0.34)] bg-transparent px-5 text-left shadow-lg transition-colors duration-200 ${on ? "z-40 text-[var(--taiko-paper)]" : "z-20 text-[rgba(255,255,255,0.84)]"}`}
+                      className={`relative z-20 mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] w-[82%] flex-col items-stretch justify-center overflow-visible rounded-lg border-l-4 bg-transparent px-5 text-left shadow-lg transition-colors duration-150 ${on ? "border-transparent text-[var(--taiko-paper)]" : "border-[rgba(255,255,255,0.34)] text-[rgba(255,255,255,0.9)]"}`}
                     >
                       <span aria-hidden="true" className={`absolute inset-0 z-0 rounded-lg transition-colors ${on ? "bg-transparent" : "bg-[rgba(15,16,20,0.56)] hover:bg-[rgba(25,26,31,0.72)]"}`} />
-                      <span className="relative z-20 block min-w-0" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
+                      <span className="relative z-20 block min-w-0 [text-shadow:0_1px_3px_rgba(0,0,0,0.55)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                         <span className="flex items-baseline gap-3">
                           <span className={`w-6 shrink-0 text-[11px] tabular-nums ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.42)]"}`}>
                             {String(index + 1).padStart(2, "0")}
