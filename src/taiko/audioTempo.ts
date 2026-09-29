@@ -100,6 +100,8 @@ function candidateScore(
   const periodicity = correlation / Math.max(0.0001, weight);
   let grid = 0;
   let gridWeight = 0;
+  let onsetTotal = 0;
+  for (let i = from; i < to; i++) onsetTotal += envelope[i] ?? 0;
   const startBeat = Math.floor((from / ENVELOPE_HZ) * bpm / 60);
   const endBeat = Math.ceil((to / ENVELOPE_HZ) * bpm / 60);
   for (let beat = startBeat; beat <= endBeat; beat++) {
@@ -110,7 +112,10 @@ function candidateScore(
     grid += local * accent;
     gridWeight += accent;
   }
-  return periodicity * 0.64 + (grid / Math.max(1, gridWeight)) * 0.36;
+  const precision = grid / Math.max(1, gridWeight);
+  const coverage = grid / Math.max(0.001, onsetTotal);
+  // precision 防止高 BPM 网格乱撞，coverage 则用于解开半速/双速歧义。
+  return periodicity * 0.55 + precision * 0.25 + Math.min(1, coverage) * 0.2;
 }
 
 function bestTempo(envelope: Float32Array, midi: ParsedMidi, from: number, to: number) {
