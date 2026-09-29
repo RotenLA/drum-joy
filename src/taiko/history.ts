@@ -169,6 +169,27 @@ function localBests(list: HistoryEntry[]): BestMap {
   return m;
 }
 
+function mergeBest(bests: BestMap, entry: HistoryEntry): BestMap {
+  if (!entry.songId) return bests;
+  const r = toInput(entry);
+  const key = `${r.songId}|${r.difficulty}`;
+  const current = bests[key];
+  return {
+    ...bests,
+    [key]: {
+      songId: r.songId,
+      difficulty: r.difficulty,
+      score: Math.max(current?.score ?? 0, r.score),
+      accuracy: Math.max(current?.accuracy ?? 0, r.accuracy),
+      maxCombo: Math.max(current?.maxCombo ?? 0, r.maxCombo),
+      progress: Math.max(current?.progress ?? 0, r.progress),
+      completed: (current?.completed ?? false) || r.completed,
+      fullCombo: (current?.fullCombo ?? false) || r.fullCombo,
+      plays: (current?.plays ?? 0) + 1,
+    },
+  };
+}
+
 /** 读取历史与最佳成绩：有账号走云端（首次合并本机记录），否则本机 */
 async function fetchPlayData(): Promise<{
   history: HistoryEntry[];
