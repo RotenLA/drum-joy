@@ -1,17 +1,13 @@
 /**
- * 三档难度：入门 / 标准 / 困难。
- * 都不再直接吃原始 MIDI，而是走「量化降噪 → 小节骨架」后重新编写：
- * - 入门（5 分区）：底鼓与军鼓大部分正拍，踩镲八分为主，过门用地通简单收尾
- * - 标准（9 分区）：每小节归类到标准节奏型重写，过门小节保留原始细节
- * - 困难（9 分区）：原样保留 + 手脚交替强化（确定性，同曲每次一致）
+ * 四档难度均从原始 GM 鼓 MIDI 筛选；量化网格只参与结构分析和限密度，
+ * 保留下来的音符始终使用上传 MIDI 自带的精确 timeMs，不按推算 BPM 重排。
  */
 import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
 import { VISIBLE_PARTS, type LayoutMode, type PartId } from "./laneLayouts";
 import { noteForPart, type MidiChartOptions } from "./midiChart";
 import { tickToMs, type ParsedMidi } from "./midiFile";
 import { cleanMidi, type CleanedMidi, type CleanHit } from "./midiClean";
-import { buildSkeleton, hasNear, type BarSkeleton, type Skeleton } from "./skeleton";
-import { matchPattern } from "./patternLib";
+import { buildSkeleton, type Skeleton } from "./skeleton";
 
 export type Difficulty = "easy" | "beginner" | "standard" | "hard";
 
@@ -86,6 +82,8 @@ interface Emit {
   step: number;
   part: PartId;
   velocity: number;
+  /** 原始 MIDI note-on 时间；最终音符优先使用，绝不按推算 BPM 重排。 */
+  timeMs?: number;
   /** 踩镲为开镲（此刻左脚必须松开，长音符要断开） */
   open?: boolean;
 }
@@ -101,114 +99,6 @@ const HAND_PRIORITY: Partial<Record<PartId, number>> = {
   floorTom: 5,
 };
 const MAX_HANDS_AT_ONCE = 2;
-
-// ================= 入门 =================
-
-function beginnerBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number): Emit[] {
-  const out: Emit[] = [];
-  const beats = stepsPerBar / stepsPerBeat;
-
-  if (bar.isFill) {
-    // 轻松 / 入门过门：用允许出现的军鼓 + 踩镲收尾，避免地通被难度过滤后整拍变空。
-    const start = stepsPerBar - stepsPerBeat;
-    const n = bar.noteCount >= 8 ? 3 : 2;
-    for (let k = 0; k < n; k++) {
-      out.push({
-        // 三下也必须保持连续八分；原先把一拍三等分后吸附到 16 分网格，
-        // 会变成 0、1、3 格（十六分 + 八分），视觉和听感都不均匀。
-        step: start + k * (stepsPerBeat / 2),
-        part: "snare",
-        velocity: 100,
-      });
-    }
-    for (let s = 0; s < stepsPerBar; s += stepsPerBeat) {
-      out.push({ step: s, part: "hihat", velocity: 90 });
-    }
-    out.push({ step: 0, part: "kick", velocity: 110 });
-    return out;
-  }
-
-  for (let b = 0; b < beats; b++) {
-    const local = b * stepsPerBeat;
-    // 军鼓：正拍（多在 2、4 拍）
-    const s = hasNear(bar, "snare", local, stepsPerBeat / 2);
-    if (s !== null) out.push({ step: local, part: "snare", velocity: bar.vel.snare?.[s] ?? 100 });
-    // 底鼓：只允许正拍。原谱正拍上/紧邻有底鼓就落一下；
-    // 只有切分底鼓（差半拍）时，仅在这一拍没有军鼓时才吸附过来，避免变成四踩。
-    const exact = hasNear(bar, "kick", local, 1);
-    const near = exact ?? (s === null ? hasNear(bar, "kick", local, stepsPerBeat / 2) : null);
-    if (near !== null)
-      out.push({ step: local, part: "kick", velocity: bar.vel.kick?.[near] ?? 100 });
-  }
-
-  // 偶尔的反拍军鼓：原谱在八分反拍有很强的军鼓时，每 4 小节最多保留一次
-  if (bar.index % 4 === 3) {
-    for (const s of bar.slots.snare ?? []) {
-      if (s % stepsPerBeat === stepsPerBeat / 2 && (bar.vel.snare?.[s] ?? 0) >= 105) {
-        out.push({ step: s, part: "snare", velocity: bar.vel.snare?.[s] ?? 105 });
-        break;
-      }
-    }
-  }
-
-  // 踩镲：以原曲脉冲为依据；乐句后半允许八分推进，但不把整段机械铺满。
-  if (bar.hatDiv !== 0) {
-    const div = bar.hatDiv === 16 && bar.index % 4 >= 2 ? stepsPerBeat / 2 : stepsPerBeat;
-    for (let s = 0; s < stepsPerBar; s += div) out.push({ step: s, part: "hihat", velocity: 90 });
-  }
-
-  return out;
-}
-
-// ================= 标准 =================
-
-function standardBar(bar: BarSkeleton, stepsPerBar: number, stepsPerBeat: number): Emit[] {
-  const out: Emit[] = [];
-  const cymbalPart: PartId = bar.ridePrimary ? "ride" : "hihat";
-
-  if (bar.isFill) {
-    // 过门小节不套模板：保留原始细节（量化后）并轻度简化
-    for (const part of Object.keys(bar.slots) as PartId[]) {
-      if (part === "hihat" && (bar.slots.hihat?.length ?? 0) > 4) continue;
-      for (const s of bar.slots[part]!) {
-        out.push({ step: s, part, velocity: bar.vel[part]?.[s] ?? 100 });
-      }
-    }
-    return out;
-  }
-
-  const pattern = matchPattern(bar, stepsPerBar);
-  if (!pattern) {
-    for (const part of Object.keys(bar.slots) as PartId[]) {
-      for (const s of bar.slots[part]!) {
-        out.push({ step: s, part, velocity: bar.vel[part]?.[s] ?? 100 });
-      }
-    }
-    return out;
-  }
-
-  for (const s of pattern.kick)
-    out.push({ step: s, part: "kick", velocity: bar.vel.kick?.[s] ?? 105 });
-  for (const s of pattern.snare)
-    out.push({ step: s, part: "snare", velocity: bar.vel.snare?.[s] ?? 105 });
-
-  const div = bar.hatDiv === 0 ? 0 : bar.hatDiv === 16 ? 1 : bar.hatDiv === 8 ? 2 : 4;
-  const useDiv = div === 0 ? (pattern.hatDiv === 16 ? 1 : pattern.hatDiv === 8 ? 2 : 4) : div;
-  if (bar.hatDiv !== 0) {
-    for (let s = 0; s < stepsPerBar; s += useDiv) {
-      const open = cymbalPart === "hihat" && bar.openHat.some((o) => Math.abs(o - s) <= 1);
-      out.push({ step: s, part: cymbalPart, velocity: open ? 100 : 90, open });
-    }
-  }
-
-  // 原曲的吊镲落点叠加回来（乐句首的重音）
-  for (const s of bar.slots.crash ?? []) {
-    out.push({ step: s, part: "crash", velocity: bar.vel.crash?.[s] ?? 110 });
-  }
-  // 原曲的踏板踩镲不再单独出音符：左脚改由「闭镲长音符」统一表示
-
-  return out;
-}
 
 // ================= 困难 =================
 
@@ -231,6 +121,7 @@ function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
       step: h.step,
       part: h.part,
       velocity: h.velocity,
+      timeMs: h.timeMs,
       open: h.open ?? false,
     }));
 
@@ -293,6 +184,42 @@ function hardEmits(clean: CleanedMidi, skeleton: Skeleton): Emit[] {
   }
 
   return kept;
+}
+
+/**
+ * 轻松 / 入门 / 标准都从原始 GM 命中筛选，不再套固定军鼓模板。
+ * 难度只决定保留哪些部件与密度，保留下来的音符始终携带原 MIDI 时间。
+ */
+function sourceEmits(clean: CleanedMidi, diff: Difficulty): Emit[] {
+  const allowed = new Set(NOTE_PARTS[diff]);
+  const hits = clean.hits.filter((hit) => allowed.has(hit.part));
+  if (diff === "standard") {
+    return hits.map((hit) => {
+      const emit: Emit = { step: hit.step, part: hit.part, velocity: hit.velocity, timeMs: hit.timeMs };
+      if (hit.open !== undefined) emit.open = hit.open;
+      return emit;
+    });
+  }
+
+  // 低难度仍以原谱落点为准：保留强音、正拍与每拍最重要的一次弱音，避免整段被滤空。
+  const strongestByBeat = new Map<string, CleanHit>();
+  for (const hit of hits) {
+    const beat = Math.floor(hit.step / clean.stepsPerBeat);
+    const key = `${beat}:${hit.part}`;
+    const previous = strongestByBeat.get(key);
+    if (!previous || hit.velocity > previous.velocity) strongestByBeat.set(key, hit);
+  }
+  const selected = hits.filter((hit) => {
+    const onBeat = hit.step % clean.stepsPerBeat === 0;
+    const strong = hit.velocity >= (diff === "easy" ? 92 : 78);
+    const beat = Math.floor(hit.step / clean.stepsPerBeat);
+    return onBeat || strong || strongestByBeat.get(`${beat}:${hit.part}`) === hit;
+  });
+  return selected.map((hit) => {
+    const emit: Emit = { step: hit.step, part: hit.part, velocity: hit.velocity, timeMs: hit.timeMs };
+    if (hit.part === "hihat") emit.open = false;
+    return emit;
+  });
 }
 
 /** 踩镲与低通/吊镲/叮叮镲不可同刻：同刻时丢掉踩镲 */
@@ -421,7 +348,7 @@ function emitsToNotes(
     const key = `${e.step}:${e.part}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const timeMs = tickToMs(midi, e.step * clean.stepTicks) + offsetMs;
+    const timeMs = (e.timeMs ?? tickToMs(midi, e.step * clean.stepTicks)) + offsetMs;
     if (timeMs < 0) continue;
     notes.push({
       timeMs,
@@ -473,18 +400,7 @@ export function buildPlayChart(
   const offset = opts.offsetMs ?? 0;
 
   let emits: Emit[];
-  if (diff === "hard") {
-    emits = hardEmits(clean, skeleton);
-  } else {
-    emits = [];
-    for (const bar of skeleton.bars) {
-      const local =
-        diff === "standard"
-          ? standardBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat)
-          : beginnerBar(bar, skeleton.stepsPerBar, skeleton.stepsPerBeat);
-      for (const e of local) emits.push({ ...e, step: bar.startStep + e.step });
-    }
-  }
+  emits = diff === "hard" ? hardEmits(clean, skeleton) : sourceEmits(clean, diff);
 
   // 轻松 / 入门：全部按闭镲处理（不出开镲）
   if (diff === "easy" || diff === "beginner") {

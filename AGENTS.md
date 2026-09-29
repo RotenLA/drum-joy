@@ -15,4 +15,4 @@
 - Auto charts are deterministic, phrase-aware, and density-limited; existing cloud charts change only through explicit regeneration.
 - Admin folder import groups by the final underscore suffix and uploads songs sequentially to avoid browser memory spikes.
 - The player checks the lightweight library revision once per page session and reuses cached library, favorites, and play data for all in-app returns.
-- Song tempo is inferred during admin import from audio transients plus MIDI drum structure in the 80–180 BPM range; MIDI remains the time-signature source.
+- Song BPM metadata is inferred from audio plus MIDI structure in the 80–180 range, while chart timing and GM parts always preserve uploaded MIDI event times; MIDI remains the time-signature source.

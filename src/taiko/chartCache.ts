@@ -10,7 +10,8 @@ import type { ParsedMidi } from "./midiFile";
 import { buildPlayChart, type Difficulty } from "./difficulty";
 import type { PlayChartOptions } from "./difficulty";
 
-const CACHE_KEY = "taiko.charts.v7";
+const CACHE_KEY = "taiko.charts.v8";
+const CHART_ALGORITHM_VERSION = "gm-exact-time-v1";
 /** 最多保留的歌曲份数（按最近使用淘汰） */
 const MAX_SONGS = 5;
 
@@ -45,7 +46,7 @@ export function midiFingerprint(midi: ParsedMidi): string {
 
 /** 云端谱面/下载版本：内容指纹之外纳入重新推算后的变速表。 */
 export function chartVersionFingerprint(midi: ParsedMidi): string {
-  let version = midiFingerprint(midi);
+  let version = `${midiFingerprint(midi)}.${CHART_ALGORITHM_VERSION}`;
   for (const tempo of midi.tempos) {
     version += `.${tempo.tick.toString(36)}-${Math.round(tempo.usPerQuarter).toString(36)}`;
   }

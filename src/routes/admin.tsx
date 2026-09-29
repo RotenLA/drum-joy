@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { parseMidi } from "@/taiko/midiFile";
 import { buildAllCharts, chartVersionFingerprint } from "@/taiko/adminChartBuild";
-import { applyConstantTempo, decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
+import { decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
 import {
   groupImportFiles,
   type FolderImportSong,
@@ -118,9 +118,10 @@ function AdminPage() {
   const sortTags = useServerFn(reorderTags);
   const linkTags = useServerFn(setSongTags);
 
-  const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
+  const [tags, setTags] = useState<{ id: string; name: string; name_en: string | null }[]>([]);
   const [tagMap, setTagMap] = useState<Record<string, string[]>>({});
   const [newTag, setNewTag] = useState("");
+  const [newTagEn, setNewTagEn] = useState("");
   const [uploadTags, setUploadTags] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [editTagsOf, setEditTagsOf] = useState<string | null>(null);
@@ -225,7 +226,7 @@ function AdminPage() {
     const tempo = await decodeAndAnalyzeTempo(files["drums"] ?? files["other"] ?? files["bass"] ?? files["vocals"]!, sourceMidi);
     const needsReview = tempo.status === "review";
     const parsed = tempo.midi;
-    const charts = buildAllCharts(parsed, songTitle);
+    const charts = buildAllCharts(parsed, songTitle, tempo.bpm);
     const fingerprint = chartVersionFingerprint(parsed);
     let durationMs = parsed.durationMs;
     for (const field of STEM_FIELDS) {
@@ -342,7 +343,7 @@ function AdminPage() {
       const { url } = await midiUrlOf({ data: { id: row.id } });
       const buf = await (await fetch(url)).arrayBuffer();
       const parsed = parseMidi(buf);
-      const charts = buildAllCharts(parsed, row.title);
+      const charts = buildAllCharts(parsed, row.title, Number(row.bpm));
       await regenerate({
         data: {
           songId: row.id,
@@ -381,7 +382,7 @@ function AdminPage() {
         const fingerprint = chartVersionFingerprint(analysis.midi);
         const differs = Math.abs(Number(row.bpm) - analysis.bpm) >= 0.1 || row.midi_fingerprint !== fingerprint;
         if (differs) {
-          const charts = buildAllCharts(analysis.midi, row.title);
+          const charts = buildAllCharts(analysis.midi, row.title, analysis.bpm);
           await replaceTempo({
             data: {
               songId: row.id,
@@ -420,9 +421,9 @@ function AdminPage() {
       const { url } = await midiUrlOf({ data: { id: row.id } });
       const response = await fetch(url);
       if (!response.ok) throw new Error("MIDI 下载失败");
-      const adjusted = applyConstantTempo(parseMidi(await response.arrayBuffer()), bpm);
-      const fingerprint = chartVersionFingerprint(adjusted);
-      const charts = buildAllCharts(adjusted, row.title);
+      const originalMidi = parseMidi(await response.arrayBuffer());
+      const fingerprint = chartVersionFingerprint(originalMidi);
+      const charts = buildAllCharts(originalMidi, row.title, bpm);
       await replaceTempo({
         data: {
           songId: row.id,
@@ -669,18 +670,30 @@ function AdminPage() {
           onSubmit={(e) => {
             e.preventDefault();
             const name = newTag.trim();
-            if (!name) return;
+            const nameEn = newTagEn.trim();
+            if (!name || !nameEn) {
+              setNote("新建歌单时中文名和英文名都必须填写");
+              return;
+            }
             setNewTag("");
-            void tagAction(() => addTag({ data: { name } }));
+            setNewTagEn("");
+            void tagAction(() => addTag({ data: { name, nameEn } }));
           }}
-          className="mb-3 flex gap-2"
+          className="mb-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2"
         >
           <input
             value={newTag}
             onChange={(e) => setNewTag(e.target.value)}
-            placeholder="新标签名，如：摇滚、热门"
+            placeholder="中文名，如：摇滚经典"
             maxLength={40}
-            className="w-64 border border-[var(--taiko-line)] bg-transparent px-3 py-1.5 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+            className="min-w-0 border border-[var(--taiko-line)] bg-transparent px-3 py-1.5 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
+          />
+          <input
+            value={newTagEn}
+            onChange={(e) => setNewTagEn(e.target.value)}
+            placeholder="英文名，如：Rock Classics"
+            maxLength={60}
+            className="min-w-0 border border-[var(--taiko-line)] bg-transparent px-3 py-1.5 text-base text-[var(--taiko-ink)] outline-none focus:border-[var(--taiko-accent)]"
           />
           <button
             type="submit"
@@ -691,15 +704,32 @@ function AdminPage() {
         </form>
         <div className="flex flex-col divide-y divide-[var(--taiko-line)]">
           {tags.map((t, i) => (
-            <div key={t.id} className="flex flex-wrap items-center gap-2 py-1.5 text-sm">
+            <div key={t.id} className="grid grid-cols-[minmax(140px,1fr)_minmax(180px,1fr)_4rem_auto_auto_auto] items-center gap-2 py-1.5 text-sm">
               <input
                 key={t.name}
                 defaultValue={t.name}
                 onBlur={(e) => {
                   const v = e.target.value.trim();
-                  if (v && v !== t.name) void tagAction(() => renTag({ data: { id: t.id, name: v } }));
+                  const nameEn = t.name_en;
+                  if (v && nameEn && v !== t.name) void tagAction(() => renTag({ data: { id: t.id, name: v, nameEn } }));
                 }}
-                className="min-w-40 flex-1 border border-transparent bg-transparent px-1 py-0.5 text-base hover:border-[var(--taiko-line)] focus:border-[var(--taiko-accent)] focus:outline-none"
+                aria-label="中文歌单名"
+                className="min-w-0 border border-transparent bg-transparent px-1 py-0.5 text-base hover:border-[var(--taiko-line)] focus:border-[var(--taiko-accent)] focus:outline-none"
+              />
+              <input
+                key={t.name_en ?? "missing"}
+                defaultValue={t.name_en ?? ""}
+                placeholder="英文名待补（必填）"
+                onBlur={(e) => {
+                  const value = e.target.value.trim();
+                  if (!value) {
+                    setNote(`歌单「${t.name}」必须填写英文名`);
+                    return;
+                  }
+                  if (value !== t.name_en) void tagAction(() => renTag({ data: { id: t.id, name: t.name, nameEn: value } }));
+                }}
+                aria-label="英文歌单名"
+                className={`min-w-0 border bg-transparent px-1 py-0.5 text-base focus:border-[var(--taiko-accent)] focus:outline-none ${t.name_en ? "border-transparent hover:border-[var(--taiko-line)]" : "border-amber-500 text-amber-300"}`}
               />
               <span className="w-16 text-xs tabular-nums text-[var(--taiko-ink)]/50">{tagCount(t.id)} 首</span>
               <button onClick={() => moveTag(i, -1)} disabled={i === 0} className="border border-[var(--taiko-line)] px-2 py-1 text-xs disabled:opacity-30">上移</button>

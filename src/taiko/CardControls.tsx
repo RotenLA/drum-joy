@@ -49,7 +49,7 @@ export function CardControls({
 
   return (
     <div
-      className="mx-auto flex w-full max-w-[360px] flex-col items-center gap-2 sm:gap-3"
+      className="mx-auto flex w-full max-w-[390px] flex-col items-center gap-2 sm:gap-3"
       onClick={stop}
       onPointerDown={stop}
     >
@@ -108,7 +108,7 @@ export function CardControls({
               }`}
             >
               <span
-                className={`text-xs font-semibold sm:text-sm ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.85)]"}`}
+                className={`flex min-w-0 items-center justify-center whitespace-nowrap text-[10px] font-semibold sm:text-xs ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.85)]"}`}
               >
                 {!open && <Lock size={11} className="mr-1 inline -translate-y-px" />}
                 {tr(d.label, d.labelEn)}
@@ -118,20 +118,20 @@ export function CardControls({
         })}
       </div>
       {(!isUnlocked(bests, songId, "standard") || !isUnlocked(bests, songId, "hard")) && (
-        <p className="-mt-1 text-center text-[11px] text-[rgba(255,255,255,0.55)]">
+        <p className="-mt-1 max-w-full text-center text-[10px] leading-4 text-[rgba(255,255,255,0.55)]">
           {!isUnlocked(bests, songId, "standard")
             ? tr("入门全连击解锁标准，标准全连击解锁困难", "Full combo Beginner to unlock Standard, Standard to unlock Hard")
             : tr("标准全连击解锁困难", "Full combo Standard to unlock Hard")}
         </p>
       )}
-      <div className="flex w-full flex-wrap items-center justify-center gap-2">
-        <span className="flex items-center gap-1.5">
+      <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
+        <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5">
           <Button
             variant="outline"
             size="sm"
             type="button"
             onClick={() => saveKitEnabled(!kitOn)}
-            className={`h-8 min-w-28 rounded-md px-3 text-xs font-semibold ${
+            className={`h-8 min-w-0 whitespace-nowrap rounded-md px-2 text-[11px] font-semibold ${
               kitOn
                 ? "bg-[var(--taiko-accent)] text-[#12141a]"
                 : "border border-[rgba(255,255,255,0.2)] bg-[rgba(0,0,0,0.28)] text-[rgba(255,255,255,0.75)]"
@@ -151,7 +151,7 @@ export function CardControls({
             saveKitId(id);
             if (loadKitEnabled()) void ensureKitLoaded(id);
           }}
-          className="h-8 min-w-28 rounded-md border border-[var(--taiko-accent)] bg-[#1a1c22] px-2 text-xs text-[rgba(255,255,255,0.9)]"
+          className="h-8 min-w-0 rounded-md border border-[var(--taiko-accent)] bg-[#1a1c22] px-2 text-[11px] text-[rgba(255,255,255,0.9)]"
         >
           {KIT_NAMES.map((k) => (
             <option key={k.id} value={k.id} className="bg-[#1a1c22] text-[rgba(255,255,255,0.9)]">

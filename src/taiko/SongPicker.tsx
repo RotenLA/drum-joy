@@ -100,7 +100,7 @@ function VerticalTitle({ title }: { title: string }) {
 }
 
 /** 展开卡片歌名：短标题静止，超出可用宽度时横向往返滚动。 */
-function HorizontalTitle({ title }: { title: string }) {
+function HorizontalTitle({ title, compact = false }: { title: string; compact?: boolean }) {
   const boxRef = useRef<HTMLSpanElement | null>(null);
   const textRef = useRef<HTMLSpanElement | null>(null);
   const [shift, setShift] = useState(0);
@@ -122,10 +122,10 @@ function HorizontalTitle({ title }: { title: string }) {
   }, [title]);
 
   return (
-    <span ref={boxRef} className="block max-w-[calc(100%-8rem)] overflow-hidden">
+    <span ref={boxRef} className="block w-full min-w-0 overflow-hidden">
       <span
         ref={textRef}
-        className={`block w-max whitespace-nowrap text-2xl font-semibold text-[rgba(255,255,255,0.96)] ${
+        className={`block w-max whitespace-nowrap font-semibold text-[rgba(255,255,255,0.96)] ${compact ? "text-lg" : "text-xl"} ${
           shift > 4 ? "taiko-title-marquee" : ""
         }`}
         style={
@@ -160,7 +160,7 @@ export function SongPicker({
   exitLabel?: string | undefined;
 }) {
   const song = useSong();
-  const { tr } = useLanguage();
+  const { language, tr } = useLanguage();
   const initialLibrary = currentLibrarySnapshot();
   const [library, setLibrary] = useState<LibrarySong[]>(() => initialLibrary?.songs ?? []);
   const [tags, setTags] = useState<LibraryTag[]>(() => initialLibrary?.tags ?? []);
@@ -256,12 +256,15 @@ export function SongPicker({
     const historyCount = listSongs("history").length;
     if (favoriteCount) out.push({ key: "fav", name: tr("我的收藏", "Favorites"), count: favoriteCount });
     if (historyCount) out.push({ key: "history", name: tr("历史", "History"), count: historyCount });
-    for (const t of tags) out.push({ key: t.id, name: t.name, count: library.filter((x) => x.tagIds.includes(t.id)).length });
+    for (const t of tags) {
+      const count = library.filter((x) => x.tagIds.includes(t.id)).length;
+      if (count) out.push({ key: t.id, name: language === "zh-CN" ? t.name : (t.nameEn?.trim() || t.name), count });
+    }
     const un = library.filter((x) => x.tagIds.length === 0).length;
     if (un) out.push({ key: "untagged", name: tr("未分类", "Uncategorized"), count: un });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [library, tags, favs, history, tr]);
+  }, [library, tags, favs, history, language, tr]);
   const toggleFav = (id: string) => {
     const on = !favs.includes(id);
     setFavs((f) => (on ? [id, ...f] : f.filter((x) => x !== id)));
@@ -361,14 +364,6 @@ export function SongPicker({
     if (selected && !isUnlocked(bests, selected.id, song.difficulty)) song.setSong({ difficulty: "beginner" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id, bests, song.difficulty]);
-  // 选中的卡片自动滚入视野
-  useEffect(() => {
-    const box = scrollRef.current;
-    if (!box) return;
-    const el = box.querySelector<HTMLElement>('[data-active="1"]');
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, [selectedId, activeSongs.length]);
-
   const settleDetailSelection = useCallback(() => {
     const box = detailScrollRef.current;
     if (!box) return;
@@ -564,11 +559,16 @@ export function SongPicker({
               <div className="shrink-0 pb-1 pl-8 text-xs font-semibold tracking-[0.18em] text-[rgba(255,255,255,0.62)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                 {activePlaylist?.name ?? ""}
               </div>
-              <div
-                ref={detailScrollRef}
-                onScroll={onDetailScroll}
-                className="taiko-detail-scroll min-h-0 flex-1 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
-              >
+              <div className="relative min-h-0 flex-1">
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-1 right-4 top-[clamp(112px,20vh,160px)] z-30 h-[clamp(48px,9vh,72px)] -translate-x-3 rounded-lg border-l-4 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.84)] shadow-lg"
+                />
+                <div
+                  ref={detailScrollRef}
+                  onScroll={onDetailScroll}
+                  className="taiko-detail-scroll absolute inset-0 overflow-y-auto pr-4 pt-[clamp(112px,20vh,160px)]"
+                >
                 {activeSongs.map((item, index) => {
                   const on = item.id === selectedId;
                   return (
@@ -579,16 +579,11 @@ export function SongPicker({
                       type="button"
                       onClick={() => {
                         pickSong(item);
-                        detailScrollRef.current?.querySelector<HTMLElement>(`[data-song-id="${item.id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
                       }}
-                      className={`mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] flex-col items-stretch justify-center overflow-hidden rounded-lg border-l-4 px-5 text-left shadow-lg transition-[width,transform,background-color,border-color] duration-200 ${
-                        on
-                          ? "w-[calc(100%-1rem)] -translate-x-3 border-[var(--taiko-accent)] bg-[rgba(245,245,245,0.84)] text-[var(--taiko-paper)]"
-                          : "w-[82%] border-[rgba(255,255,255,0.34)] bg-[rgba(15,16,20,0.56)] text-[rgba(255,255,255,0.84)] hover:bg-[rgba(25,26,31,0.72)]"
-                      }`}
-                      style={{ transform: on ? "translateX(-0.75rem)" : undefined }}
+                      className={`relative mb-2 ml-4 flex h-[clamp(48px,9vh,72px)] w-[82%] flex-col items-stretch justify-center overflow-visible rounded-lg border-l-4 border-[rgba(255,255,255,0.34)] bg-transparent px-5 text-left shadow-lg transition-colors duration-200 ${on ? "z-40 text-[var(--taiko-paper)]" : "z-20 text-[rgba(255,255,255,0.84)]"}`}
                     >
-                      <span className="block min-w-0" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
+                      <span aria-hidden="true" className={`absolute inset-0 z-0 rounded-lg transition-colors ${on ? "bg-transparent" : "bg-[rgba(15,16,20,0.56)] hover:bg-[rgba(25,26,31,0.72)]"}`} />
+                      <span className="relative z-20 block min-w-0" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                         <span className="flex items-baseline gap-3">
                           <span className={`w-6 shrink-0 text-[11px] tabular-nums ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.42)]"}`}>
                             {String(index + 1).padStart(2, "0")}
@@ -603,6 +598,7 @@ export function SongPicker({
                   );
                 })}
                 <div aria-hidden="true" className="h-[80vh] shrink-0" />
+                </div>
               </div>
             </div>
 
@@ -647,19 +643,15 @@ export function SongPicker({
                         <Heart size={17} className={fav ? "fill-[#ff5a6e] text-[#ff5a6e]" : "text-[rgba(255,255,255,0.75)]"} />
                       </Button>
                     </div>
-                    <div className="taiko-song-detail-controls my-auto flex min-h-[160px] items-center justify-center py-1">
+                    <div className="taiko-song-detail-controls my-auto flex min-h-[136px] items-center justify-center py-1">
                       <CardControls songId={item.id} bests={bests} />
                     </div>
-                    <div className="flex shrink-0 items-end justify-between gap-6 border-l-4 border-[var(--taiko-accent)] py-2 pl-4 pr-1">
-                      <div className="min-w-0 flex-1">
-                        <HorizontalTitle title={item.title} />
-                        <span className="block truncate text-xs tabular-nums text-[rgba(255,255,255,0.72)]">
-                          {item.artist ? `${item.artist} · ` : ""}
-                          {fmtTime(item.durationMs)} · BPM {item.bpm} · {item.timeSignature[0]}/{item.timeSignature[1]}
+                    <div className="grid shrink-0 grid-cols-[minmax(9rem,1fr)_minmax(7.5rem,9rem)] items-end gap-3 border-l-4 border-[var(--taiko-accent)] py-1.5 pl-4 pr-1">
+                      <div className="min-w-0">
+                        <HorizontalTitle title={item.title} compact />
+                        <span className="block text-[11px] tabular-nums text-[rgba(255,255,255,0.72)]">
+                          {fmtTime(item.durationMs)}
                         </span>
-                        {downloaded && (
-                          <span className="mt-1 block text-xs text-[var(--taiko-accent)]">{tr("已下载", "Downloaded")}</span>
-                        )}
                       </div>
                       <Button
                         type="button"
@@ -669,7 +661,7 @@ export function SongPicker({
                           else void downloadSong(item);
                         }}
                         disabled={busyThis || (locked && downloaded)}
-                        className="relative h-12 min-w-[9rem] shrink-0 gap-2 overflow-hidden rounded-md bg-[var(--taiko-accent)] px-6 text-base font-semibold tracking-[0.15em] text-[var(--taiko-paper)] transition-transform hover:scale-[1.04] disabled:opacity-60"
+                        className="relative h-11 min-w-0 gap-1.5 overflow-hidden rounded-md bg-[var(--taiko-accent)] px-3 text-sm font-semibold text-[var(--taiko-paper)] transition-transform hover:scale-[1.03] disabled:opacity-60"
                       >
                         {busyThis ? <><Loader2 size={16} className="animate-spin" />{tr("准备中", "Loading")}</>
                           : downloading ? <><X size={16} />{dl.percent}%</>

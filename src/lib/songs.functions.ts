@@ -24,6 +24,7 @@ export interface LibrarySong {
 export interface LibraryTag {
   id: string;
   name: string;
+  nameEn: string | null;
 }
 
 /** 轻量曲库版本；应用每次全新打开只查询一次。 */
@@ -61,12 +62,12 @@ export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async 
     tagIds: [] as string[],
   }));
   const [tagsRes, linksRes] = await Promise.all([
-    supabaseAdmin.from("song_tags").select("id, name, sort_order").order("sort_order"),
+    supabaseAdmin.from("song_tags").select("id, name, name_en, sort_order").order("sort_order"),
     supabaseAdmin.from("song_tag_links").select("song_id, tag_id"),
   ]);
   const byId = new Map(songs.map((s) => [s.id, s]));
   for (const l of linksRes.data ?? []) byId.get(l.song_id)?.tagIds.push(l.tag_id);
-  const tags: LibraryTag[] = (tagsRes.data ?? []).map((t) => ({ id: t.id, name: t.name }));
+  const tags: LibraryTag[] = (tagsRes.data ?? []).map((t) => ({ id: t.id, name: t.name, nameEn: t.name_en }));
   return { songs, tags };
 });
 
