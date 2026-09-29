@@ -11,8 +11,6 @@ import { tutorialLabels, tutorialStepCopy, type TutorialStep } from "./steps";
 import { buildPracticeChart, PRACTICE_BPM } from "./practiceChart";
 import { Metronome, unlockAudio } from "../metronome";
 import { stickManager } from "../stickInput";
-import { renderColumns } from "../columnRenderer";
-import type { FallMode } from "../fallMode";
 import type { TaikoChart } from "@/shared/taikoChart";
 
 export function TutorialStage({
@@ -23,7 +21,6 @@ export function TutorialStage({
   needed,
   hold,
   restartKey,
-  fallMode,
   clockRef,
 }: {
   step: TutorialStep;
@@ -33,7 +30,6 @@ export function TutorialStage({
   needed: number;
   hold: boolean;
   restartKey: number;
-  fallMode: FallMode;
   /** 当前练习时钟与谱面，供外层做真实判定 */
   clockRef?: React.MutableRefObject<{ timeMs: number; chart: TaikoChart | null }>;
 }) {
@@ -110,8 +106,7 @@ export function TutorialStage({
         minimalHud: true,
         sticks: stickManager.latest(),
       };
-      if (fallMode === "columns") renderColumns(ctx, canvas.clientWidth, canvas.clientHeight, frame);
-      else renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
     };
     raf = requestAnimationFrame(draw);
     return () => {
@@ -119,7 +114,7 @@ export function TutorialStage({
       ro?.disconnect();
       if (!ro) window.removeEventListener("resize", resize);
     };
-  }, [chart, flashes, parts, showNotes, restartKey, fallMode, clockRef]);
+  }, [chart, flashes, parts, showNotes, restartKey, clockRef]);
 
   return (
     <div ref={wrapRef} className="relative h-full min-h-[240px] w-full overflow-hidden bg-[var(--taiko-paper)]">

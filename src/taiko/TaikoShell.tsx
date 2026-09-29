@@ -12,12 +12,9 @@ import { getAudioContext } from "./metronome";
 import { LabHub, type LabGame } from "./LabHub";
 import { ThereminScreen } from "./theremin/ThereminScreen";
 import { useLanguage } from "./i18n";
-import type { FallMode } from "./fallMode";
-
-
-interface TaikoSettings { speed: number; midiDeviceId: string | null; fallMode: FallMode }
+interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
-const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.5, midiDeviceId: null, fallMode: "stage" };
+const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.5, midiDeviceId: null };
 
 
 /** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等；300ms 内去重（开发环境可能双触发） */
@@ -61,11 +58,7 @@ function ShellInner() {
       const raw = localStorage.getItem(SETTINGS_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as Partial<TaikoSettings>;
-        setSettings((s) => ({
-          ...s,
-          ...saved,
-          fallMode: saved.fallMode === "columns" ? "columns" : "stage",
-        }));
+        setSettings((s) => ({ ...s, speed: saved.speed ?? s.speed, midiDeviceId: saved.midiDeviceId ?? s.midiDeviceId }));
       }
     } catch { /* 忽略损坏设置 */ }
   }, []);
@@ -128,8 +121,6 @@ function ShellInner() {
             key="lab-rhythm"
             speed={settings.speed}
             onSpeedChange={(speed) => updateSettings({ speed })}
-            fallMode={settings.fallMode}
-            onFallModeChange={(fallMode) => updateSettings({ fallMode })}
             onExit={() => setLab("hub")}
             gestureHits
             exitLabel={tr("返回", "Back")}
@@ -139,8 +130,6 @@ function ShellInner() {
             key="release"
             speed={settings.speed}
             onSpeedChange={(speed) => updateSettings({ speed })}
-            fallMode={settings.fallMode}
-            onFallModeChange={(fallMode) => updateSettings({ fallMode })}
             onExit={exitApp}
             onSecretUnlock={() => setLab("hub")}
           />

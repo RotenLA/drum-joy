@@ -13,7 +13,6 @@
 import { PART_BY_ID, type PartId } from "./laneLayouts";
 import { layerOfPitch, partOfPose } from "./stickMapping";
 import { stickManager, type StickPose, type StickSide, type StickSnapshot } from "./stickInput";
-import { columnPartOfYaw } from "./fallMode";
 
 /** 起手门槛：一次挥击期间的峰值下探角速度（度/秒）需达到此值 */
 const ARM_SPEED = 170;
@@ -108,18 +107,14 @@ class GestureHitDetector {
   private layers: Record<StickSide, "upper" | "lower"> = { l: "lower", r: "lower" };
   private off: (() => void) | null = null;
   private emit: ((hit: GestureHit) => void) | null = null;
-  private pitchOnly = false;
-  private visibleParts: readonly PartId[] = [];
 
   /** 开始监听姿态流并派发击打；返回停止函数 */
   start(
     onHit: (hit: GestureHit) => void,
-    options?: { pitchOnly?: boolean; parts?: readonly PartId[] },
+    _options?: { parts?: readonly PartId[] },
   ): () => void {
     this.stop();
     this.emit = onHit;
-    this.pitchOnly = options?.pitchOnly === true;
-    this.visibleParts = options?.parts ?? [];
     this.off = stickManager.onFrame((snap) => this.feed(snap));
     return () => this.stop();
   }
@@ -199,9 +194,7 @@ class GestureHitDetector {
     // 落点 = 停住那一刻的姿态：挥棒最终停在哪个区就触发哪个鼓面，
     // 途中经过的分区一律不算；上下层用滞回判定，防止分界附近串层。
     const landing = s.lastPose ?? pose;
-    const part = this.pitchOnly
-      ? columnPartOfYaw(landing.y, this.visibleParts, false)
-      : partOfPose(landing, this.layers[side]);
+    const part = partOfPose(landing, this.layers[side]);
     if (!part) return;
     glog(`${side} 命中 ${part} p=${landing.p.toFixed(1)} y=${landing.y.toFixed(1)} peak=${Math.round(peak)}`);
     this.emit?.({ side, part, velocity: velocityOf(peak), atMs: at, speed: peak });

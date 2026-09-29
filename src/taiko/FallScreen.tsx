@@ -17,8 +17,6 @@ import { useLanguage } from "./i18n";
 import { SongPicker } from "./SongPicker";
 import { Pause, Settings, SlidersHorizontal, X } from "lucide-react";
 import { GlobalSettings } from "./GlobalSettings";
-import { renderColumns } from "./columnRenderer";
-import type { FallMode } from "./fallMode";
 import { Button } from "@/components/ui/button";
 
 
@@ -55,8 +53,6 @@ export function FallScreen({
   speed,
   suspended = false,
   onSpeedChange,
-  fallMode = "stage",
-  onFallModeChange,
   onExit,
   gestureHits = false,
   exitLabel,
@@ -65,8 +61,6 @@ export function FallScreen({
   speed: number;
   suspended?: boolean;
   onSpeedChange?: ((s: number) => void) | undefined;
-  fallMode?: FallMode;
-  onFallModeChange?: ((mode: FallMode) => void) | undefined;
   onExit?: (() => void) | undefined;
   /** 实验版：手部七个鼓面改由鼓棒角度判定，踏板仍走 MIDI */
   gestureHits?: boolean;
@@ -347,8 +341,8 @@ export function FallScreen({
       if (!parts.includes(hit.part)) return;
       stickManager.switchLayerForHit(hit.part, parts);
       hitPartRef.current(hit.part, hit.atMs, hit.velocity, noteOfPart(hit.part));
-    }, { pitchOnly: fallMode === "columns", parts });
-  }, [gestureHits, parts, fallMode]);
+    }, { parts });
+  }, [gestureHits, parts]);
 
 
   // 开始、重开、暂停后继续共用：按拍号分子倒数，再从指定位置播放。
@@ -604,8 +598,7 @@ export function FallScreen({
         sticks: stickManager.latest(),
       };
 
-      if (fallMode === "columns") renderColumns(ctx, canvas.clientWidth, canvas.clientHeight, frame);
-      else renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
     };
 
     raf = requestAnimationFrame(draw);
@@ -615,7 +608,7 @@ export function FallScreen({
       ro?.disconnect();
       if (!ro) window.removeEventListener("resize", resize);
     };
-  }, [playChart, speed, parts, hasAudio, readTimeMs, tier, fallMode]);
+  }, [playChart, speed, parts, hasAudio, readTimeMs, tier]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
@@ -785,7 +778,6 @@ export function FallScreen({
         {phase === "idle" && tutorialOpen && (
           <TutorialOverlay
             gestureHits={gestureHits}
-            fallMode={fallMode}
             onLeave={() => {
               markTutorialSeen();
               setTutorialOpen(false);
@@ -817,8 +809,6 @@ export function FallScreen({
               <GlobalSettings
                 speed={speed}
                 onSpeedChange={(next) => onSpeedChange?.(next)}
-                fallMode={fallMode}
-                onFallModeChange={(next) => onFallModeChange?.(next)}
                 onSecretUnlock={onSecretUnlock}
               />
             </div>
