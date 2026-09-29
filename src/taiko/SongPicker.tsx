@@ -347,7 +347,7 @@ export function SongPicker({
     for (const element of Array.from(box.querySelectorAll<HTMLElement>("[data-song-id]"))) {
       const distance = Math.abs(element.offsetTop + element.offsetHeight / 2 - center);
       if (!nearest || distance < nearest.distance) {
-        nearest = { id: element.dataset.songId ?? "", distance, element };
+        nearest = { id: element.dataset["songId"] ?? "", distance, element };
       }
     }
     if (!nearest?.id) return;
@@ -360,6 +360,16 @@ export function SongPicker({
     if (detailScrollTimerRef.current !== null) window.clearTimeout(detailScrollTimerRef.current);
     detailScrollTimerRef.current = window.setTimeout(settleDetailSelection, 110);
   };
+
+  useEffect(() => {
+    if (!openList || !selectedId) return;
+    const frame = window.requestAnimationFrame(() => {
+      detailScrollRef.current
+        ?.querySelector<HTMLElement>(`[data-song-id="${selectedId}"]`)
+        ?.scrollIntoView({ block: "center" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [openList, selectedId]);
 
   // 鼠标拖拽横向滑动（拖动超过阈值则吞掉后续 click）
   const onPointerDown = (e: React.PointerEvent) => {
@@ -474,6 +484,9 @@ export function SongPicker({
                     : CARD_GRADIENTS[i % CARD_GRADIENTS.length],
               }}
             >
+              {pl.backgroundUrl && (
+                <img src={pl.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+              )}
               <span className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(10,12,18,0.05), rgba(10,12,18,0.72))" }} />
               <span className="relative z-10 flex h-full w-full min-w-0 flex-col justify-end p-6" style={{ transform: "skewX(9deg)" }}>
                 <span className="flex min-w-0 flex-col gap-1">
