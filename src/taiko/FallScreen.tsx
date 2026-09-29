@@ -15,7 +15,7 @@ import { latencyMeter } from "./latencyMeter";
 import { debugLog } from "./debugLog";
 import { useLanguage } from "./i18n";
 import { SongPicker } from "./SongPicker";
-import { Pause, Settings, SlidersHorizontal, X } from "lucide-react";
+import { Pause, Settings, X } from "lucide-react";
 import { GlobalSettings } from "./GlobalSettings";
 import { Button } from "@/components/ui/button";
 
@@ -75,7 +75,6 @@ export function FallScreen({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [phase, setPhase] = useState<Phase>("idle");
-  const [mixerOpen, setMixerOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
@@ -715,51 +714,25 @@ export function FallScreen({
           </div>
         )}
 
-        {/* 左下角抽屉式调音台（选歌时隐藏，保持选歌层干净） */}
-        {phase !== "idle" && <div className="absolute bottom-3 left-3 z-30">
-
-          {mixerOpen && (
-            <div className="mb-2 w-[min(70vw,300px)] bg-[rgba(10,12,18,0.82)] px-4 py-3 backdrop-blur-[8px]">
-              <div className="mb-2 flex items-baseline gap-3">
-                <span className="text-xs tracking-[0.2em] text-[var(--taiko-accent)]">
-                  {tr("调音台", "Mixer")}
-                </span>
-                <span className="text-[10px] text-[rgba(255,255,255,0.45)]">
-                  {tr("80% = 原始音量，100% = +6dB", "80% = original, 100% = +6dB")}
-                </span>
-              </div>
-              <label className="flex min-w-0 flex-col gap-1">
-                <span className="flex items-center justify-between text-[11px] text-[rgba(255,255,255,0.75)]">
-                  <span>{tr("背景音乐", "Music")}</span>
-                  <span className="tabular-nums text-[rgba(255,255,255,0.55)]">
-                    {Math.round(song.mix.music * 100)}%
-                  </span>
-                </span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={Math.round(song.mix.music * 100)}
-                  onChange={(e) => song.setSong({ mix: { ...song.mix, music: Number(e.target.value) / 100 } })}
-                  className="h-1.5 w-full cursor-pointer appearance-none rounded bg-[rgba(255,255,255,0.25)] accent-[var(--taiko-accent)]"
-                />
-              </label>
+        {/* 左下角：背景音乐推子（选歌时隐藏，保持选歌层干净） */}
+        {phase !== "idle" && (
+          <div className="absolute bottom-3 left-3 z-30">
+            <div className="flex w-[min(48vw,260px)] items-center gap-3 rounded-full bg-[rgba(10,12,18,0.55)] px-4 py-2 backdrop-blur-[8px]">
+              <span className="shrink-0 whitespace-nowrap text-[11px] text-[rgba(255,255,255,0.75)]">
+                {tr("背景音乐", "Music")}
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(song.mix.music * 100)}
+                onChange={(e) => song.setSong({ mix: { ...song.mix, music: Number(e.target.value) / 100 } })}
+                className="h-1.5 w-full min-w-0 cursor-pointer appearance-none rounded bg-[rgba(255,255,255,0.25)] accent-[var(--taiko-accent)]"
+              />
             </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setMixerOpen((v) => !v)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] transition-colors ${
-              mixerOpen
-                ? "bg-[var(--taiko-accent)] text-[#12141a]"
-                : "bg-[rgba(10,12,18,0.7)] text-[rgba(255,255,255,0.75)] hover:bg-[rgba(10,12,18,0.9)]"
-            }`}
-          >
-            <SlidersHorizontal size={13} />
-            {tr("调音台", "Mixer")}
-          </button>
-        </div>}
+          </div>
+        )}
 
 
         {/* 选歌层：未开始时覆盖在虚化的舞台上 */}
