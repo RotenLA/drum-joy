@@ -7,7 +7,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { parseMidi } from "@/taiko/midiFile";
-import { buildAllCharts, midiFingerprint } from "@/taiko/adminChartBuild";
+import { buildAllCharts, chartVersionFingerprint } from "@/taiko/adminChartBuild";
 import { applyConstantTempo, decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
 import {
   groupImportFiles,
@@ -226,7 +226,7 @@ function AdminPage() {
     if (tempo.status === "review") throw new Error(`速度置信度不足（推算 BPM ${tempo.bpm}），请检查音频或 MIDI`);
     const parsed = tempo.midi;
     const charts = buildAllCharts(parsed, songTitle);
-    const fingerprint = midiFingerprint(parsed);
+    const fingerprint = chartVersionFingerprint(parsed);
     let durationMs = parsed.durationMs;
     for (const field of STEM_FIELDS) {
       const file = files[field.key];
@@ -342,7 +342,7 @@ function AdminPage() {
       await regenerate({
         data: {
           songId: row.id,
-          fingerprint: midiFingerprint(parsed),
+          fingerprint: chartVersionFingerprint(parsed),
           charts: charts.map((c) => ({ difficulty: c.difficulty, chart: c.chart })),
         },
       });
@@ -374,7 +374,7 @@ function AdminPage() {
         const audioBlob = await audioResponse.blob();
         const analysis = await decodeAndAnalyzeTempo(new File([audioBlob], `${row.title}.audio`, { type: audioBlob.type }), sourceMidi);
         if (analysis.status === "review") throw new Error(`置信度不足，建议人工检查 BPM ${analysis.bpm}`);
-        const fingerprint = midiFingerprint(analysis.midi);
+        const fingerprint = chartVersionFingerprint(analysis.midi);
         const differs = Math.abs(Number(row.bpm) - analysis.bpm) >= 0.1 || row.midi_fingerprint !== fingerprint;
         if (differs) {
           const charts = buildAllCharts(analysis.midi, row.title);
@@ -417,7 +417,7 @@ function AdminPage() {
       const response = await fetch(url);
       if (!response.ok) throw new Error("MIDI 下载失败");
       const adjusted = applyConstantTempo(parseMidi(await response.arrayBuffer()), bpm);
-      const fingerprint = midiFingerprint(adjusted);
+      const fingerprint = chartVersionFingerprint(adjusted);
       const charts = buildAllCharts(adjusted, row.title);
       await replaceTempo({
         data: {

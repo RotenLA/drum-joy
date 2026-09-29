@@ -151,14 +151,14 @@ export const replaceCharts = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("song_charts").delete().eq("song_id", data.songId);
-    const { error } = await supabaseAdmin.from("song_charts").insert(
+    const { error } = await supabaseAdmin.from("song_charts").upsert(
       data.charts.map((c) => ({
         song_id: data.songId,
         difficulty: c.difficulty,
         midi_fingerprint: data.fingerprint,
         chart: c.chart as never,
       })),
+      { onConflict: "song_id,difficulty" },
     );
     if (error) throw new Error(error.message);
     await supabaseAdmin
@@ -181,15 +181,15 @@ export const replaceTempoAndCharts = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     await requireAdmin();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error: deleteError } = await supabaseAdmin.from("song_charts").delete().eq("song_id", data.songId);
-    if (deleteError) throw new Error(deleteError.message);
-    const { error: chartError } = await supabaseAdmin.from("song_charts").insert(
+    // 四档逐行原地替换；写入失败时旧谱仍在，不会留下空歌曲。
+    const { error: chartError } = await supabaseAdmin.from("song_charts").upsert(
       data.charts.map((chart) => ({
         song_id: data.songId,
         difficulty: chart.difficulty,
         midi_fingerprint: data.fingerprint,
         chart: chart.chart as never,
       })),
+      { onConflict: "song_id,difficulty" },
     );
     if (chartError) throw new Error(chartError.message);
     const { error: songError } = await supabaseAdmin

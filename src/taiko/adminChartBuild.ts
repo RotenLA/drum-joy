@@ -3,7 +3,7 @@
  * 所以库里存的谱面就是玩家实际打到的谱面。
  */
 import { buildPlayChart, DIFFICULTIES, type Difficulty } from "./difficulty";
-import { midiFingerprint } from "./chartCache";
+import { chartVersionFingerprint, midiFingerprint } from "./chartCache";
 import type { ParsedMidi } from "./midiFile";
 import type { TaikoChart } from "@/shared/taikoChart";
 
@@ -19,4 +19,4 @@ export function buildAllCharts(
   }));
 }
 
-export { midiFingerprint, DIFFICULTIES };
+export { chartVersionFingerprint, midiFingerprint, DIFFICULTIES };
