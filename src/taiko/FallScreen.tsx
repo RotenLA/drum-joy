@@ -645,7 +645,11 @@ export function FallScreen({
         sticks: stickManager.latest(),
       };
 
-      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      if (viewMode === "columns") {
+        renderColumns(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      } else {
+        renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      }
     };
 
     raf = requestAnimationFrame(draw);
