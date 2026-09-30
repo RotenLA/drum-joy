@@ -348,12 +348,11 @@ function enforceMinGap(notes: TaikoNote[], diff: Difficulty): TaikoNote[] {
 
 function emitsToNotes(
   emits: Emit[],
-  midi: ParsedMidi,
-  clean: CleanedMidi,
   allowParts: readonly PartId[],
   offsetMs: number,
-  aligner: HitAligner,
+  aligner: StepTimer,
 ): TaikoNote[] {
+
   const allow = new Set(allowParts);
   const seen = new Set<string>();
   const notes: TaikoNote[] = [];
