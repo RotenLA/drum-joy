@@ -12,6 +12,12 @@ import { applyConstantTempo, decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
 import { analyzeMetroFile, toChartBeatMap } from "@/taiko/metroAnalysis";
 import { readAudioMeta } from "@/taiko/audioMeta";
 import type { ChartBeatMap } from "@/shared/taikoChart";
+import {
+  buildChartPackage,
+  safeExportFileStem,
+  type ChartExportSourceSong,
+} from "@/shared/chartExport";
+import { Button } from "@/components/ui/button";
 
 import {
   groupImportFiles,
@@ -24,6 +30,7 @@ import {
   adminStatus,
   createUploadTargets,
   deleteSong,
+  exportChartData,
   getSongMidiUrl,
   getSongAnalysisAssets,
   listAllSongs,
@@ -111,6 +118,7 @@ function AdminPage() {
   const save = useServerFn(saveSong);
   const update = useServerFn(updateSong);
   const remove = useServerFn(deleteSong);
+  const exportCharts = useServerFn(exportChartData);
   const midiUrlOf = useServerFn(getSongMidiUrl);
   const analysisAssetsOf = useServerFn(getSongAnalysisAssets);
   const regenerate = useServerFn(replaceCharts);
@@ -542,6 +550,32 @@ function AdminPage() {
     }
   };
 
+  const downloadChartExport = async (rows: AdminSongRow[]) => {
+    if (!rows.length || busy !== null) return;
+    setBusy(rows.length === 1 ? `正在导出《${rows[0]?.title ?? "歌曲"}》谱面…` : `正在导出全部 ${rows.length} 首歌曲谱面…`);
+    setNote(null);
+    try {
+      const result = await exportCharts({ data: { songIds: rows.map((row) => row.id) } });
+      const pack = buildChartPackage(result.songs as ChartExportSourceSong[]);
+      const blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json;charset=utf-8" });
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = rows.length === 1
+        ? `${safeExportFileStem(rows[0]?.title ?? "song")}.aerogame-chart.json`
+        : `aerogame-library-${new Date().toISOString().slice(0, 10)}.aerogame-chart.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+      setNote(rows.length === 1 ? `《${rows[0]?.title ?? "歌曲"}》谱面已导出` : `已导出 ${rows.length} 首歌曲的四档谱面`);
+    } catch (error) {
+      setNote(`导出失败：${(error as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (signedIn === null) {
     return <div className="p-8 text-sm text-[var(--taiko-ink)]/60">载入中…</div>;
   }
@@ -860,6 +894,16 @@ function AdminPage() {
         <div className="mb-3 flex items-center justify-between gap-3">
           <h2 className="text-sm font-medium">曲库（{songs.length}）</h2>
           <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={batchRunning || busy !== null || songs.length === 0}
+              onClick={() => void downloadChartExport(songs)}
+              className="border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] text-[var(--taiko-accent)] hover:border-[var(--taiko-accent)] hover:text-[var(--taiko-accent)]"
+            >
+              导出全部谱面
+            </Button>
             <button
               type="button"
               disabled={batchRunning || busy !== null || songs.length === 0}
@@ -922,6 +966,16 @@ function AdminPage() {
               >
                 人工确认 BPM
               </button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void downloadChartExport([s])}
+                disabled={busy !== null}
+                className="h-auto rounded-none border-[var(--taiko-line)] px-2 py-1 text-xs hover:border-[var(--taiko-accent)]"
+              >
+                导出谱面
+              </Button>
               <button
                 onClick={() => {
                   if (confirm(`删除《${s.title}》？`)) void remove({ data: { id: s.id } }).then(refresh);

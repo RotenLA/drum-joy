@@ -14,7 +14,7 @@
 - Gameplay is fixed to stage mode; keep columns source/assets dormant for possible restoration, but do not expose or render the columns mode.
 - Auto charts run a three-stage pipeline: AI drum MIDI is sanitized (velocity gates, 62 ms per-part debounce, two-hand arbitration), per-song groove templates are clustered from the cleaned bars, then each difficulty's notes get their real MIDI hit time back-filled (grid time only as fallback) — removes AI stem noise while staying locked to the audio.
 - Ratings use strict shared thresholds; live grades are progress-gated, SSS requires 99.5% plus a completed full combo, and stage intensity follows the live grade.
-- Admin folder import groups by the final underscore suffix and uploads songs sequentially to avoid browser memory spikes.
+- Admin folder imports stay sequential; cross-game exports use versioned JSON without storage paths or device calibration.
 - The player checks the lightweight library revision once per page session and reuses cached library, favorites, and play data for all in-app returns.
 - Song BPM metadata is inferred from audio plus MIDI structure in the 80–180 range; chart timing follows the difficulty snap rule and the MIDI tempo map, while MIDI remains the GM-part and time-signature source.
 - On low-height landscape screens, Settings, Exit/Back, and Tutorial share the same safe-area top line and 2rem height so Unity WebView chrome stays aligned.
