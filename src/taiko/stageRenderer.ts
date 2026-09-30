@@ -501,15 +501,23 @@ function drawBeatMarks(
   const bpm = f.chart.bpm;
   if (!Number.isFinite(bpm) || bpm <= 0) return;
   const [num, den] = f.chart.timeSignature;
-  const beatMs = (60000 / bpm) * (4 / den);
-  const stepMs = beatMs / 4; // 十六分栅格
+  const g = f.chart.grid;
+  // 新谱面自带栅格（与音符完全同源）；旧谱面回退到音符相位估算
+  const stepMs = g && g.stepMs > 0 ? g.stepMs : (60000 / bpm) * (4 / den) / 4;
   if (stepMs < 30) return;
-  const barSteps = Math.max(4, Math.round(Math.max(1, num) * 4));
-  const { phaseMs, shift } = beatPhaseOf(f.chart, stepMs, barSteps);
+  const stepsPerBeat = Math.max(1, Math.round(g?.stepsPerBeat ?? 4));
+  const barSteps = Math.max(
+    stepsPerBeat,
+    Math.round(g?.stepsPerBar ?? Math.max(1, num) * stepsPerBeat),
+  );
+  const est = g ? null : beatPhaseOf(f.chart, stepMs, barSteps);
+  const phaseMs = g ? g.originMs : (est?.phaseMs ?? 0);
+  const shift = g ? 0 : (est?.shift ?? 0);
   const span = LEAD_MS / Math.max(0.1, f.speed);
   const fromStep = Math.ceil((f.timeMs - phaseMs) / stepMs);
   const toStep = Math.floor((f.timeMs + span - phaseMs) / stepMs);
   if (toStep < fromStep) return;
+
 
   ctx.save();
   ctx.lineCap = "round";
