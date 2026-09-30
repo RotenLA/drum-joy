@@ -403,6 +403,8 @@ function holdsToNotes(
 export interface PlayChartOptions extends MidiChartOptions {
   /** 小节相位手动微调（拍） */
   phaseBeatOffset?: number | undefined;
+  /** Metro（节拍器）轨解析出的绝对节拍轴；有则作为唯一计时基准 */
+  beatMap?: ChartBeatMap | undefined;
 }
 
 /** MIDI → 按难度成谱（谱面屏与游玩屏共用） */
@@ -413,8 +415,13 @@ export function buildPlayChart(
 ): TaikoChart {
   const { clean, skeleton } = analyzeMidi(midi, opts.phaseBeatOffset ?? 0);
   const offset = opts.offsetMs ?? 0;
+  const beatMap = opts.beatMap && opts.beatMap.beats.length >= 4 ? opts.beatMap : undefined;
+  // Metro 轨给出小节拍数时以它为准（真人录音的拍号比 MIDI 更可信）
+  const timeSignature: [number, number] = beatMap
+    ? [beatMap.beatsPerBar, 4]
+    : midi.timeSignature;
 
-  let emits: Emit[] = patternEmits(skeleton, diff, midi.timeSignature[0]);
+  let emits: Emit[] = patternEmits(skeleton, diff, timeSignature[0]);
 
   // 轻松 / 入门：全部按闭镲处理（不出开镲）
   if (diff === "easy" || diff === "beginner") {
@@ -425,38 +432,54 @@ export function buildPlayChart(
   const lastStep = emits.reduce((m, e) => Math.max(m, e.step), 0);
   const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);
 
-  const aligner = new HitAligner(midi, clean);
+  const aligner: StepTimer = beatMap
+    ? new MetroTimer(beatMap.beats, clean.stepsPerBeat, skeleton.phaseSteps, beatMap.barPhase)
+    : new HitAligner(midi, clean);
   const notes = enforceMinGap(
     [
-      ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, aligner),
-      ...holdsToNotes(holds, midi, clean, offset, aligner),
+      ...emitsToNotes(emits, NOTE_PARTS[diff], offset, aligner),
+      ...holdsToNotes(holds, offset, aligner),
     ].sort((a, b) => a.timeMs - b.timeMs),
     diff,
   );
 
-
-
   const last = notes[notes.length - 1]?.timeMs ?? 0;
-  // 节拍栅格：与音符完全同源（同一 tempo map、同一相位、同一 offset）
+  // 节拍栅格：与音符完全同源（同一计时器、同一相位、同一 offset）
   const phaseSteps = skeleton.phaseSteps;
-  const gridAt = (step: number) => tickToMs(midi, step * clean.stepTicks) + offset;
-  const originMs = gridAt(phaseSteps);
-  const stepMs = Math.max(1, (gridAt(phaseSteps + 4) - originMs) / 4);
+  const gridAt = (step: number) => aligner.rawOf(step) + offset;
+  const originMs = beatMap
+    ? beatTimeAt(beatMap.beats, beatMap.barPhase) + offset
+    : gridAt(phaseSteps);
+  const stepsPerBeat = clean.stepsPerBeat;
+  const stepMs = beatMap
+    ? Math.max(1, averageBeatMs(beatMap.beats) / stepsPerBeat)
+    : Math.max(1, (gridAt(phaseSteps + 4) - originMs) / 4);
+  const bpm = beatMap
+    ? Math.round((60000 / averageBeatMs(beatMap.beats)) * 100) / 100
+    : Math.round(midi.bpm * 100) / 100;
+
   return {
     title: opts.title,
-    bpm: Math.round(midi.bpm * 100) / 100,
-    timeSignature: midi.timeSignature,
+    bpm,
+    timeSignature,
     durationMs: opts.durationMs ?? Math.max(last + 2000, midi.durationMs + offset),
     notes,
     grid: {
       originMs,
       stepMs,
-      stepsPerBeat: clean.stepsPerBeat,
-      stepsPerBar: clean.stepsPerBar,
+      stepsPerBeat,
+      stepsPerBar: beatMap ? stepsPerBeat * beatMap.beatsPerBar : clean.stepsPerBar,
     },
+    ...(beatMap
+      ? {
+          beatMap: offset
+            ? { ...beatMap, beats: beatMap.beats.map((t) => t + offset) }
+            : beatMap,
+        }
+      : {}),
   };
-
 }
+
 
 /** 兼容旧接口：按难度加工已有谱面（现只用于渲染层测试） */
 export function applyDifficulty(chart: TaikoChart, diff: Difficulty): TaikoChart {
