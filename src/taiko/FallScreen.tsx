@@ -429,7 +429,20 @@ export function FallScreen({
     }
   }, [hasAudio, playChart, resetRun, setPhaseBoth]);
 
-  const start = useCallback(() => beginCountdown(0, true), [beginCountdown]);
+  // 开始请求先挂起：等本组件的换歌装载 / 谱面重建 effect 都执行完，再在下方 effect 里真正开始，
+  // 避免首次进歌时开始排好的声音被随后的 stop()/load() 冲掉（倒计时照走却没声音）。
+  const [startTick, setStartTick] = useState(0);
+  const pendingStartRef = useRef(false);
+  const start = useCallback(() => {
+    pendingStartRef.current = true;
+    setStartTick((n) => n + 1);
+  }, []);
+  useEffect(() => {
+    if (!pendingStartRef.current || !playChart) return;
+    if (phaseRef.current !== "idle" && phaseRef.current !== "ended") { pendingStartRef.current = false; return; }
+    pendingStartRef.current = false;
+    beginCountdown(0, true);
+  }, [startTick, playChart, stems, beginCountdown]);
 
   const pause = useCallback(() => {
     if (phaseRef.current === "playing" || phaseRef.current === "countdown") {
@@ -561,6 +574,13 @@ export function FallScreen({
         setPhase("playing");
       }
       if (ph === "playing") {
+        if (hasAudio && songPlayer.hasAudio && !songPlayer.playing && t >= 0 && t < songPlayer.durationMs - 50) {
+          // 播放器被外部停掉（换歌装载/重建冲掉排程）：按当前谱面时间立即补播
+          void getAudioContext().resume().catch(() => undefined);
+          songPlayer.play(t);
+          const g = clockGuardRef.current;
+          g.lastAudio = t; g.lastAt = now; g.stalled = false;
+        }
         if (!hasAudio && playChart && t > playChart.durationMs) {
           phaseRef.current = "ended";
           setPhase("ended");
