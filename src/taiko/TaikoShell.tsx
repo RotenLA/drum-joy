@@ -14,7 +14,7 @@ import { ThereminScreen } from "./theremin/ThereminScreen";
 import { useLanguage } from "./i18n";
 interface TaikoSettings { speed: number; midiDeviceId: string | null }
 const SETTINGS_KEY = "taiko.settings.v5";
-const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.25, midiDeviceId: null };
+const DEFAULT_SETTINGS: TaikoSettings = { speed: 1.5, midiDeviceId: null };
 
 
 /** 关闭面板回宿主大厅：只走 window.__pd2uExit()，幂等；300ms 内去重（开发环境可能双触发） */
@@ -56,14 +56,14 @@ function ShellInner() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(SETTINGS_KEY);
-      if (!raw) localStorage.setItem(SETTINGS_KEY + ".v2", "1");
+      if (!raw) localStorage.setItem(SETTINGS_KEY + ".v3", "1");
       if (raw) {
         const saved = JSON.parse(raw) as Partial<TaikoSettings>;
-        // v2：旧存档的速度一次性迁移到新默认 1.25x，之后用户自改的值保留
-        const migrated = localStorage.getItem(SETTINGS_KEY + ".v2") === "1";
+        // v3：旧存档的速度一次性迁移到新默认 1.5x，之后用户自改的值保留
+        const migrated = localStorage.getItem(SETTINGS_KEY + ".v3") === "1";
         const speed = migrated ? (saved.speed ?? DEFAULT_SETTINGS.speed) : DEFAULT_SETTINGS.speed;
         if (!migrated) {
-          localStorage.setItem(SETTINGS_KEY + ".v2", "1");
+          localStorage.setItem(SETTINGS_KEY + ".v3", "1");
           localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...saved, speed }));
         }
         setSettings((s2) => ({ ...s2, speed, midiDeviceId: saved.midiDeviceId ?? s2.midiDeviceId }));
