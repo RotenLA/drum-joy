@@ -220,25 +220,87 @@ function AdminPage() {
     const midi = files["midi"];
     if (!midi) throw new Error("缺少 MIDI");
     for (const field of STEM_FIELDS) if (!files[field.key]) throw new Error(`缺少 ${field.label}`);
-    setBusy(`解析《${songTitle}》并生成四档谱面…`);
+
+    // 无后缀的原曲文件：读内嵌歌名、歌手与专辑封面
+    let title = songTitle;
+    let artist = songArtist.trim();
+    let coverFile: File | null = null;
+    const original = files["original"];
+    if (original) {
+      setBusy(`读取《${songTitle}》原曲信息…`);
+      const meta = await readAudioMeta(original);
+      if (!title && meta.title) title = meta.title;
+      if (!artist && meta.artist) artist = meta.artist;
+      if (meta.cover) {
+        coverFile = new File([meta.cover.blob], `cover.${meta.cover.ext}`, {
+          type: meta.cover.blob.type,
+        });
+      }
+    }
+    if (!title) throw new Error("缺少歌名");
+
+    setBusy(`解析《${title}》并生成四档谱面…`);
     const sourceMidi = parseMidi(await midi.arrayBuffer());
-    setBusy(`分析《${songTitle}》音频速度…`);
-    const tempo = await decodeAndAnalyzeTempo(files["drums"] ?? files["other"] ?? files["bass"] ?? files["vocals"]!, sourceMidi);
-    const needsReview = tempo.status === "review";
-    const parsed = tempo.midi;
-    const charts = buildAllCharts(parsed, songTitle, tempo.bpm);
-    const fingerprint = chartVersionFingerprint(parsed);
+
+    // 节拍器基准轨优先：拿到绝对拍点序列后不再需要任何音频测速与人工确认
+    let beatMap: ChartBeatMap | null = null;
+    let metroBpm = 0;
+    let metroBeatsPerBar = 0;
+    const metro = files["metro"];
+    if (metro) {
+      setBusy(`解析《${title}》节拍器轨…`);
+      const ctx = new (window.AudioContext ?? window.webkitAudioContext)();
+      try {
+        const analysis = await analyzeMetroFile(metro, ctx);
+        if (analysis) {
+          beatMap = toChartBeatMap(analysis);
+          metroBpm = analysis.bpm;
+          metroBeatsPerBar = analysis.beatsPerBar;
+        }
+      } finally {
+        void ctx.close();
+      }
+      if (!beatMap) throw new Error("节拍器轨解析失败：没有检测到稳定的脉冲");
+    }
+
+    let parsed = sourceMidi;
+    let displayBpm = metroBpm;
+    let needsReview = false;
+    if (!beatMap) {
+      setBusy(`分析《${title}》音频速度…`);
+      const tempo = await decodeAndAnalyzeTempo(
+        files["drums"] ?? files["other"] ?? files["bass"] ?? files["vocals"]!,
+        sourceMidi,
+      );
+      needsReview = tempo.status === "review";
+      parsed = tempo.midi;
+      displayBpm = tempo.bpm;
+    }
+
+    const charts = buildAllCharts(parsed, title, displayBpm, beatMap);
+    const fingerprint = chartVersionFingerprint(parsed, beatMap);
     let durationMs = parsed.durationMs;
     for (const field of STEM_FIELDS) {
       const file = files[field.key];
       if (file) durationMs = Math.max(durationMs, await audioDurationMs(file));
     }
-    const uploadFiles = [...STEM_FIELDS.map((field) => ({ key: field.key, file: files[field.key] })), { key: "midi" as const, file: midi }];
-    const completeFiles = uploadFiles.filter((item): item is { key: ImportFileKey; file: File } => item.file instanceof File);
+
+    const uploadFiles = [
+      ...STEM_FIELDS.map((field) => ({ key: field.key as string, file: files[field.key] })),
+      { key: "midi", file: midi },
+      { key: "metro", file: metro },
+      { key: "cover", file: coverFile ?? undefined },
+    ];
+    const completeFiles = uploadFiles.filter(
+      (item): item is { key: string; file: File } => item.file instanceof File,
+    );
     const targets = await signUploads({
       data: {
-        folder: songTitle.replace(/\s+/g, "-").toLowerCase(),
-        files: completeFiles.map(({ key, file }) => ({ key, ext: file.name.split(".").pop() ?? (key === "midi" ? "mid" : "mp3") })),
+        folder: title.replace(/\s+/g, "-").toLowerCase(),
+        files: completeFiles.map(({ key, file }) => ({
+          key,
+          ext: file.name.split(".").pop() ?? (key === "midi" ? "mid" : "mp3"),
+        })),
       },
     });
     const paths: Record<string, string> = {};
@@ -248,31 +310,41 @@ function AdminPage() {
       if (!target) continue;
       const source = completeFiles.find((item) => item.key === target.key)?.file;
       if (!source) throw new Error(`${target.key} 文件不存在`);
-      setBusy(`上传《${songTitle}》${target.key}（${i + 1}/${targets.targets.length}）…`);
+      setBusy(`上传《${title}》${target.key}（${i + 1}/${targets.targets.length}）…`);
       const { error } = await supabase.storage.from("songs").uploadToSignedUrl(target.path, target.token, source);
       if (error) throw new Error(`${target.key} 上传失败：${error.message}`);
       paths[target.key] = target.path;
-      sizes[target.key] = source.size;
+      // 玩家端只下载四条分轨与谱面，metro/cover 不计入下载体积
+      if (target.key !== "metro") sizes[target.key] = source.size;
     }
     const midiPath = paths["midi"];
     if (!midiPath) throw new Error("MIDI 上传结果缺失");
-    setBusy(`写入《${songTitle}》…`);
+    setBusy(`写入《${title}》…`);
     await save({ data: {
-      title: songTitle,
-      artist: songArtist.trim() || null,
+      title,
+      artist: artist || null,
       durationMs,
-      bpm: tempo.bpm,
-      tsNum: parsed.timeSignature[0],
-      tsDen: parsed.timeSignature[1],
+      bpm: Math.round(displayBpm * 10) / 10,
+      tsNum: metroBeatsPerBar || parsed.timeSignature[0],
+      tsDen: beatMap ? 4 : parsed.timeSignature[1],
       fingerprint,
-      paths: { vocals: paths["vocals"] ?? null, bass: paths["bass"] ?? null, drums: paths["drums"] ?? null, other: paths["other"] ?? null, midi: midiPath },
+      paths: {
+        vocals: paths["vocals"] ?? null,
+        bass: paths["bass"] ?? null,
+        drums: paths["drums"] ?? null,
+        other: paths["other"] ?? null,
+        midi: midiPath,
+        metro: paths["metro"] ?? null,
+        cover: paths["cover"] ?? null,
+      },
       sizes,
       charts: charts.map((chart) => ({ difficulty: chart.difficulty, chart: chart.chart })),
       tagIds,
       published: !needsReview,
     } });
-    return { needsReview, bpm: tempo.bpm };
+    return { needsReview, bpm: Math.round(displayBpm * 10) / 10, title };
   };
+
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
