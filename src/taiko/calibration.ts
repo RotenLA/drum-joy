@@ -1,27 +1,18 @@
 /**
- * 延迟校准：安卓 WebView 的音频输出与触发链路常有 100~200ms 延迟，
- * 这里保存两个偏移量并提供一个「跟拍 8 下」的自动测算。
- *
- * visualMs：音符视觉偏移（正数 = 音符看起来更早到）
- * judgeMs ：判定偏移（正数 = 认为玩家敲得偏晚，把判定窗往后挪）
+ * 延迟校准只移动歌曲播放，不移动谱面、音符或判定窗。
+ * playbackMs：正数让歌曲提前，负数让歌曲延后。
  */
-import { isAndroid } from "./platform";
-
 export interface Calibration {
-  visualMs: number;
-  judgeMs: number;
+  playbackMs: number;
 }
 
-const KEY = "taiko.calib.v5";
+const KEY = "taiko.calib.v6";
 export const CALIB_RANGE = 200;
-/** 桌面 / iOS：空气鼓输入延迟约 80~100ms，网页端发声链路约 20ms */
-export const DEFAULT_CALIBRATION: Calibration = { visualMs: 90, judgeMs: 20 };
-/** 安卓音频管线比 iOS 多 40~50ms 缓冲，开机默认就把这段补上 */
-export const ANDROID_CALIBRATION: Calibration = { visualMs: 110, judgeMs: 65 };
+export const DEFAULT_CALIBRATION: Calibration = { playbackMs: 0 };
 
 /** 当前平台的默认偏移 */
 export function platformDefaultCalibration(): Calibration {
-  return isAndroid() ? { ...ANDROID_CALIBRATION } : { ...DEFAULT_CALIBRATION };
+  return { ...DEFAULT_CALIBRATION };
 }
 
 const clamp = (v: number) => Math.max(-CALIB_RANGE, Math.min(CALIB_RANGE, Math.round(v || 0)));
@@ -33,23 +24,31 @@ export function loadCalibration(): Calibration {
     const raw = localStorage.getItem(KEY);
     if (!raw) return base;
     const p = JSON.parse(raw) as Partial<Calibration>;
-    return {
-      visualMs: clamp(p.visualMs ?? base.visualMs),
-      judgeMs: clamp(p.judgeMs ?? base.judgeMs),
-    };
+    return { playbackMs: clamp(p.playbackMs ?? base.playbackMs) };
   } catch {
     return base;
   }
 }
 
 export function saveCalibration(c: Calibration): Calibration {
-  const next = { visualMs: clamp(c.visualMs), judgeMs: clamp(c.judgeMs) };
+  const next = { playbackMs: clamp(c.playbackMs) };
   try {
     localStorage.setItem(KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent<Calibration>("taiko:calibration", { detail: next }));
   } catch {
     // 忽略
   }
   return next;
+}
+
+export function subscribeCalibration(listener: (calibration: Calibration) => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const onChange = (event: Event) => {
+    const custom = event as CustomEvent<Calibration>;
+    listener(custom.detail ?? loadCalibration());
+  };
+  window.addEventListener("taiko:calibration", onChange);
+  return () => window.removeEventListener("taiko:calibration", onChange);
 }
 
 /**

@@ -23,6 +23,8 @@ class SongPlayer {
     other: 1,
   };
   private leadMs = 0;
+  /** 正数让歌曲内容相对固定谱面提前，负数让歌曲延后。 */
+  private playbackOffsetMs = 0;
   private startCtxSec = 0;
   private startOffsetMs = 0;
   private positionMs = 0;
@@ -67,6 +69,10 @@ class SongPlayer {
     if (v === this.leadMs) return;
     this.leadMs = v;
     if (!this.playing) this.positionMs = 0;
+  }
+
+  setPlaybackOffsetMs(ms: number): void {
+    this.playbackOffsetMs = Number.isFinite(ms) ? Math.max(-200, Math.min(200, ms)) : 0;
   }
 
   /** 音量 0~1，1 = 原始文件音量（不做超过峰值的放大） */
@@ -114,6 +120,9 @@ class SongPlayer {
     );
     this.startOffsetMs = offset;
     this.startCtxSec = Math.max(atCtxSec ?? ctx.currentTime + 0.05, ctx.currentTime + 0.02);
+    const contentOffsetMs = offset + this.playbackOffsetMs;
+    const audioStartCtxSec = this.startCtxSec + Math.max(0, -contentOffsetMs) / 1000;
+    const audioOffsetMs = Math.max(0, contentOffsetMs);
 
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 64;
@@ -154,8 +163,8 @@ class SongPlayer {
         };
       }
       src.start(
-        this.startCtxSec,
-        Math.min((offset + this.leadMs) / 1000, Math.max(0, track.buffer.duration - 0.01)),
+        audioStartCtxSec,
+        Math.min((audioOffsetMs + this.leadMs) / 1000, Math.max(0, track.buffer.duration - 0.01)),
       );
       this.sources[k] = src;
       this.gains[k] = gain;
@@ -183,23 +192,12 @@ class SongPlayer {
     else this.positionMs = t;
   }
 
-  /**
-   * 设备输出延迟（毫秒）：安卓 WebView 上常有 100~200ms，
-   * 计入后「听到的位置」才与判定时钟一致。
-   */
-  outputLatencyMs(): number {
-    const ctx = getAudioContext() as AudioContext & { outputLatency?: number };
-    const l = ctx.outputLatency ?? ctx.baseLatency ?? 0;
-    return Number.isFinite(l) ? Math.min(0.5, Math.max(0, l)) * 1000 : 0;
-  }
-
+  /** 固定谱面时钟；播放偏移只在声音源排程时应用。 */
   timeMs(): number {
     if (!this.playing) return this.positionMs;
     return Math.min(
       this.durationMs,
-      this.startOffsetMs +
-        (getAudioContext().currentTime - this.startCtxSec) * 1000 -
-        this.outputLatencyMs(),
+      this.startOffsetMs + (getAudioContext().currentTime - this.startCtxSec) * 1000,
     );
   }
 

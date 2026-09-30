@@ -27,7 +27,7 @@ import { getPlayChart } from "./chartCache";
 import { shiftChart } from "@/shared/taikoChart";
 
 import { quality, type QualityTier } from "./perf";
-import { DEFAULT_CALIBRATION, loadCalibration, type Calibration } from "./calibration";
+import { DEFAULT_CALIBRATION, loadCalibration, subscribeCalibration, type Calibration } from "./calibration";
 import { addHistory } from "./history";
 import { TutorialOverlay, markTutorialSeen } from "./tutorial/TutorialOverlay";
 import { ratingOfAccuracy } from "./rating";
@@ -129,8 +129,14 @@ export function FallScreen({
   const kitOnRef = useRef(true);
   useEffect(() => {
     calibRef.current = loadCalibration();
+    songPlayer.setPlaybackOffsetMs(calibRef.current.playbackMs);
     kitOnRef.current = loadKitEnabled();
-    return subscribeKitEnabled((on) => { kitOnRef.current = on; });
+    const offCalibration = subscribeCalibration((next) => {
+      calibRef.current = next;
+      songPlayer.setPlaybackOffsetMs(next.playbackMs);
+    });
+    const offKit = subscribeKitEnabled((on) => { kitOnRef.current = on; });
+    return () => { offCalibration(); offKit(); };
   }, []);
 
   // 视觉模式：舞台下落式 / 横排下落式（横排始终显示全部 9 个部件）
@@ -294,8 +300,8 @@ export function FallScreen({
         debugLog.push("midi", `击打迟到 ${Math.round(now - at)}ms，只出声不判定`);
         return;
       }
-      // 敲击时刻 + 判定偏移（把设备链路延迟补回来）
-      const t = readTimeMs(now) - (now - at) + calibRef.current.judgeMs;
+      // 只修正宿主事件传递耗时；歌曲播放偏移不改变谱面判定窗。
+      const t = readTimeMs(now) - (now - at);
       const notes = playChart.notes;
       // 只在该鼓件的时间窗附近查找（二分定位），不再遍历整首曲子
       const idx = noteIndexRef.current[part];
@@ -620,8 +626,8 @@ export function FallScreen({
 
       const frame = {
         chart: frameChart,
-        // 视觉偏移：只影响画面，不影响判定
-        timeMs: t + calibRef.current.visualMs,
+        // 音符和判定始终共用未经偏移的谱面时间。
+        timeMs: t,
         speed,
         now,
         flashes: flashesRef.current,
