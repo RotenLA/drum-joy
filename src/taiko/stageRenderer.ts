@@ -476,7 +476,7 @@ function beatPhaseOf(chart: StageFrame["chart"], stepMs: number, barSteps: numbe
   let best = -1;
   for (let s = 0; s < barSteps; s++) {
     let sum = 0;
-    for (let b = 0; b < barSteps; b += 4) sum += scores[(s + b) % barSteps] * (b === 0 ? 1.3 : 1);
+    for (let b = 0; b < barSteps; b += 4) sum += (scores[(s + b) % barSteps] ?? 0) * (b === 0 ? 1.3 : 1);
     if (sum > best) {
       best = sum;
       shift = s;
