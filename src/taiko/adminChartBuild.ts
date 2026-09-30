@@ -13,11 +13,17 @@ export function buildAllCharts(
   midi: ParsedMidi,
   title: string,
   displayBpm = midi.bpm,
+  beatMap?: ChartBeatMap | null,
 ): { difficulty: Difficulty; chart: TaikoChart }[] {
-  return ALL_DIFFICULTIES.map((difficulty) => ({
-    difficulty,
-    chart: { ...buildPlayChart(midi, { title }, difficulty), bpm: Math.round(displayBpm * 10) / 10 },
-  }));
+  return ALL_DIFFICULTIES.map((difficulty) => {
+    const chart = buildPlayChart(midi, { title, beatMap: beatMap ?? undefined }, difficulty);
+    // 有 Metro 轨时展示 BPM 就用它算出来的平均值，否则沿用后台测速结果
+    return {
+      difficulty,
+      chart: beatMap ? chart : { ...chart, bpm: Math.round(displayBpm * 10) / 10 },
+    };
+  });
 }
+
 
 export { chartVersionFingerprint, midiFingerprint, DIFFICULTIES };
