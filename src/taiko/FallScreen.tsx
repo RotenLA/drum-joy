@@ -577,8 +577,8 @@ export function FallScreen({
         missCursorRef.current = c;
       }
 
-      // 长音符（左踏板踩住闭镲）：全程按住，中途松开立即判失误
-      if (ph === "playing" && playChart) {
+      // 舞台模式保留左踏板长按；横排模式只把起点当作一次 Foot 踩击。
+      if (ph === "playing" && playChart && viewMode !== "columns") {
         const notes = playChart.notes;
         for (const i of holdIndices) {
           const n = notes[i]!;
@@ -640,6 +640,8 @@ export function FallScreen({
             : null,
         // 未开始（idle）时不画音符，只显示鼓阵
         showNotes: ph !== "idle",
+        audioEnergy: viewMode === "columns" ? songPlayer.audioEnergy() : 0,
+        motionActive: ph === "playing" || ph === "countdown",
 
         // 宿主实时注入的鼓棒姿态（无数据时为 null，不绘制）
         sticks: stickManager.latest(),
