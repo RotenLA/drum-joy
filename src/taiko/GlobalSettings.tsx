@@ -22,6 +22,7 @@ import { midiManager } from "./midiInput";
 import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
 import { Button } from "@/components/ui/button";
+import { loadViewMode, setViewMode, subscribeViewMode, type ViewMode } from "./viewMode";
 
 const CALIB_TARGET = 8;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
@@ -37,6 +38,13 @@ export function GlobalSettings({
 }) {
   const { tr, language } = useLanguage();
   const labTapRef = useRef({ count: 0, at: 0 });
+
+  // ---- 视觉模式（舞台 / 横排） ----
+  const [viewMode, setViewModeState] = useState<ViewMode>("stage");
+  useEffect(() => {
+    setViewModeState(loadViewMode());
+    return subscribeViewMode(setViewModeState);
+  }, []);
 
   // ---- 画质 ----
   const [qualityMode, setQualityMode] = useState<QualityMode>("auto");
@@ -148,6 +156,37 @@ export function GlobalSettings({
         <span className="text-[10px] text-[var(--taiko-ink)]/45">
           {tr("所有歌曲通用，只需设置一次", "Applies to every song, set once")}
         </span>
+      </div>
+
+      {/* 视觉模式 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs text-[var(--taiko-ink)]/70">
+          {tr("视觉模式", "Visual mode")}
+        </span>
+        {(
+          [
+            ["stage", tr("舞台模式", "Stage")],
+            ["columns", tr("横排模式", "Classic lanes")],
+          ] as const
+        ).map(([mode, label]) => (
+          <Button
+            key={mode}
+            variant="outline"
+            size="sm"
+            type="button"
+            onClick={() => {
+              setViewMode(mode);
+              setViewModeState(mode);
+            }}
+            className={`h-8 min-w-20 rounded-md px-3 text-xs ${
+              viewMode === mode
+                ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)] text-[var(--taiko-paper)]"
+                : "border-[var(--taiko-line)] text-[var(--taiko-ink)]/70 hover:border-[var(--taiko-accent)]"
+            }`}
+          >
+            {label}
+          </Button>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

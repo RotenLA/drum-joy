@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
+import { renderColumns } from "./columnRenderer";
+import { loadViewMode, subscribeViewMode, type ViewMode } from "./viewMode";
 import { musicGain, useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { STEM_KINDS, hasAnyStem, stemsDurationMs } from "./stems";
@@ -127,8 +129,15 @@ export function FallScreen({
     return subscribeKitEnabled((on) => { kitOnRef.current = on; });
   }, []);
 
+  // 视觉模式：舞台下落式 / 横排下落式（横排始终显示全部 9 个部件）
+  const [viewMode, setViewModeState] = useState<ViewMode>("stage");
+  useEffect(() => {
+    setViewModeState(loadViewMode());
+    return subscribeViewMode(setViewModeState);
+  }, []);
+
   const layout = layoutOf(song.difficulty);
-  const parts = VISIBLE_PARTS[layout];
+  const parts = viewMode === "columns" ? VISIBLE_PARTS.nine : VISIBLE_PARTS[layout];
   const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
 
   /**
@@ -636,7 +645,11 @@ export function FallScreen({
         sticks: stickManager.latest(),
       };
 
-      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      if (viewMode === "columns") {
+        renderColumns(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      } else {
+        renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      }
     };
 
     raf = requestAnimationFrame(draw);
@@ -646,7 +659,7 @@ export function FallScreen({
       ro?.disconnect();
       if (!ro) window.removeEventListener("resize", resize);
     };
-  }, [playChart, speed, parts, hasAudio, readTimeMs, tier]);
+  }, [playChart, speed, parts, hasAudio, readTimeMs, tier, viewMode]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
