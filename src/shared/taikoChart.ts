@@ -101,10 +101,15 @@ export function shiftChart(chart: TaikoChart, shiftMs: number): TaikoChart {
     notes.push({ ...n, timeMs: t });
   }
   const grid = chart.grid ? { ...chart.grid, originMs: chart.grid.originMs - shiftMs } : undefined;
+  const beatMap = chart.beatMap
+    ? { ...chart.beatMap, beats: chart.beatMap.beats.map((t) => t - shiftMs) }
+    : undefined;
   return {
     ...chart,
     durationMs: Math.max(0, chart.durationMs - shiftMs),
     notes,
     ...(grid ? { grid } : {}),
+    ...(beatMap ? { beatMap } : {}),
   };
 }
+
