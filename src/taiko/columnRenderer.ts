@@ -7,17 +7,16 @@
  * 动态音符）在同一 1564×720 参考坐标系里按实测坐标绘制，保证完全重合。
  */
 import plateUrl from "@/assets/columns-stage.jpg";
-import noteB01 from "@/assets/columns-game/NoteB01.png.asset.json";
-import noteB02 from "@/assets/columns-game/NoteB02.png.asset.json";
-import noteB03 from "@/assets/columns-game/NoteB03.png.asset.json";
-import noteB04 from "@/assets/columns-game/NoteB04.png.asset.json";
-import noteT01 from "@/assets/columns-game/NoteT01.png.asset.json";
-import noteT02 from "@/assets/columns-game/NoteT02.png.asset.json";
-import noteT03 from "@/assets/columns-game/NoteT03.png.asset.json";
-import noteT04 from "@/assets/columns-game/NoteT04.png.asset.json";
-import motionLight from "@/assets/columns-game/运动光线.png.asset.json";
-import farLight from "@/assets/columns-game/远光.png.asset.json";
-import waveform from "@/assets/columns-game/音波.png.asset.json";
+import noteB01 from "@/assets/columns-game/NoteB01.png";
+import noteB02 from "@/assets/columns-game/NoteB02.png";
+import noteB03 from "@/assets/columns-game/NoteB03.png";
+import noteT01 from "@/assets/columns-game/NoteT01.png";
+import noteT02 from "@/assets/columns-game/NoteT02.png";
+import noteT03 from "@/assets/columns-game/NoteT03.png";
+import noteT04 from "@/assets/columns-game/NoteT04.png";
+import motionLight from "@/assets/columns-game/运动光线.png";
+import farLight from "@/assets/columns-game/远光.png";
+import waveform from "@/assets/columns-game/音波.png";
 import { partOfNote, type PartId } from "./laneLayouts";
 import { quality } from "./perf";
 import { drawHud, hexToRgba, stageViewport, type StageFrame } from "./stageRenderer";
@@ -87,8 +86,8 @@ function loadedImage(url: string): HTMLImageElement | null {
   return image.complete && image.naturalWidth > 0 ? image : null;
 }
 
-const BOTTOM_IMAGES = [noteB01.url, noteB01.url, noteB02.url, noteB01.url, noteB03.url] as const;
-const TOP_IMAGES = [noteT01.url, noteT02.url, noteT03.url, noteT04.url] as const;
+const BOTTOM_IMAGES = [noteB01, noteB01, noteB02, noteB01, noteB03] as const;
+const TOP_IMAGES = [noteT01, noteT02, noteT03, noteT04] as const;
 
 function slotOf(part: PartId): Slot | null {
   if (part === "pedalHat") return { row: 1, index: 1 };
@@ -173,18 +172,18 @@ function drawReactiveBackdrop(ctx: CanvasRenderingContext2D, t: Xf, f: StageFram
   ctx.globalCompositeOperation = "screen";
 
   // 同事提供的原始运动光、远光与音波素材；只做平移/透明度，避免程序近似重画。
-  const motion = loadedImage(motionLight.url);
+  const motion = loadedImage(motionLight);
   if (motion) {
     const drift = Math.sin(clock * 0.7) * 18;
     ctx.globalAlpha = 0.08 + energy * 0.12;
     ctx.drawImage(motion, X(t, 69 + drift), Y(t, 64), 1426 * t.s, 577 * t.s);
   }
-  const far = loadedImage(farLight.url);
+  const far = loadedImage(farLight);
   if (far) {
     ctx.globalAlpha = 0.18 + energy * 0.18;
     ctx.drawImage(far, X(t, 216), Y(t, 119), 1133 * t.s, 107 * t.s);
   }
-  const wave = loadedImage(waveform.url);
+  const wave = loadedImage(waveform);
   if (wave) {
     const waveAlpha = 0.05 + energy * 0.16;
     ctx.globalAlpha = waveAlpha;
@@ -361,7 +360,7 @@ function placeNotes(f: StageFrame): Placed[] {
 }
 
 function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
-  const image = loadedImage(BOTTOM_IMAGES[n.index] ?? noteB01.url);
+  const image = loadedImage(BOTTOM_IMAGES[n.index] ?? noteB01);
   if (!image) return;
   const laneW = Math.max(2, railX(n.index * 2 + 1, n.cy) - railX(n.index * 2, n.cy));
   const imageW = laneW * 1.05 * t.s;
@@ -386,7 +385,7 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
 }
 
 function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
-  const image = loadedImage(TOP_IMAGES[n.index] ?? noteT01.url);
+  const image = loadedImage(TOP_IMAGES[n.index] ?? noteT01);
   const d = DIAMONDS[n.index];
   const spawn = TOP_SPAWNS[n.index];
   if (!image || !d || !spawn) return;
