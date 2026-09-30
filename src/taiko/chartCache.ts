@@ -5,7 +5,7 @@
  * 生成本身是确定性的，缓存额外保证「输入的边角参数变化（音频时长等）」
  * 不会让谱面漂移，同时省掉重复分析开销。
  */
-import type { TaikoChart } from "@/shared/taikoChart";
+import type { ChartBeatMap, TaikoChart } from "@/shared/taikoChart";
 import type { ParsedMidi } from "./midiFile";
 import { buildPlayChart, type Difficulty } from "./difficulty";
 import type { PlayChartOptions } from "./difficulty";
