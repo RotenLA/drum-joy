@@ -61,7 +61,7 @@ function ShellInner() {
         const saved = JSON.parse(raw) as Partial<TaikoSettings>;
         // v2：旧存档的速度一次性迁移到新默认 1.25x，之后用户自改的值保留
         const migrated = localStorage.getItem(SETTINGS_KEY + ".v2") === "1";
-        const speed = migrated ? (saved.speed ?? s.speed) : s.speed;
+        const speed = migrated ? (saved.speed ?? DEFAULT_SETTINGS.speed) : DEFAULT_SETTINGS.speed;
         if (!migrated) {
           localStorage.setItem(SETTINGS_KEY + ".v2", "1");
           localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...saved, speed }));
