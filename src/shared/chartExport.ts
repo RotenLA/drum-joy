@@ -8,6 +8,14 @@ export const EXPORT_DIFFICULTIES = ["easy", "beginner", "standard", "hard"] as c
 
 export type ExportDifficulty = (typeof EXPORT_DIFFICULTIES)[number];
 
+export type ChartExportJson =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: ChartExportJson | undefined }
+  | ChartExportJson[];
+
 export interface ChartExportSourceSong {
   id: string;
   title: string;
@@ -16,7 +24,7 @@ export interface ChartExportSourceSong {
   bpm: number;
   timeSignature: [number, number];
   fingerprint: string;
-  charts: Partial<Record<ExportDifficulty, unknown>>;
+  charts: Partial<Record<ExportDifficulty, ChartExportJson>>;
 }
 
 export interface AeroGameExportNote {
@@ -112,7 +120,7 @@ function isTaikoChart(value: unknown): value is TaikoChart {
   );
 }
 
-function exportChart(difficulty: ExportDifficulty, value: unknown): AeroGameExportChart {
+function exportChart(difficulty: ExportDifficulty, value: ChartExportJson | undefined): AeroGameExportChart {
   if (!isTaikoChart(value)) throw new Error(`谱面 ${difficulty} 数据格式不完整`);
   const chart = value;
   return {
