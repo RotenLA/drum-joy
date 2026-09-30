@@ -31,7 +31,7 @@ interface Placed {
 }
 
 const LANE_CENTERS = [-0.8, -0.4, 0, 0.4, 0.8] as const;
-const LANE_WIDTH = 0.31;
+const LANE_WIDTH = 0.36;
 const TOP_U = [-0.82, -0.22, 0.22, 0.78] as const;
 const TOP_DEPTH = [0.505, 0.47, 0.47, 0.505] as const;
 
@@ -197,7 +197,7 @@ function topTarget(g: Geom, index: number): StandingTarget {
   return {
     center: { x: floor.x, y: floor.y - g.h * (index === 0 || index === 3 ? 0.016 : 0.027) },
     width: g.w * 0.037 * scale,
-    height: g.h * 0.067 * scale,
+    height: g.h * 0.085 * scale,
     skew: (index - 1.5) * g.w * 0.0028,
     depth,
   };
