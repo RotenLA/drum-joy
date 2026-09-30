@@ -395,13 +395,25 @@ export function buildPlayChart(
 
 
   const last = notes[notes.length - 1]?.timeMs ?? 0;
+  // 节拍栅格：与音符完全同源（同一 tempo map、同一相位、同一 offset）
+  const phaseSteps = skeleton.phaseSteps;
+  const gridAt = (step: number) => tickToMs(midi, step * clean.stepTicks) + offset;
+  const originMs = gridAt(phaseSteps);
+  const stepMs = Math.max(1, (gridAt(phaseSteps + 4) - originMs) / 4);
   return {
     title: opts.title,
     bpm: Math.round(midi.bpm * 100) / 100,
     timeSignature: midi.timeSignature,
     durationMs: opts.durationMs ?? Math.max(last + 2000, midi.durationMs + offset),
     notes,
+    grid: {
+      originMs,
+      stepMs,
+      stepsPerBeat: clean.stepsPerBeat,
+      stepsPerBar: clean.stepsPerBar,
+    },
   };
+
 }
 
 /** 兼容旧接口：按难度加工已有谱面（现只用于渲染层测试） */
