@@ -12,6 +12,21 @@ export interface TaikoNote {
   holdMs?: number;
 }
 
+/**
+ * 节拍网格：谱面音符所用的同一套栅格。
+ * 渲染层的节拍刻度必须用它，否则会和音符/音乐错相位。
+ */
+export interface ChartGrid {
+  /** 第一小节第一拍的时刻（毫秒，与 notes 同一时间基准） */
+  originMs: number;
+  /** 一格（十六分）的毫秒长度 */
+  stepMs: number;
+  /** 一拍几格 */
+  stepsPerBeat: number;
+  /** 一小节几格 */
+  stepsPerBar: number;
+}
+
 export interface TaikoChart {
   title: string;
   bpm: number;
@@ -20,7 +35,10 @@ export interface TaikoChart {
   /** 曲目总长（毫秒） */
   durationMs: number;
   notes: TaikoNote[];
+  /** 节拍栅格（新谱面必带；旧谱面缺省时渲染层回退估算） */
+  grid?: ChartGrid;
 }
+
 
 /** 一小节的毫秒长度 */
 export function measureDurationMs(chart: TaikoChart): number {
