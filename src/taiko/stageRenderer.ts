@@ -10,6 +10,8 @@
  * 踏板为斜放的立方体（顶面旋转后按 0.42 均匀压扁，与鼓面椭圆同一压扁比）。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
+import { beatIndexAtOrAfter } from "./beatGrid";
+
 import {
   DRUM_PARTS,
   PAD_ANCHORS,
