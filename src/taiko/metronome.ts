@@ -35,34 +35,67 @@ export function getAudioContext(): AudioContext {
   return sharedCtx;
 }
 
-let unlocked = false;
+let listening = false;
+let silentEl: HTMLAudioElement | null = null;
+
+/** 极短静音 WAV（data URI），iOS 循环播放后网页被当作「媒体播放」，静音拨片下也能出声 */
+function silentWavUri(): string {
+  const n = 800, rate = 8000;
+  const buf = new Uint8Array(44 + n);
+  const dv = new DataView(buf.buffer);
+  const w = (o: number, s: string) => { for (let i = 0; i < s.length; i++) buf[o + i] = s.charCodeAt(i); };
+  w(0, "RIFF"); dv.setUint32(4, 36 + n, true); w(8, "WAVE"); w(12, "fmt ");
+  dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate, true); dv.setUint16(32, 1, true); dv.setUint16(34, 8, true);
+  w(36, "data"); dv.setUint32(40, n, true);
+  for (let i = 0; i < n; i++) buf[44 + i] = 128;
+  let bin = "";
+  for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]!);
+  return `data:audio/wav;base64,${btoa(bin)}`;
+}
 
 /**
- * 首次用户手势时解锁音频：iOS/WKWebView 的 AudioContext 只有在手势里
- * resume + 播一帧静音后才会真正接通输出，否则第一批敲击会明显抖动。
+ * 在用户手势当下唤醒声音（可重复调用）：只要引擎不是运行中就 resume + 播一帧静音。
+ * iOS/WebView 切后台、来电、锁屏后会回到挂起/中断，必须由下一次点击重新唤醒。
  */
-export function unlockAudio(): void {
-  if (unlocked || typeof window === "undefined") return;
-  const run = () => {
-    if (unlocked) return;
-    unlocked = true;
-    try {
-      const ctx = getAudioContext();
-      void ctx.resume();
+export function wakeAudio(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state !== "running") {
+      void ctx.resume().catch(() => undefined);
       const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
       const src = ctx.createBufferSource();
       src.buffer = buf;
       src.connect(ctx.destination);
       src.start(ctx.currentTime);
+    }
+  } catch {
+    // 环境不支持，忽略
+  }
+  if (isIOS()) {
+    try {
+      if (!silentEl) {
+        silentEl = document.createElement("audio");
+        silentEl.src = silentWavUri();
+        silentEl.loop = true;
+        silentEl.setAttribute("playsinline", "");
+        silentEl.setAttribute("x-webkit-airplay", "deny");
+        silentEl.preload = "auto";
+      }
+      if (silentEl.paused) void silentEl.play().catch(() => undefined);
     } catch {
-      // 环境不支持，忽略
+      // 忽略
     }
-    for (const ev of ["pointerdown", "touchstart", "keydown"] as const) {
-      window.removeEventListener(ev, run);
-    }
-  };
-  for (const ev of ["pointerdown", "touchstart", "keydown"] as const) {
-    window.addEventListener(ev, run, { passive: true });
+  }
+}
+
+/** 挂全局手势监听：每次点击/触摸/按键都检查一次声音引擎（不再只解锁一次） */
+export function unlockAudio(): void {
+  if (listening || typeof window === "undefined") return;
+  listening = true;
+  for (const ev of ["pointerdown", "touchstart", "touchend", "keydown"] as const) {
+    window.addEventListener(ev, wakeAudio, { passive: true, capture: true });
   }
 }
 
