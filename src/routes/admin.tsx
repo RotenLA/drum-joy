@@ -9,6 +9,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { parseMidi } from "@/taiko/midiFile";
 import { buildAllCharts, chartVersionFingerprint } from "@/taiko/adminChartBuild";
 import { applyConstantTempo, decodeAndAnalyzeTempo } from "@/taiko/audioTempo";
+import { analyzeMetroFile, toChartBeatMap } from "@/taiko/metroAnalysis";
+import { readAudioMeta } from "@/taiko/audioMeta";
+import type { ChartBeatMap } from "@/shared/taikoChart";
+
 import {
   groupImportFiles,
   type FolderImportSong,
