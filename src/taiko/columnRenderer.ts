@@ -230,7 +230,7 @@ function drawChevron(ctx: CanvasRenderingContext2D, q: Quad, direction: -1 | 1, 
 function drawBottomRow(ctx: CanvasRenderingContext2D, g: Geom, f: StageFrame, glow: boolean) {
   for (let i = 0; i < 5; i++) {
     const part = BOTTOM_SLOTS[i];
-    const expiry = part ? Math.max(f.flashes[part] ?? 0, part === "hihat" ? f.flashes.pedalHat ?? 0 : 0) : 0;
+    const expiry = part ? Math.max(f.flashes[part] ?? 0, part === "hihat" ? f.flashes["pedalHat"] ?? 0 : 0) : 0;
     const hit = Math.max(0, Math.min(1, (expiry - f.now) / FLASH_MS));
     const q = groundQuad(g, laneCenterU(i), 0.37, g.bottomDepth, 0.075);
     ctx.save(); quadPath(ctx, q); ctx.clip();
