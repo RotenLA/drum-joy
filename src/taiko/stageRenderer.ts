@@ -554,7 +554,7 @@ function drawBeatMarks(
         ctx.moveTo(cx - px * halfW, cy - py * halfW);
         ctx.lineTo(cx + px * halfW, cy + py * halfW);
         ctx.stroke();
-      } else if (sub === 2) {
+      } else if (sub === half) {
         // 反拍：更短更淡的虚线
         const halfW = base * 0.18;
         ctx.globalAlpha = (0.035 + 0.1 * p) * fade;
