@@ -22,6 +22,14 @@ const extOfMime = (mime: string): string => {
   return "jpg";
 };
 
+/** 复制成独立的 ArrayBuffer，避免视图类型与 Blob 参数不兼容 */
+const toBlobPart = (view: Uint8Array): ArrayBuffer => {
+  const copy = new Uint8Array(view.length);
+  copy.set(view);
+  return copy.buffer;
+};
+
+
 /** ID3v2 文本帧解码（0=Latin1 1=UTF16LE/BE 2=UTF16BE 3=UTF8） */
 function decodeText(bytes: Uint8Array): string {
   if (!bytes.length) return "";
