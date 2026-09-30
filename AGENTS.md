@@ -11,7 +11,7 @@
 
 - Startup watchdog: root component marks booted on mount (covers every route); overlay only on mobile/Unity, never on Preview/desktop, and only when an error was captured — avoids false "Failed to start".
 - Playlist detail screens always reveal the blurred gameplay stage; `song_tags.background_path` is deprecated and must not be read, written, or exposed in admin UI.
-- Columns is default: measured 1564×720 plate plus original Game art; all notes share one linear vertical timeline, top notes stay upright with their bottom bars on rails 1/3/4/5, and columns has no guides/links/holds; stage retains holds.
+- Columns defaults to the measured 1564×720 plate and original Game art; notes share one timeline, top notes stay upright on rails 1/3/4/5, and columns has no guides/links/holds; stage retains holds.
 - Auto charts run a three-stage pipeline: AI drum MIDI is sanitized (velocity gates, 62 ms per-part debounce, two-hand arbitration), per-song groove templates are clustered from the cleaned bars, then each difficulty's notes get their real MIDI hit time back-filled (grid time only as fallback) — removes AI stem noise while staying locked to the audio.
 - Ratings use strict shared thresholds; live grades are progress-gated, SSS requires 99.5% plus a completed full combo, and stage intensity follows the live grade.
 - Admin folder import groups by the final underscore suffix and uploads songs sequentially to avoid browser memory spikes.
@@ -19,4 +19,5 @@
 - Song BPM metadata is inferred from audio plus MIDI structure in the 80–180 range; chart timing follows the difficulty snap rule and the MIDI tempo map, while MIDI remains the GM-part and time-signature source.
 - On low-height landscape screens, Settings, Exit/Back, and Tutorial share the same safe-area top line and 2rem height so Unity WebView chrome stays aligned.
 
-- The song picker remembers the open playlist in session memory so leaving a song returns to that playlist; a page reload starts at the home screen.
+- The song picker remembers its playlist in session memory; leaving a song returns there, while reload starts home.
+- Calibration moves song playback only; notes and judgement share the unshifted chart clock so they cannot drift apart.
