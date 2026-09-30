@@ -77,12 +77,9 @@ export const stemsDurationMs = (stems: StemMap): number => {
 
 export const hasAnyStem = (stems: StemMap): boolean => STEM_KINDS.some((k) => stems[k] !== null);
 
-/** 静音阈值：约 -24dBFS 以下视为空白（轻微底噪/引子也切掉） */
+/** 静音阈值：约 -24dBFS 以下视为空白（仅供诊断用途） */
 const SILENCE_THRESHOLD = 10 ** (-24 / 20);
-/** 裁切时往前保留的余量，避免削掉音头 */
-const LEAD_GUARD_MS = 30;
-/** 鼓轨真实起振阈值：第一下鼓通常远高于底噪，用更高的门限避开气口/底噪 */
-const ONSET_THRESHOLD = 10 ** (-18 / 20);
+
 
 /** 单轨开头空白长度（毫秒）：首个超过给定阈值的样本时刻 */
 export function leadSilenceMs(buffer: AudioBuffer, threshold = SILENCE_THRESHOLD): number {
