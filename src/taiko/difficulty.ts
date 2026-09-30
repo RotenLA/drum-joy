@@ -377,10 +377,8 @@ function emitsToNotes(
 
 function holdsToNotes(
   segs: HoldSeg[],
-  midi: ParsedMidi,
-  clean: CleanedMidi,
   offsetMs: number,
-  aligner: HitAligner,
+  aligner: StepTimer,
 ): TaikoNote[] {
   const notes: TaikoNote[] = [];
   for (const s of segs) {
@@ -388,8 +386,9 @@ function holdsToNotes(
     const startStep = Math.max(0, s.startStep);
     const startMs = Math.max(0, aligner.timeOf(startStep, "pedalHat") + offsetMs);
 
-    const endMs = tickToMs(midi, s.endStep * clean.stepTicks) + offsetMs;
+    const endMs = aligner.rawOf(s.endStep) + offsetMs;
     if (endMs <= startMs) continue;
+
 
     notes.push({
       timeMs: startMs,
