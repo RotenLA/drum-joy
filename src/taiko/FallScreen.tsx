@@ -11,7 +11,7 @@ import { stickManager } from "./stickInput";
 import { gestureHitDetector, noteOfPart } from "./gestureHit";
 
 import { DebugLogPanel } from "./DebugLogPanel";
-import { click as metronomeClick, getAudioContext, unlockAudio } from "./metronome";
+import { click as metronomeClick, getAudioContext, unlockAudio, wakeAudio } from "./metronome";
 import { loadKitEnabled, playDrum, subscribeKitEnabled, warmUpDrums } from "./drumKit";
 import { latencyMeter } from "./latencyMeter";
 import { debugLog } from "./debugLog";
@@ -257,25 +257,30 @@ export function FallScreen({
           return countdownTargetRef.current - countdownMsRef.current + (now - countdownStartRef.current);
         }
         if (!hasAudio) return now - silentStartRef.current;
-        // 声音时钟卡住（引擎未唤醒）时用页面时钟兜底推进，并定期重新唤醒起播
+        // 统一平滑主时钟：页面时钟推进，声音时钟只做小幅校正，永不回退、不瞬跳。
         const g = clockGuardRef.current;
-        const a = songPlayer.timeMs();
-        if (songPlayer.playing && a !== g.lastAudio) {
-          g.lastAudio = a; g.lastAt = now; g.stalled = false;
-          return a;
+        let t = g.lastAudio + (now - g.lastAt);
+        const ctx = getAudioContext();
+        if (songPlayer.playing && ctx.state === "running") {
+          const err = songPlayer.timeMs() - t;
+          if (Math.abs(err) > 150) {
+            // 偏差过大：不跳画面，把声音重新排到画面当前位置（节流 1 秒）
+            if (now - g.retryAt > 1000 && t >= 0 && t < songPlayer.durationMs - 50) {
+              g.retryAt = now;
+              songPlayer.play(t);
+            }
+          } else {
+            t += Math.max(-3, Math.min(3, err * 0.1));
+          }
+        } else if (songPlayer.hasAudio && !songPlayer.playing && t >= 0 && t < songPlayer.durationMs - 50 && now - g.retryAt > 1000) {
+          // 播放器被外部停掉：按画面当前位置补播
+          g.retryAt = now;
+          void ctx.resume().catch(() => undefined);
+          songPlayer.play(t);
         }
-        if (now - g.lastAt < 300) return g.lastAudio;
-        const fb = g.lastAudio + (now - g.lastAt);
-        if (!g.stalled || now - g.retryAt > 1000) {
-          g.stalled = true; g.retryAt = now;
-          const ctx = getAudioContext();
-          void ctx.resume().catch(() => undefined).then(() => {
-            if (phaseRef.current !== "playing") return;
-            const t2 = clockGuardRef.current.lastAudio + (performance.now() - clockGuardRef.current.lastAt);
-            songPlayer.play(Math.max(0, t2));
-          });
-        }
-        return fb;
+        if (t < g.lastAudio) t = g.lastAudio;
+        g.lastAudio = t; g.lastAt = now;
+        return t;
       }
       if (ph === "idle") return 0;
       return timeRef.current;
@@ -434,6 +439,7 @@ export function FallScreen({
   const [startTick, setStartTick] = useState(0);
   const pendingStartRef = useRef(false);
   const start = useCallback(() => {
+    wakeAudio();
     pendingStartRef.current = true;
     setStartTick((n) => n + 1);
   }, []);
@@ -458,7 +464,7 @@ export function FallScreen({
   }, [hasAudio, readTimeMs, setPhaseBoth]);
 
   const resume = useCallback(
-    () => beginCountdown(Math.max(0, timeRef.current), false),
+    () => { wakeAudio(); beginCountdown(Math.max(0, timeRef.current), false); },
     [beginCountdown],
   );
 
@@ -569,18 +575,14 @@ export function FallScreen({
           void getAudioContext().resume().catch(() => undefined);
           songPlayer.play(Math.max(0, countdownTargetRef.current));
         }
+        clockGuardRef.current.lastAudio = countdownTargetRef.current;
+        clockGuardRef.current.lastAt = now;
+        clockGuardRef.current.retryAt = now;
         ph = "playing";
         phaseRef.current = "playing";
         setPhase("playing");
       }
       if (ph === "playing") {
-        if (hasAudio && songPlayer.hasAudio && !songPlayer.playing && t >= 0 && t < songPlayer.durationMs - 50) {
-          // 播放器被外部停掉（换歌装载/重建冲掉排程）：按当前谱面时间立即补播
-          void getAudioContext().resume().catch(() => undefined);
-          songPlayer.play(t);
-          const g = clockGuardRef.current;
-          g.lastAudio = t; g.lastAt = now; g.stalled = false;
-        }
         if (!hasAudio && playChart && t > playChart.durationMs) {
           phaseRef.current = "ended";
           setPhase("ended");
