@@ -409,13 +409,14 @@ function AdminPage() {
   };
 
   const setManualTempo = async (row: AdminSongRow) => {
-    const raw = prompt(`输入《${row.title}》确认后的 BPM（80–180）`, String(Number(row.bpm)));
+    const raw = prompt(`输入《${row.title}》确认后的 BPM（50–200）`, String(Number(row.bpm)));
     if (raw === null) return;
     const bpm = Number(raw);
-    if (!Number.isFinite(bpm) || bpm < 80 || bpm > 180) {
-      setNote("BPM 必须在 80–180 之间");
+    if (!Number.isFinite(bpm) || bpm < 50 || bpm > 200) {
+      setNote("BPM 必须在 50–200 之间");
       return;
     }
+
     setBusy(`按 ${bpm} BPM 更新《${row.title}》…`);
     try {
       const { url } = await midiUrlOf({ data: { id: row.id } });
