@@ -327,7 +327,7 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
   const yNear = n.cy + n.halfH, yFar = n.cy - n.halfH;
   const leftFar = railX(n.index * 2, yFar) + 1, rightFar = railX(n.index * 2 + 1, yFar) - 1;
   const leftNear = railX(n.index * 2, yNear) + 1, rightNear = railX(n.index * 2 + 1, yNear) - 1;
-  const x0 = X(t, leftFar), x1 = X(t, rightNear);
+  const x0 = Math.min(X(t, leftFar), X(t, leftNear)), x1 = Math.max(X(t, rightFar), X(t, rightNear));
   const y0 = Y(t, yFar), y1 = Y(t, yNear);
   const w = Math.max(1, X(t, rightNear) - X(t, leftNear)), h = Math.max(1.5, y1 - y0);
   ctx.save();
@@ -339,6 +339,7 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
   ctx.beginPath();
   ctx.moveTo(X(t, leftFar), y0); ctx.lineTo(X(t, rightFar), y0);
   ctx.lineTo(X(t, rightNear), y1); ctx.lineTo(X(t, leftNear), y1); ctx.closePath(); ctx.fill();
+  ctx.clip();
   ctx.shadowBlur = 0;
   // 中央高亮，不再画白色外框。
   if (h > 4) {
@@ -348,14 +349,14 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
     shine.addColorStop(0.5, "rgba(255,255,255,0.68)");
     shine.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = shine;
-    ctx.fillRect(Math.min(x0, X(t, leftNear)) + w * 0.04, midY - h * 0.23, Math.abs(x1 - x0) - w * 0.08, h * 0.46);
+    ctx.fillRect(x0 + w * 0.04, midY - h * 0.23, Math.max(1, x1 - x0 - w * 0.08), h * 0.46);
   }
   if (n.label && h > 5) {
     const fs = h * 0.78;
     ctx.translate((x0 + x1) / 2, (y0 + y1) / 2);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = `italic 500 ${fs}px system-ui, sans-serif`;
-    const tw = ctx.measureText(n.label).width, max = Math.abs(x1 - x0) * 0.78;
+    const tw = ctx.measureText(n.label).width, max = (x1 - x0) * 0.78;
     if (tw > max) ctx.scale(max / tw, 1);
     ctx.fillStyle = "rgba(12,16,24,0.9)";
     ctx.fillText(n.label, 0, fs * 0.04);
