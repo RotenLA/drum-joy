@@ -405,8 +405,11 @@ function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: 
   const laneW = Math.max(2, railX(railSlot * 2 + 1, n.cy) - railX(railSlot * 2, n.cy));
   const imageW = laneW * 1.12 * t.s;
   const targetHeadGap = PAD_HIT_Y - d[1];
-  const imageH = Math.max(imageW * 1.3, targetHeadGap * (0.28 + n.progress * 0.72) * t.s);
-  const anchorY = imageH * 0.92;
+  const headRatio = 0.18;
+  const barRatio = 0.94;
+  const targetImageH = targetHeadGap / (barRatio - headRatio);
+  const imageH = Math.max(imageW * 1.3, targetImageH * (0.28 + n.progress * 0.72) * t.s);
+  const anchorY = imageH * barRatio;
   ctx.save();
   ctx.globalAlpha = n.alpha;
   ctx.shadowColor = "rgba(255,255,255,0.45)"; ctx.shadowBlur = glow ? 7 * t.s : 0;

@@ -100,7 +100,6 @@ export function FallScreen({
   const missCursorRef = useRef(0);
   /** 鼓件 → 该鼓件音符下标（按时间升序），判定时只在时间窗附近二分查找 */
   const noteIndexRef = useRef<Partial<Record<PartId, number[]>>>({});
-  const timersRef = useRef<number[]>([]);
   const countdownStartRef = useRef(0);
   const countdownMsRef = useRef(0);
   const countdownBeatsRef = useRef(4);
@@ -237,12 +236,6 @@ export function FallScreen({
     return () => songPlayer.setOnEnded(null);
   }, [setPhaseBoth]);
 
-  useEffect(() => {
-    return () => {
-      timersRef.current.forEach((t) => window.clearTimeout(t));
-    };
-  }, []);
-
   /** 当前谱面时间（毫秒）：随时可读，不等下一帧，低帧率下判定也不被推迟 */
   const readTimeMs = useCallback(
     (now: number) => {
@@ -369,8 +362,6 @@ export function FallScreen({
   // 开始、重开、暂停后继续共用：按拍号分子倒数，再从指定位置播放。
   const beginCountdown = useCallback((fromMs: number, reset: boolean) => {
     if (!playChart || playChart.notes.length === 0) return;
-    timersRef.current.forEach((t) => window.clearTimeout(t));
-    timersRef.current = [];
     if (reset) {
       resetRun();
       playedRef.current = true;
@@ -407,11 +398,6 @@ export function FallScreen({
       metronomeClick(i === 0, ctx.currentTime + LEAD_MS / 1000 + (i * beatMs) / 1000);
     }
   }, [hasAudio, playChart, resetRun, setPhaseBoth]);
-
-  // 重试与兜底都通过 ref 调用最新的 beginCountdown，避免闭包里递归引用自身
-  const beginCountdownRef = useRef(beginCountdown);
-  beginCountdownRef.current = beginCountdown;
-
 
   const start = useCallback(() => beginCountdown(0, true), [beginCountdown]);
 
