@@ -156,7 +156,7 @@ function parseFlac(data: Uint8Array): AudioMeta | null {
       p += 4;
       if (dataLen > 0 && p + dataLen <= body.length) {
         out.cover = {
-          blob: new Blob([body.subarray(p, p + dataLen)], { type: mime }),
+          blob: new Blob([toBlobPart(body.subarray(p, p + dataLen))], { type: mime }),
           ext: extOfMime(mime),
         };
       }
