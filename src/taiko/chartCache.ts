@@ -47,14 +47,26 @@ export function midiFingerprint(midi: ParsedMidi): string {
   return (h >>> 0).toString(36);
 }
 
-/** 云端谱面/下载版本：内容指纹之外纳入重新推算后的变速表。 */
-export function chartVersionFingerprint(midi: ParsedMidi): string {
+/**
+ * 云端谱面/下载版本：内容指纹之外纳入变速表，
+ * 以及 Metro 轨解析出的节拍轴（换了节拍器轨或重新解析，指纹必变、旧缓存自动失效）。
+ */
+export function chartVersionFingerprint(midi: ParsedMidi, beatMap?: ChartBeatMap | null): string {
   let version = `${midiFingerprint(midi)}.${CHART_ALGORITHM_VERSION}`;
   for (const tempo of midi.tempos) {
     version += `.${tempo.tick.toString(36)}-${Math.round(tempo.usPerQuarter).toString(36)}`;
   }
+  if (beatMap && beatMap.beats.length) {
+    let h = 0x811c9dc5;
+    for (const t of beatMap.beats) {
+      h ^= Math.round(t) & 0xffff;
+      h = Math.imul(h, 0x01000193);
+    }
+    version += `.m${beatMap.beats.length.toString(36)}-${beatMap.beatsPerBar}-${beatMap.barPhase}-${(h >>> 0).toString(36)}`;
+  }
   return version;
 }
+
 
 function readCache(): CacheFile {
   if (typeof localStorage === "undefined") return {};
