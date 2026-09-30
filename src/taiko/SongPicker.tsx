@@ -40,6 +40,23 @@ function playlistBackground(key: string, index: number): string {
   return CARD_GRADIENTS[Math.max(0, index) % CARD_GRADIENTS.length] ?? "var(--taiko-playlist-1)";
 }
 
+/**
+ * 拿到曲库列表时就把所有封面预取进浏览器缓存，
+ * 选歌/切歌时详情卡背景立刻显示，不再等到选中才发请求。
+ */
+const preloadedCovers = new Set<string>();
+function preloadCovers(songs: readonly LibrarySong[]): void {
+  if (typeof Image === "undefined") return;
+  for (const s of songs) {
+    const url = s.coverUrl;
+    if (!url || preloadedCovers.has(url)) continue;
+    preloadedCovers.add(url);
+    const img = new Image();
+    img.decoding = "async";
+    img.src = url;
+  }
+}
+
 const DETAIL_SKEW = -8;
 
 function detailSlotTop(): number {
@@ -203,13 +220,18 @@ export function SongPicker({
         const lib = await loadLibraryOnce();
         setLibrary(lib.songs);
         setTags(lib.tags);
+        preloadCovers(lib.songs);
       } catch {
         setListErr(tr("曲库读取失败，请稍后重试", "Failed to load the song library"));
       } finally {
         setListing(false);
       }
     })();
-    const off = onLibraryChanged((lib) => { setLibrary(lib.songs); setTags(lib.tags); });
+    const off = onLibraryChanged((lib) => {
+      setLibrary(lib.songs);
+      setTags(lib.tags);
+      preloadCovers(lib.songs);
+    });
     void loadFavorites().then(setFavs);
     void loadPlayData().then((r) => {
       setHistory(r.history);
@@ -652,7 +674,7 @@ export function SongPicker({
                 <span
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url("${selected.coverUrl}")`, opacity: 0.55 }}
+                  style={{ backgroundImage: `url("${selected.coverUrl}")`, opacity: 0.22 }}
                 />
               ) : null}
               <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />

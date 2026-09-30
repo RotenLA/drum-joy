@@ -98,12 +98,12 @@ export function CardControls({
               onClick={() => song.setSong({ difficulty: d.id })}
               className={`h-9 min-w-0 rounded-md px-1.5 text-center ${
                 on
-                  ? "border-[var(--taiko-accent)] bg-[rgba(255,140,0,0.18)]"
+                  ? "border-[var(--taiko-accent)] bg-[var(--taiko-accent)]"
                   : "border-[rgba(255,255,255,0.14)] bg-[rgba(0,0,0,0.28)] hover:border-[rgba(255,255,255,0.3)]"
               }`}
             >
               <span
-                className={`flex min-w-0 items-center justify-center whitespace-nowrap text-[10px] font-semibold sm:text-xs ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.85)]"}`}
+                className={`flex min-w-0 items-center justify-center whitespace-nowrap text-[10px] font-bold sm:text-xs ${on ? "text-[#12141a]" : "text-[rgba(255,255,255,0.85)]"}`}
               >
                 {tr(d.label, d.labelEn)}
               </span>
