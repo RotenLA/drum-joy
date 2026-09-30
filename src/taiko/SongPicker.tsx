@@ -10,8 +10,8 @@ import { currentLibrarySnapshot, loadLibraryOnce, onLibraryChanged } from "./lib
 import { cancelDownload, downloadSong, readStoredAny, scanDownloads, useDownloads } from "./songDownloads";
 import { LeaderboardDialog } from "./LeaderboardDialog";
 import { songPlayer } from "./player";
-import { emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
-import { audioAlignMs } from "./audioAlign";
+import { emptyStems, hasAnyStem } from "./stems";
+
 
 import { useLanguage } from "./i18n";
 import { isUnlocked, loadFavorites, loadPlayData, setFavorite, type BestMap, type HistoryEntry } from "./history";
