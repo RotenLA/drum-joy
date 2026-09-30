@@ -196,7 +196,41 @@ function pedalHolds(emits: Emit[], diff: Difficulty, endStep: number): HoldSeg[]
  */
 const ANCHOR_PRIORITY: readonly PartId[] = ["snare", "kick", "hihat", "ride", "crash"];
 
-class HitAligner {
+/** 步 → 毫秒的统一计时接口（Metro 轨优先，旧歌回退 MIDI 回填） */
+interface StepTimer {
+  /** 该格的击打时刻 */
+  timeOf(step: number, part?: PartId): number;
+  /** 该格的纯栅格时刻（长音符结尾等不需要贴合击打的场合） */
+  rawOf(step: number): number;
+}
+
+/**
+ * Metro（节拍器）轨计时：步号换算成拍号后，直接查真实拍点时刻并在拍间线性插值。
+ * 真人演奏的动态推拉因此被逐拍吸收，全曲不会累积偏差。
+ */
+class MetroTimer implements StepTimer {
+  constructor(
+    private beats: readonly number[],
+    private stepsPerBeat: number,
+    private phaseSteps: number,
+    private barPhase: number,
+  ) {}
+
+  private beatFloat(step: number): number {
+    return this.barPhase + (step - this.phaseSteps) / Math.max(1, this.stepsPerBeat);
+  }
+
+  timeOf(step: number): number {
+    return beatTimeAt(this.beats, this.beatFloat(step));
+  }
+
+  rawOf(step: number): number {
+    return this.timeOf(step);
+  }
+}
+
+class HitAligner implements StepTimer {
+
   private byPartStep = new Map<string, number>();
   private byStep = new Map<number, number>();
   private steps: number[] = [];
