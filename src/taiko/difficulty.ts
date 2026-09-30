@@ -1,14 +1,19 @@
 /**
- * 四档难度由基础鼓节奏型生成：MIDI 只作对位参考（小节网格、疏密、重音、过门），
- * 音符时间统一取测速后 tempo map 的网格。
+ * 四档难度由基础鼓节奏型生成：MIDI 只作对位参考（小节网格、疏密、重音、过门）。
+ *
+ * 计时基准的优先级：
+ * 1) Metro（节拍器）轨解析出的绝对节拍时间轴 —— 逐拍真实时刻，动态变速也精准；
+ * 2) 没有 Metro 轨的旧歌才回退到 MIDI tempo map + 真实击打回填。
  */
-import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
+import type { ChartBeatMap, TaikoChart, TaikoNote } from "@/shared/taikoChart";
 import { VISIBLE_PARTS, type LayoutMode, type PartId } from "./laneLayouts";
 import { noteForPart, type MidiChartOptions } from "./midiChart";
 import { tickToMs, type ParsedMidi } from "./midiFile";
 import { cleanMidi, type CleanedMidi } from "./midiClean";
 import { buildSkeleton, type Skeleton } from "./skeleton";
 import { patternEmits } from "./patterns";
+import { averageBeatMs, beatTimeAt } from "./beatGrid";
+
 
 export type Difficulty = "easy" | "beginner" | "standard" | "hard";
 
