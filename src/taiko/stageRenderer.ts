@@ -470,7 +470,7 @@ function beatPhaseOf(chart: StageFrame["chart"], stepMs: number, barSteps: numbe
     const idx = Math.round((n.timeMs - phaseMs) / stepMs);
     const weight = n.note === 35 || n.note === 36 ? 3 : n.note === 38 || n.note === 40 ? 2 : 0.4;
     const pos = ((idx % barSteps) + barSteps) % barSteps;
-    scores[pos] += weight;
+    scores[pos] = (scores[pos] ?? 0) + weight;
   }
   let shift = 0;
   let best = -1;
