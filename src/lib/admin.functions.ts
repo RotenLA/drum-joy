@@ -6,6 +6,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { useSession } from "@tanstack/react-start/server";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { EXPORT_DIFFICULTIES, type ChartExportSourceSong } from "@/shared/chartExport";
 
 const BUCKET = "songs";
 
@@ -224,6 +225,54 @@ export const listAllSongs = createServerFn({ method: "GET" }).handler(async () =
   if (error) throw new Error(error.message);
   return { songs: data ?? [] };
 });
+
+/** 导出通用谱面所需的数据；不包含音频路径、签名链接或任何后台凭据。 */
+export const exportChartData = createServerFn({ method: "POST" })
+  .inputValidator((data: { songIds?: string[] }) => ({
+    songIds: Array.from(new Set(data.songIds ?? [])).slice(0, 500),
+  }))
+  .handler(async ({ data }) => {
+    await requireAdmin();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let songQuery = supabaseAdmin
+      .from("songs")
+      .select("id, title, artist, duration_ms, bpm, ts_num, ts_den, midi_fingerprint")
+      .order("created_at", { ascending: false });
+    if (data.songIds.length) songQuery = songQuery.in("id", data.songIds);
+    const { data: songs, error: songError } = await songQuery;
+    if (songError) throw new Error(songError.message);
+    if (!songs?.length) throw new Error("没有找到可导出的歌曲");
+
+    const songIds = songs.map((song) => song.id);
+    const { data: chartRows, error: chartError } = await supabaseAdmin
+      .from("song_charts")
+      .select("song_id, difficulty, midi_fingerprint, chart")
+      .in("song_id", songIds);
+    if (chartError) throw new Error(chartError.message);
+
+    const sourceSongs: ChartExportSourceSong[] = songs.map((song) => {
+      const currentRows = (chartRows ?? []).filter(
+        (row) => row.song_id === song.id && row.midi_fingerprint === song.midi_fingerprint,
+      );
+      const charts: ChartExportSourceSong["charts"] = {};
+      for (const difficulty of EXPORT_DIFFICULTIES) {
+        const row = currentRows.find((candidate) => candidate.difficulty === difficulty);
+        if (!row) throw new Error(`《${song.title}》缺少 ${difficulty} 难度谱面`);
+        charts[difficulty] = row.chart;
+      }
+      return {
+        id: song.id,
+        title: song.title,
+        artist: song.artist,
+        durationMs: song.duration_ms,
+        bpm: Number(song.bpm),
+        timeSignature: [song.ts_num, song.ts_den],
+        fingerprint: song.midi_fingerprint,
+        charts,
+      };
+    });
+    return { songs: sourceSongs };
+  });
 
 export const updateSong = createServerFn({ method: "POST" })
   .inputValidator(
