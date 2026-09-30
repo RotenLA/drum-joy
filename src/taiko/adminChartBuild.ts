@@ -5,7 +5,7 @@
 import { buildPlayChart, DIFFICULTIES, type Difficulty } from "./difficulty";
 import { chartVersionFingerprint, midiFingerprint } from "./chartCache";
 import type { ParsedMidi } from "./midiFile";
-import type { TaikoChart } from "@/shared/taikoChart";
+import type { ChartBeatMap, TaikoChart } from "@/shared/taikoChart";
 
 export const ALL_DIFFICULTIES: Difficulty[] = ["easy", "beginner", "standard", "hard"];
 
