@@ -15,8 +15,8 @@ import {
 } from "./drumKit";
 import { useSong } from "./songStore";
 import { useLanguage } from "./i18n";
-import { isUnlocked, unlockRequirement, type BestMap } from "./history";
-import { Lock } from "lucide-react";
+import { type BestMap } from "./history";
+
 import { ratingOfAccuracy } from "./rating";
 import { HelpDot } from "@/components/HelpDot";
 import { helpText } from "./helpTexts";
