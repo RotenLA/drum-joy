@@ -15,7 +15,7 @@
 
 ## 歌曲与谱面
 
-每首歌曲包含稳定 `id`、标题、艺人、时长、BPM、拍号、`chartFingerprint` 和四档 `charts`：
+每首歌曲包含稳定 `id`、标题、艺人、时长、BPM、拍号、`chartFingerprint`、`coverImage`（封面图，内嵌 data URI，如 `data:image/jpeg;base64,...`；无封面为 `null`）和四档 `charts`：
 
 - `easy`：轻松
 - `beginner`：入门

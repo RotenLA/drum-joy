@@ -24,6 +24,8 @@ export interface ChartExportSourceSong {
   bpm: number;
   timeSignature: [number, number];
   fingerprint: string;
+  /** Cover image embedded as a data URI (e.g. data:image/jpeg;base64,...), or null. */
+  coverImage: string | null;
   charts: Partial<Record<ExportDifficulty, ChartExportJson>>;
 }
 
@@ -56,6 +58,7 @@ export interface AeroGameExportSong {
   bpm: number;
   timeSignature: [number, number];
   chartFingerprint: string;
+  coverImage: string | null;
   charts: Record<ExportDifficulty, AeroGameExportChart>;
 }
 
@@ -166,6 +169,7 @@ export function buildChartPackage(
       bpm: song.bpm,
       timeSignature: song.timeSignature,
       chartFingerprint: song.fingerprint,
+      coverImage: song.coverImage ?? null,
       charts: Object.fromEntries(chartEntries) as Record<ExportDifficulty, AeroGameExportChart>,
     };
   });
