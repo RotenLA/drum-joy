@@ -129,8 +129,15 @@ export function FallScreen({
     return subscribeKitEnabled((on) => { kitOnRef.current = on; });
   }, []);
 
+  // 视觉模式：舞台下落式 / 横排下落式（横排始终显示全部 9 个部件）
+  const [viewMode, setViewModeState] = useState<ViewMode>("stage");
+  useEffect(() => {
+    setViewModeState(loadViewMode());
+    return subscribeViewMode(setViewModeState);
+  }, []);
+
   const layout = layoutOf(song.difficulty);
-  const parts = VISIBLE_PARTS[layout];
+  const parts = viewMode === "columns" ? VISIBLE_PARTS.nine : VISIBLE_PARTS[layout];
   const durationMs = stemsDurationMs(stems) || (song.midi?.durationMs ?? 0);
 
   /**
