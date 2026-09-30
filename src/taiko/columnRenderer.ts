@@ -45,7 +45,7 @@ const DIAMONDS: readonly [number, number, number, number][] = [
  * 上排四条红线的独立出生点。红线标注的斜率依次约为
  * -0.94 / 0 / 0.49 / 0.91，不与下排中央消失点共用。
  */
-const TOP_SPAWNS: readonly [number, number][] = [[713, 145], [783, 145], [807, 145], [857, 145]];
+const TOP_SPAWNS: readonly [number, number][] = [[691, 172], [785, 172], [820, 172], [879, 172]];
 /** 1x 在 1564×720 参考画面中的恒定移动速度（px/ms）。 */
 const FALL_PX_PER_MS = (PAD_HIT_Y - HORIZON_Y) / 2200;
 const FLASH_MS = 200;
