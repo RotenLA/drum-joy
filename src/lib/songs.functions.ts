@@ -7,6 +7,7 @@ import type { TaikoChart } from "@/shared/taikoChart";
 
 const BUCKET = "songs";
 const URL_TTL = 3600;
+const COVER_TTL = 86400;
 
 export interface LibrarySong {
   id: string;
@@ -57,7 +58,7 @@ export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async 
     if (/^https?:\/\//i.test(path)) return path;
     const { data: signed } = await supabaseAdmin.storage
       .from(BUCKET)
-      .createSignedUrl(path, URL_TTL);
+      .createSignedUrl(path, COVER_TTL);
     return signed?.signedUrl ?? null;
   };
   const songs: LibrarySong[] = await Promise.all(
@@ -146,3 +147,18 @@ export const getSongAssets = createServerFn({ method: "POST" })
       charts,
     };
   });
+
+/** 仅刷新封面临时链接（曲库快照复用时每个会话调用一次） */
+export const listCoverUrls = createServerFn({ method: "GET" }).handler(async () => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.from("songs").select("id, cover_path").eq("published", true);
+  if (error) throw new Error(error.message);
+  const out: Record<string, string | null> = {};
+  await Promise.all((data ?? []).map(async (r) => {
+    if (!r.cover_path) { out[r.id] = null; return; }
+    if (/^https?:\/\//i.test(r.cover_path)) { out[r.id] = r.cover_path; return; }
+    const { data: signed } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(r.cover_path, COVER_TTL);
+    out[r.id] = signed?.signedUrl ?? null;
+  }));
+  return out;
+});

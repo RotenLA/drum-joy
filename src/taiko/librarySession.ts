@@ -1,4 +1,4 @@
-import { getLibraryRevision, listLibrarySongs, type LibrarySong, type LibraryTag } from "@/lib/songs.functions";
+import { getLibraryRevision, listCoverUrls, listLibrarySongs, type LibrarySong, type LibraryTag } from "@/lib/songs.functions";
 
 const SNAPSHOT_KEY = "taiko.library.snapshot.v1";
 
@@ -45,7 +45,8 @@ function readSnapshot(): LibrarySnapshot | null {
 
 function writeSnapshot(snapshot: LibrarySnapshot): void {
   try {
-    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
+    const stripped = { ...snapshot, songs: snapshot.songs.map((x) => ({ ...x, coverUrl: null })) };
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(stripped));
   } catch {
     // 存储不可用时，本次会话仍复用内存快照。
   }
@@ -65,6 +66,11 @@ export function loadLibraryOnce(): Promise<LibrarySnapshot> {
     try {
       const { version } = await getLibraryRevision();
       if (cached && cached.version === version) {
+        // 封面是临时链接，本机快照里的会过期：每个会话重新取一次
+        try {
+          const covers = await listCoverUrls();
+          cached.songs = cached.songs.map((x) => ({ ...x, coverUrl: covers[x.id] ?? null }));
+        } catch { cached.songs = cached.songs.map((x) => ({ ...x, coverUrl: null })); }
         sessionSnapshot = cached;
         return cached;
       }
