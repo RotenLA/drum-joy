@@ -15,8 +15,9 @@ export interface TempoAnalysis {
 }
 
 const ENVELOPE_HZ = 100;
-const MIN_BPM = 80;
-const MAX_BPM = 180;
+const MIN_BPM = 50;
+const MAX_BPM = 200;
+
 const WINDOW_SECONDS = 24;
 const WINDOW_HOP_SECONDS = 12;
 

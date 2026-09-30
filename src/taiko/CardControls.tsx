@@ -121,13 +121,6 @@ export function CardControls({
           );
         })}
       </div>
-      {(!isUnlocked(bests, songId, "standard") || !isUnlocked(bests, songId, "hard")) && (
-        <p className="-mt-1 max-w-full text-center text-[10px] leading-4 text-[rgba(255,255,255,0.55)]">
-          {!isUnlocked(bests, songId, "standard")
-            ? tr("入门全连击解锁标准，标准全连击解锁困难", "Full combo Beginner to unlock Standard, Standard to unlock Hard")
-            : tr("标准全连击解锁困难", "Full combo Standard to unlock Hard")}
-        </p>
-      )}
       <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
         <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5">
           <Button
