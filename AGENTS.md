@@ -11,7 +11,7 @@
 
 - Startup watchdog: root component marks booted on mount (covers every route); overlay only on mobile/Unity, never on Preview/desktop, and only when an error was captured — avoids false "Failed to start".
 - Playlist detail screens always reveal the blurred gameplay stage; `song_tags.background_path` is deprecated and must not be read, written, or exposed in admin UI.
-- Gameplay and tutorial support stage and columns renderers; columns mode draws five independent double-edged lanes, projects bottom notes per lane, and uses separately calibrated standing targets for its four upper parts — matching the reference's two distinct depth planes.
+- Gameplay and tutorial support stage and columns renderers; columns mode draws a static plate traced from the reference video (src/assets/columns-stage.jpg) and places notes/hit feedback in the same measured 1564×720 reference coordinates (rails, pads, diamonds in columnRenderer.ts) — guarantees 1:1 overlap with the reference.
 - Auto charts run a three-stage pipeline: AI drum MIDI is sanitized (velocity gates, 62 ms per-part debounce, two-hand arbitration), per-song groove templates are clustered from the cleaned bars, then each difficulty's notes get their real MIDI hit time back-filled (grid time only as fallback) — removes AI stem noise while staying locked to the audio.
 - Ratings use strict shared thresholds; live grades are progress-gated, SSS requires 99.5% plus a completed full combo, and stage intensity follows the live grade.
 - Admin folder import groups by the final underscore suffix and uploads songs sequentially to avoid browser memory spikes.
