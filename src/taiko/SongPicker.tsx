@@ -327,9 +327,9 @@ export function SongPicker({
         const stored = await readStoredAny(item);
         if (!stored) throw new Error("not downloaded");
         const loaded = await decodeStoredSong(item, stored);
-        const leadMs = stemsLeadMs(loaded.stems);
-        const alignMs = audioAlignMs(loaded.stems, loaded.midi);
-        songPlayer.setLeadMs(leadMs);
+        // 每首歌的音频都预留了一整小节，计时基准来自 Metro 轨解析出的节拍轴，
+        // 所以不再裁掉开头静音、也不再做鼓声起振猜测：一律从 0ms 物理原点起播。
+        songPlayer.setLeadMs(0);
         songPlayer.load(loaded.stems);
         song.setSong({
           stems: loaded.stems,
@@ -341,8 +341,9 @@ export function SongPicker({
           phaseBeatOffset: 0,
           bpm: item.bpm,
           timeSignature: item.timeSignature,
-          audioLeadMs: leadMs,
-          audioAlignMs: alignMs,
+          audioLeadMs: 0,
+          audioAlignMs: 0,
+
           chart: null,
         });
 
