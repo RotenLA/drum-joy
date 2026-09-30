@@ -90,21 +90,12 @@ export function CardControls({
       <div className="grid w-full grid-cols-4 gap-1.5">
         {DIFFICULTIES.map((d) => {
           const on = song.difficulty === d.id;
-          const open = isUnlocked(bests, songId, d.id);
-          const req = unlockRequirement(d.id);
-          const reqItem = DIFFICULTIES.find((x) => x.id === req);
           return (
             <Button
               key={d.id}
               variant="outline"
               type="button"
-              disabled={!open}
-              title={
-                !open && reqItem
-                  ? tr(`${reqItem.label}全连击后解锁`, `Full combo ${reqItem.labelEn} to unlock`)
-                  : undefined
-              }
-              onClick={() => open && song.setSong({ difficulty: d.id })}
+              onClick={() => song.setSong({ difficulty: d.id })}
               className={`h-9 min-w-0 rounded-md px-1.5 text-center ${
                 on
                   ? "border-[var(--taiko-accent)] bg-[rgba(255,140,0,0.18)]"
@@ -114,12 +105,12 @@ export function CardControls({
               <span
                 className={`flex min-w-0 items-center justify-center whitespace-nowrap text-[10px] font-semibold sm:text-xs ${on ? "text-[var(--taiko-accent)]" : "text-[rgba(255,255,255,0.85)]"}`}
               >
-                {!open && <Lock size={11} className="mr-1 inline -translate-y-px" />}
                 {tr(d.label, d.labelEn)}
               </span>
             </Button>
           );
         })}
+
       </div>
       <div className="grid w-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
         <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1.5">

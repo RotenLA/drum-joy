@@ -1793,6 +1793,8 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   ctx.translate(v.x, v.y);
   drawRatingLight(ctx, v.w, v.h, growth, f.now);
   drawLanes(ctx, v.w, v.h, parts, growth);
+  if (f.showNotes !== false) drawBeatMarks(ctx, v.w, v.h, parts, f);
+
 
   // 固定层级队列：连续色带 → 在途音符 → 全部实体鼓面 → 到达自身鼓面的音符 → 缩圈。
   // 不再使用飞行位置切换层级，因此任意交叉路径经过鼓面边缘都不会突然前后跳动。
