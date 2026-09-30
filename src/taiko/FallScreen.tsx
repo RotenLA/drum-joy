@@ -106,6 +106,9 @@ export function FallScreen({
   const countdownTargetRef = useRef(0);
   /** 每次开始递增，异步唤醒完成后只允许当前一轮安排音频。 */
   const countdownRunRef = useRef(0);
+  const countdownFreshRef = useRef(true);
+  const resumeFromRef = useRef(0);
+  const clockGuardRef = useRef({ lastAudio: 0, lastAt: 0, stalled: false, retryAt: 0 });
   const beatMsRef = useRef(500);
 
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
