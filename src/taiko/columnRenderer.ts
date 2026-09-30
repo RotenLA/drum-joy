@@ -48,7 +48,6 @@ interface Placed {
   color: string;
   /** 参考坐标 */
   cx: number; cy: number; halfW: number; halfH: number; alpha: number;
-  tail: { y: number; halfW: number } | null;
 }
 
 let plate: HTMLImageElement | null = null;
@@ -108,6 +107,112 @@ function drawPlate(ctx: CanvasRenderingContext2D, w: number, h: number, t: Xf) {
     g.addColorStop(0, "#0c1428"); g.addColorStop(1, "#050a16");
     ctx.fillStyle = g; ctx.fillRect(0, bottom - 1, w, h - bottom + 1);
   }
+}
+
+function downbeatPulse(f: StageFrame): number {
+  if (!f.motionActive || f.timeMs < 0) return 0;
+  const map = f.chart.beatMap;
+  let nearest = Number.POSITIVE_INFINITY;
+  if (map && map.beats.length) {
+    for (let i = map.barPhase; i < map.beats.length; i += map.beatsPerBar) {
+      const beat = map.beats[i];
+      if (beat === undefined) continue;
+      const d = Math.abs(f.timeMs - beat);
+      if (d < nearest) nearest = d;
+      if (beat > f.timeMs + 180) break;
+    }
+  } else {
+    const grid = f.chart.grid;
+    const barMs = grid
+      ? grid.stepMs * grid.stepsPerBar
+      : (60000 / Math.max(1, f.chart.bpm)) * Math.max(1, f.chart.timeSignature[0]);
+    const origin = grid?.originMs ?? 0;
+    nearest = Math.abs(f.timeMs - (origin + Math.round((f.timeMs - origin) / barMs) * barMs));
+  }
+  return nearest < 170 ? Math.pow(1 - nearest / 170, 2) : 0;
+}
+
+/** 参考底图上叠加轻量动态层；不移动跑道与判定坐标。 */
+function drawReactiveBackdrop(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame) {
+  if (!f.motionActive || quality.tier === "low") return;
+  const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) return;
+  const energy = Math.max(0, Math.min(1, f.audioEnergy ?? 0));
+  const clock = f.now * 0.001;
+  const high = quality.tier === "high";
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+
+  // 顶部光束与地平线光晕缓慢扫动。
+  const sweep = Math.sin(clock * 0.55) * 48;
+  const halo = ctx.createRadialGradient(X(t, 782 + sweep), Y(t, 169), 0, X(t, 782 + sweep), Y(t, 169), 210 * t.s);
+  halo.addColorStop(0, `rgba(125,226,255,${0.12 + energy * 0.12})`);
+  halo.addColorStop(1, "rgba(125,226,255,0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(X(t, 480), Y(t, 50), 604 * t.s, 260 * t.s);
+  ctx.strokeStyle = `rgba(125,226,255,${0.07 + energy * 0.09})`;
+  ctx.lineWidth = 3 * t.s;
+  for (let i = -2; i <= 2; i++) {
+    const sway = Math.sin(clock * 0.42 + i) * 35;
+    ctx.beginPath();
+    ctx.moveTo(X(t, 782 + sweep * 0.25), Y(t, 170));
+    ctx.lineTo(X(t, 782 + i * 240 + sway), Y(t, 15));
+    ctx.stroke();
+  }
+
+  // 两侧频谱能量条：固定数量、低频采样结果驱动高度，避免每帧分配数组。
+  const bars = high ? 34 : 20;
+  for (let side = -1; side <= 1; side += 2) {
+    for (let i = 0; i < bars; i++) {
+      const p = i / Math.max(1, bars - 1);
+      const y = 210 + p * 410;
+      const wave = 0.55 + 0.45 * Math.sin(clock * 4.2 + i * 0.83 + side);
+      const amp = 10 + (18 + energy * 58) * wave * (0.45 + p * 0.55);
+      const inner = side < 0 ? railX(0, y) - 25 : railX(9, y) + 25;
+      ctx.strokeStyle = `rgba(104,205,255,${0.08 + energy * 0.16})`;
+      ctx.lineWidth = Math.max(1, 2.2 * t.s);
+      ctx.beginPath();
+      ctx.moveTo(X(t, inner), Y(t, y));
+      ctx.lineTo(X(t, inner + side * amp), Y(t, y - 4));
+      ctx.stroke();
+    }
+  }
+
+  // 山峰轮廓沿原轮廓附近缓慢漂移，保持参考构图而产生流动感。
+  if (high) {
+    ctx.strokeStyle = `rgba(122,196,255,${0.07 + energy * 0.08})`;
+    ctx.lineWidth = 1.4 * t.s;
+    for (let side = -1; side <= 1; side += 2) {
+      ctx.beginPath();
+      for (let i = 0; i <= 11; i++) {
+        const p = i / 11;
+        const x = 782 + side * (360 + p * 420) + Math.sin(clock * 0.65 + i) * 9;
+        const y = 154 + p * 130 - Math.sin(i * 1.72 + clock * 0.8) * (18 + energy * 15);
+        if (i === 0) ctx.moveTo(X(t, x), Y(t, y)); else ctx.lineTo(X(t, x), Y(t, y));
+      }
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawTopGuides(ctx: CanvasRenderingContext2D, t: Xf) {
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.lineWidth = 1.5 * t.s;
+  for (let i = 0; i < DIAMONDS.length; i++) {
+    const d = DIAMONDS[i];
+    if (!d) continue;
+    const g = ctx.createLinearGradient(X(t, 782), Y(t, HORIZON_Y), X(t, d[0]), Y(t, d[1]));
+    g.addColorStop(0, "rgba(123,223,255,0.12)");
+    g.addColorStop(1, "rgba(123,223,255,0.56)");
+    ctx.strokeStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(X(t, 782), Y(t, HORIZON_Y));
+    ctx.lineTo(X(t, d[0]), Y(t, d[1]));
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function hitAmount(f: StageFrame, part: PartId | null): number {
@@ -196,33 +301,22 @@ function placeNotes(f: StageFrame): Placed[] {
     if (progress < 0 || progress > 1.08) continue;
     const alpha = Math.min(1, progress * 8);
     const color = PART_BY_ID[part].color;
-    let tail: Placed["tail"] = null;
     if (slot.row === 1) {
       const y = HORIZON_Y + bottomD * progress;
       const l = railX(slot.index * 2, y), r = railX(slot.index * 2 + 1, y);
       const halfH = (y - HORIZON_Y) * THICK * 0.5;
-      if (n.holdMs) {
-        const tailProgress = Math.max(0, Math.min(1.08, fallProgress(n.timeMs + n.holdMs - f.timeMs, f.speed)));
-        const ty = HORIZON_Y + bottomD * tailProgress;
-        tail = { y: ty, halfW: (railX(slot.index * 2 + 1, ty) - railX(slot.index * 2, ty)) * 0.5 - 1 };
-      }
       out.push({
         row: 1, index: slot.index, timeMs: n.timeMs, label: hatLabel(part, n.note),
-        color, cx: (l + r) / 2, cy: y, halfW: (r - l) / 2 - 1, halfH, alpha, tail,
+        color, cx: (l + r) / 2, cy: y, halfW: (r - l) / 2 - 1, halfH, alpha,
       });
     } else {
       const d = DIAMONDS[slot.index]; if (!d) continue;
       const topD = d[1] - HORIZON_Y;
       const y = HORIZON_Y + topD * progress;
       const cx = 782 + (d[0] - 782) * progress;
-      if (n.holdMs) {
-        const tailProgress = Math.max(0, Math.min(1.08, fallProgress(n.timeMs + n.holdMs - f.timeMs, f.speed)));
-        const ty = HORIZON_Y + topD * tailProgress;
-        tail = { y: ty, halfW: d[2] * 0.35 * ((ty - HORIZON_Y) / topD) };
-      }
       out.push({
         row: 0, index: slot.index, timeMs: n.timeMs, label: null,
-        color, cx, cy: y, halfW: d[2] * 0.82 * progress, halfH: d[3] * 0.82 * progress, alpha, tail,
+        color, cx, cy: y, halfW: d[2] * 0.82 * progress, halfH: d[3] * 0.82 * progress, alpha,
       });
     }
   }
@@ -230,40 +324,38 @@ function placeNotes(f: StageFrame): Placed[] {
 }
 
 function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
-  const x0 = X(t, n.cx - n.halfW), x1 = X(t, n.cx + n.halfW);
-  const y0 = Y(t, n.cy - n.halfH), y1 = Y(t, n.cy + n.halfH);
-  const w = x1 - x0, h = Math.max(1.5, y1 - y0);
-  if (n.tail) {
-    const ty = Y(t, n.tail.y), thw = n.tail.halfW * t.s, cx = X(t, n.cx);
-    ctx.save(); ctx.globalAlpha = n.alpha * 0.28; ctx.fillStyle = n.color;
-    ctx.beginPath(); ctx.moveTo(cx - thw, ty); ctx.lineTo(cx + thw, ty); ctx.lineTo(x1, y0); ctx.lineTo(x0, y0); ctx.closePath(); ctx.fill();
-    ctx.restore();
-  }
+  const yNear = n.cy + n.halfH, yFar = n.cy - n.halfH;
+  const leftFar = railX(n.index * 2, yFar) + 1, rightFar = railX(n.index * 2 + 1, yFar) - 1;
+  const leftNear = railX(n.index * 2, yNear) + 1, rightNear = railX(n.index * 2 + 1, yNear) - 1;
+  const x0 = X(t, leftFar), x1 = X(t, rightNear);
+  const y0 = Y(t, yFar), y1 = Y(t, yNear);
+  const w = Math.max(1, X(t, rightNear) - X(t, leftNear)), h = Math.max(1.5, y1 - y0);
   ctx.save();
   ctx.globalAlpha = n.alpha;
-  // 外层橙色发光底
   ctx.shadowColor = n.color; ctx.shadowBlur = glow ? Math.max(3, h * 0.9) : 0;
   const body = ctx.createLinearGradient(0, y0, 0, y1);
-  body.addColorStop(0, hexToRgba(n.color, 0.72)); body.addColorStop(0.5, n.color); body.addColorStop(1, hexToRgba(n.color, 0.68));
-  ctx.fillStyle = body; ctx.fillRect(x0, y0, w, h);
+  body.addColorStop(0, hexToRgba(n.color, 0.68)); body.addColorStop(0.5, n.color); body.addColorStop(1, hexToRgba(n.color, 0.72));
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(X(t, leftFar), y0); ctx.lineTo(X(t, rightFar), y0);
+  ctx.lineTo(X(t, rightNear), y1); ctx.lineTo(X(t, leftNear), y1); ctx.closePath(); ctx.fill();
   ctx.shadowBlur = 0;
-  // 内层浅色牌面 + 亮边
+  // 中央高亮，不再画白色外框。
   if (h > 4) {
-    const ix = w * 0.035, iy = h * 0.2;
-    const face = ctx.createLinearGradient(0, y0 + iy, 0, y1 - iy);
-    face.addColorStop(0, hexToRgba(n.color, 0.42)); face.addColorStop(0.55, hexToRgba(n.color, 0.72)); face.addColorStop(1, hexToRgba(n.color, 0.9));
-    ctx.fillStyle = face; ctx.fillRect(x0 + ix, y0 + iy, w - ix * 2, h - iy * 2);
-    ctx.strokeStyle = "rgba(255,250,225,0.95)"; ctx.lineWidth = Math.max(0.8, h * 0.06);
-    ctx.strokeRect(x0 + ix, y0 + iy, w - ix * 2, h - iy * 2);
-  } else {
-    ctx.strokeStyle = "rgba(255,230,180,0.9)"; ctx.lineWidth = 0.8; ctx.strokeRect(x0, y0, w, h);
+    const midY = (y0 + y1) / 2;
+    const shine = ctx.createLinearGradient(0, y0, 0, y1);
+    shine.addColorStop(0, "rgba(255,255,255,0)");
+    shine.addColorStop(0.5, "rgba(255,255,255,0.68)");
+    shine.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = shine;
+    ctx.fillRect(Math.min(x0, X(t, leftNear)) + w * 0.04, midY - h * 0.23, Math.abs(x1 - x0) - w * 0.08, h * 0.46);
   }
   if (n.label && h > 5) {
     const fs = h * 0.78;
     ctx.translate((x0 + x1) / 2, (y0 + y1) / 2);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = `italic 500 ${fs}px system-ui, sans-serif`;
-    const tw = ctx.measureText(n.label).width, max = w * 0.74;
+    const tw = ctx.measureText(n.label).width, max = Math.abs(x1 - x0) * 0.78;
     if (tw > max) ctx.scale(max / tw, 1);
     ctx.fillStyle = "rgba(12,16,24,0.9)";
     ctx.fillText(n.label, 0, fs * 0.04);
@@ -272,22 +364,37 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
 }
 
 function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
-  if (n.tail) {
-    ctx.save(); ctx.globalAlpha = n.alpha * 0.28; ctx.fillStyle = n.color;
-    const ty = Y(t, n.tail.y), thw = n.tail.halfW * t.s, cx = X(t, n.cx), hw = n.halfW * 0.35 * t.s;
-    ctx.beginPath(); ctx.moveTo(cx - thw, ty); ctx.lineTo(cx + thw, ty); ctx.lineTo(cx + hw, Y(t, n.cy)); ctx.lineTo(cx - hw, Y(t, n.cy)); ctx.closePath(); ctx.fill();
-    ctx.restore();
-  }
   const cx = X(t, n.cx), cy = Y(t, n.cy), hw = Math.max(1.5, n.halfW * t.s), hh = Math.max(1.5, n.halfH * t.s);
   ctx.save();
   ctx.globalAlpha = n.alpha;
   ctx.beginPath();
   ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath();
-  const g = ctx.createLinearGradient(0, cy - hh, 0, cy + hh);
-  g.addColorStop(0, hexToRgba(n.color, 0.62)); g.addColorStop(0.5, n.color); g.addColorStop(1, hexToRgba(n.color, 0.7));
+  const g = ctx.createLinearGradient(cx - hw, cy, cx + hw, cy);
+  g.addColorStop(0, hexToRgba(n.color, 0.68)); g.addColorStop(0.5, "rgba(255,255,255,0.74)"); g.addColorStop(1, hexToRgba(n.color, 0.72));
   ctx.fillStyle = g; ctx.shadowColor = n.color; ctx.shadowBlur = glow ? Math.max(3, hh * 0.6) : 0; ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = "rgba(255,248,220,0.95)"; ctx.lineWidth = Math.max(0.8, hh * 0.08); ctx.stroke();
+  ctx.restore();
+}
+
+function drawBeatTargets(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame) {
+  const pulse = downbeatPulse(f);
+  if (pulse <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.strokeStyle = hexToRgba(GOLD, 0.22 + pulse * 0.42);
+  ctx.lineWidth = (1.2 + pulse * 1.4) * t.s;
+  ctx.shadowColor = GOLD;
+  ctx.shadowBlur = quality.params.glow ? 10 * pulse * t.s : 0;
+  for (let i = 0; i < 5; i++) {
+    const [l, r] = PAD_X[i] ?? [0, 0];
+    const cx = (l + r) / 2, cy = PAD_HIT_Y, s = 1 + pulse * 0.035;
+    ctx.save(); ctx.translate(X(t, cx), Y(t, cy)); ctx.scale(s, s); ctx.translate(-X(t, cx), -Y(t, cy));
+    padPath(ctx, t, i); ctx.stroke(); ctx.restore();
+  }
+  for (const d of DIAMONDS) {
+    const s = 1 + pulse * 0.055;
+    ctx.save(); ctx.translate(X(t, d[0]), Y(t, d[1])); ctx.scale(s, s); ctx.translate(-X(t, d[0]), -Y(t, d[1]));
+    diamondPath(ctx, t, d[0], d[1], d[2], d[3]); ctx.stroke(); ctx.restore();
+  }
   ctx.restore();
 }
 
@@ -296,6 +403,9 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
   const t = transformOf(w, h);
   ctx.save();
   drawPlate(ctx, w, h, t);
+  drawReactiveBackdrop(ctx, t, f);
+  drawTopGuides(ctx, t);
+  drawBeatTargets(ctx, t, f);
   drawTargetsFeedback(ctx, t, f, glow);
   if (f.showNotes !== false) {
     const placed = placeNotes(f);
