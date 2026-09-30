@@ -255,6 +255,11 @@ class HitAligner implements StepTimer {
     return tickToMs(this.midi, step * this.clean.stepTicks);
   }
 
+  rawOf(step: number): number {
+    return this.grid(step);
+  }
+
+
   /** 一格的毫秒长度（按该处 tempo 估算） */
   private stepMs(step: number): number {
     const a = this.grid(step);
