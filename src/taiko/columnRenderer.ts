@@ -45,7 +45,7 @@ const TOP_RAIL_SLOTS = [0, 2, 3, 4] as const;
 /** 1x 从地平线到判定线的统一飞行时长。 */
 const FALL_MS = 2200;
 const FLASH_MS = 200;
-const HIT_COVER_MS = 180;
+const HIT_COVER_MS = 240;
 const MISS_FADE_MS = 200;
 
 const GOLD = "#ffd84a";
@@ -136,12 +136,12 @@ function drawPlate(ctx: CanvasRenderingContext2D, w: number, h: number, t: Xf) {
   }
 }
 
-function downbeatPulse(f: StageFrame): number {
+function beatPulse(f: StageFrame): number {
   if (!f.motionActive || f.timeMs < 0) return 0;
   const map = f.chart.beatMap;
   let nearest = Number.POSITIVE_INFINITY;
   if (map && map.beats.length) {
-    for (let i = map.barPhase; i < map.beats.length; i += map.beatsPerBar) {
+    for (let i = 0; i < map.beats.length; i++) {
       const beat = map.beats[i];
       if (beat === undefined) continue;
       const d = Math.abs(f.timeMs - beat);
@@ -150,11 +150,11 @@ function downbeatPulse(f: StageFrame): number {
     }
   } else {
     const grid = f.chart.grid;
-    const barMs = grid
-      ? grid.stepMs * grid.stepsPerBar
-      : (60000 / Math.max(1, f.chart.bpm)) * Math.max(1, f.chart.timeSignature[0]);
+    const beatMs = grid
+      ? grid.stepMs * Math.max(1, grid.stepsPerBeat)
+      : 60000 / Math.max(1, f.chart.bpm);
     const origin = grid?.originMs ?? 0;
-    nearest = Math.abs(f.timeMs - (origin + Math.round((f.timeMs - origin) / barMs) * barMs));
+    nearest = Math.abs(f.timeMs - (origin + Math.round((f.timeMs - origin) / beatMs) * beatMs));
   }
   return nearest < 170 ? Math.pow(1 - nearest / 170, 2) : 0;
 }
@@ -444,12 +444,13 @@ function drawNoteHitCovers(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame, 
     const slot = part ? slotOf(part) : null;
     if (!slot) continue;
     const amount = 1 - age / HIT_COVER_MS;
+    const burst = Math.sin(Math.min(1, age / 90) * Math.PI * 0.5);
     ctx.save();
     ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = amount;
-    ctx.fillStyle = hexToRgba(GOLD, 0.7);
+    ctx.globalAlpha = Math.min(1, amount * 1.25);
+    ctx.fillStyle = hexToRgba("#fff6c4", 0.9);
     ctx.shadowColor = GOLD;
-    ctx.shadowBlur = glow ? 24 * amount * t.s : 0;
+    ctx.shadowBlur = glow ? (28 + burst * 28) * amount * t.s : 0;
     if (slot.row === 1) {
       padPath(ctx, t, slot.index);
     } else {
@@ -458,12 +459,16 @@ function drawNoteHitCovers(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame, 
       diamondPath(ctx, t, target[0], target[1], target[2], target[3]);
     }
     ctx.fill();
+    ctx.globalAlpha = amount * 0.9;
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = (2.5 + burst * 4) * t.s;
+    ctx.stroke();
     ctx.restore();
   }
 }
 
 function drawBeatTargets(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame) {
-  const pulse = downbeatPulse(f);
+  const pulse = beatPulse(f);
   if (pulse <= 0) return;
   ctx.save();
   ctx.globalCompositeOperation = "screen";
@@ -476,11 +481,6 @@ function drawBeatTargets(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame) {
     const cx = (l + r) / 2, cy = PAD_HIT_Y, s = 1 + pulse * 0.035;
     ctx.save(); ctx.translate(X(t, cx), Y(t, cy)); ctx.scale(s, s); ctx.translate(-X(t, cx), -Y(t, cy));
     padPath(ctx, t, i); ctx.stroke(); ctx.restore();
-  }
-  for (const d of DIAMONDS) {
-    const s = 1 + pulse * 0.055;
-    ctx.save(); ctx.translate(X(t, d[0]), Y(t, d[1])); ctx.scale(s, s); ctx.translate(-X(t, d[0]), -Y(t, d[1]));
-    diamondPath(ctx, t, d[0], d[1], d[2], d[3]); ctx.stroke(); ctx.restore();
   }
   ctx.restore();
 }

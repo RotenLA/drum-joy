@@ -7,9 +7,8 @@ export const HELP: Record<string, string> = {
   difficulty:
     "决定出现哪些鼓件和音符密度：轻松只有军鼓、踩镲和左踏板；入门加右踏板；标准再加吊镲、叮叮镲；困难是全部九件。",
   quality: "画面精细度。自动会在卡顿时自己降档；手机或低配电脑建议选「中」或「低」，画面更流畅。",
-  visualMs: "只改变音符看起来到达鼓面的时刻，不影响判定。觉得音符看着偏早/偏晚时微调。",
-  judgeMs: "把设备与音频的延迟补回来。如果你明明打准了却总判偏早，就把它调大（默认 -35ms）。",
-  calibrate: "节拍器会一直响，跟着敲 8 下，系统自动算出你这台机器的延迟并写入判定偏移。",
+  playbackMs: "只调整歌曲相对谱面的播放时间，音符和判定点始终不动。正数让歌曲提前，负数让歌曲延后。",
+  calibrate: "节拍器会一直响，跟着敲 8 下，系统自动测算并写入歌曲播放偏移。",
   kit: "手机音色打开后，敲击时手机也会发出鼓声音。",
   kitId: "选择鼓组音色，共 9 套。切换后立刻生效；样本在后台加载，加载完成前先用合成音。",
   speed: "音符下落的快慢，只影响观感和提前预判的时间，不改变歌曲速度。",
@@ -34,12 +33,10 @@ export const HELP_EN: Record<string, string> = {
     "Controls which pieces appear and how dense the chart is: Easy is snare, hi-hat and held left pedal; Beginner adds the right pedal; Standard adds floor tom, crash and ride; Hard uses all nine pieces.",
   quality:
     "Visual detail. Auto steps down when frames drop; pick Mid or Low on phones and low-end PCs for smoother motion.",
-  visualMs:
-    "Shifts only when notes appear to reach the pad; judging is unaffected. Nudge it if notes look early or late.",
-  judgeMs:
-    "Compensates for device and audio latency. If your hits read early even when they feel right, raise it (default -35 ms).",
+  playbackMs:
+    "Shifts only song playback against the fixed chart. Positive values advance the song; negative values delay it.",
   calibrate:
-    "The metronome keeps clicking; hit along 8 times and your device latency is measured and written into the judging offset.",
+    "The metronome keeps clicking; hit along 8 times and the measured timing is written into the song playback offset.",
   kit: "When Mobile sound is on, your phone also plays drum sounds as you hit.",
   kitId:
     "Pick one of 9 drum kits. Switching applies instantly; samples load in the background and the synth sound covers until then.",

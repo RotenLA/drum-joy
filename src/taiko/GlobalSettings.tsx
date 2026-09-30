@@ -1,5 +1,5 @@
 /**
- * 全局参数：下落速度、画质、视觉/判定偏移、自动校准。
+ * 全局参数：下落速度、画质、歌曲播放偏移、自动校准。
  * 一次设置对所有歌曲生效，不随歌曲变化。
  * 难度、手机音色、鼓组在展开的歌曲卡片里设置，此处不重复。
  */
@@ -94,7 +94,7 @@ export function GlobalSettings({
     setTaps(0);
     if (!run || run.taps.length < 3) return;
     const off = tapOffsetMs(run.taps, run.startMs, run.beatMs);
-    setCalib((c) => saveCalibration({ ...c, judgeMs: -off }));
+    setCalib(saveCalibration({ playbackMs: off }));
   }, []);
 
   const startCalibration = useCallback(() => {
@@ -257,36 +257,28 @@ export function GlobalSettings({
         </span>
       </div>
 
-      {/* 偏移 */}
+      {/* 歌曲播放偏移 */}
       <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2">
-        {(
-          [
-            ["visualMs", tr("音符视觉偏移", "Visual offset")],
-            ["judgeMs", tr("判定偏移", "Judge offset")],
-          ] as const
-        ).map(([key, label]) => (
-          <label key={key} className="flex flex-col gap-1">
-            <span className="flex items-center justify-between text-[11px] text-[var(--taiko-ink)]/70">
-              <span className="flex items-center gap-1">
-                {label}
-                <HelpDot label={label} text={helpText(key, language)} />
-              </span>
-              <span className="tabular-nums text-[var(--taiko-ink)]/55">
-                {calib[key] > 0 ? "+" : ""}
-                {calib[key]} ms
-              </span>
+        <label className="flex flex-col gap-1">
+          <span className="flex items-center justify-between text-[11px] text-[var(--taiko-ink)]/70">
+            <span className="flex items-center gap-1">
+              {tr("歌曲播放偏移", "Song playback offset")}
+              <HelpDot label={tr("歌曲播放偏移", "Song playback offset")} text={helpText("playbackMs", language)} />
             </span>
-            <input
-              type="range"
-              min={-CALIB_RANGE}
-              max={CALIB_RANGE}
-              step={1}
-              value={calib[key]}
-              onChange={(e) => updateCalib({ [key]: Number(e.target.value) })}
-              className="h-1 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)]"
-            />
-          </label>
-        ))}
+            <span className="tabular-nums text-[var(--taiko-ink)]/55">
+              {calib.playbackMs > 0 ? "+" : ""}{calib.playbackMs} ms
+            </span>
+          </span>
+          <input
+            type="range"
+            min={-CALIB_RANGE}
+            max={CALIB_RANGE}
+            step={1}
+            value={calib.playbackMs}
+            onChange={(e) => updateCalib({ playbackMs: Number(e.target.value) })}
+            className="h-1 w-full cursor-pointer appearance-none rounded bg-[var(--taiko-ink)]/25 accent-[var(--taiko-accent)]"
+          />
+        </label>
       </div>
 
       {/* 自动校准 */}
