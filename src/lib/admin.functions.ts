@@ -236,7 +236,7 @@ export const exportChartData = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     let songQuery = supabaseAdmin
       .from("songs")
-      .select("id, title, artist, duration_ms, bpm, ts_num, ts_den, midi_fingerprint")
+      .select("id, title, artist, duration_ms, bpm, ts_num, ts_den, midi_fingerprint, cover_path")
       .order("created_at", { ascending: false });
     if (data.songIds.length) songQuery = songQuery.in("id", data.songIds);
     const { data: songs, error: songError } = await songQuery;
@@ -249,6 +249,34 @@ export const exportChartData = createServerFn({ method: "POST" })
       .select("song_id, difficulty, midi_fingerprint, chart")
       .in("song_id", songIds);
     if (chartError) throw new Error(chartError.message);
+
+    const covers = new Map<string, string | null>();
+    await Promise.all(
+      songs.map(async (song) => {
+        covers.set(song.id, null);
+        const path = song.cover_path;
+        if (!path) return;
+        try {
+          let blob: Blob | null = null;
+          if (/^https?:\/\//i.test(path)) {
+            const res = await fetch(path);
+            if (res.ok) blob = await res.blob();
+          } else {
+            const { data: file } = await supabaseAdmin.storage.from(BUCKET).download(path);
+            blob = file ?? null;
+          }
+          if (!blob || blob.size > 8 * 1024 * 1024) return;
+          const ext = path.split(".").pop()?.toLowerCase() ?? "";
+          const mime = blob.type && blob.type.startsWith("image/")
+            ? blob.type
+            : ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+          const b64 = Buffer.from(await blob.arrayBuffer()).toString("base64");
+          covers.set(song.id, `data:${mime};base64,${b64}`);
+        } catch {
+          // cover is optional; skip on failure
+        }
+      }),
+    );
 
     const sourceSongs: ChartExportSourceSong[] = songs.map((song) => {
       const currentRows = (chartRows ?? []).filter(
@@ -268,6 +296,7 @@ export const exportChartData = createServerFn({ method: "POST" })
         bpm: Number(song.bpm),
         timeSignature: [song.ts_num, song.ts_den],
         fingerprint: song.midi_fingerprint,
+        coverImage: covers.get(song.id) ?? null,
         charts,
       };
     });
