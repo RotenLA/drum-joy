@@ -652,7 +652,7 @@ export function SongPicker({
                 <span
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url("${selected.coverUrl}")`, opacity: 0.55 }}
+                  style={{ backgroundImage: `url("${selected.coverUrl}")`, opacity: 0.22 }}
                 />
               ) : null}
               <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
