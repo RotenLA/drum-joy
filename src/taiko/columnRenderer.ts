@@ -388,16 +388,21 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
 function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
   const image = loadedImage(TOP_IMAGES[n.index] ?? noteT01.url);
   const d = DIAMONDS[n.index];
-  if (!image || !d) return;
+  const spawn = TOP_SPAWNS[n.index];
+  if (!image || !d || !spawn) return;
   const cx = X(t, n.cx), cy = Y(t, n.cy);
   const scale = (0.36 + n.progress * 0.64) * ((d[2] * 2) / 202) * t.s;
   const imageW = image.naturalWidth * scale, imageH = image.naturalHeight * scale;
   // 原图菱形头中心在素材顶部约 17%；中心严格跟随匀速轨迹，尾光只改变外观。
   const headY = imageH * 0.17;
+  // 素材尾光原本向下；旋转到音符来向，使四个音符分别沿红线角度拖尾。
+  const angle = Math.atan2(spawn[1] - d[1], spawn[0] - d[0]) - Math.PI / 2;
   ctx.save();
   ctx.globalAlpha = n.alpha;
   ctx.shadowColor = "rgba(255,255,255,0.45)"; ctx.shadowBlur = glow ? 7 * t.s : 0;
-  ctx.drawImage(image, cx - imageW / 2, cy - headY, imageW, imageH);
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+  ctx.drawImage(image, -imageW / 2, -headY, imageW, imageH);
   ctx.restore();
 }
 
