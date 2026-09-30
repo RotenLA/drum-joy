@@ -53,7 +53,7 @@ function writeSnapshot(snapshot: LibrarySnapshot): void {
 }
 
 export function currentLibrarySnapshot(): LibrarySnapshot | null {
-  return sessionSnapshot;
+  return sessionSnapshot ?? readSnapshot();
 }
 
 /** 每次页面会话只执行一次版本校验；游戏内返回只复用结果。 */
