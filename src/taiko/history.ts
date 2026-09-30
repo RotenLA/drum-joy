@@ -226,16 +226,14 @@ export function loadPlayData(): Promise<{ history: HistoryEntry[]; bests: BestMa
   return playDataPromise;
 }
 
-/** 难度解锁：轻松/入门常开；标准需入门全连击；困难需标准全连击 */
-const UNLOCK_REQ: Partial<Record<Difficulty, Difficulty>> = { standard: "beginner", hard: "standard" };
-export function unlockRequirement(diff: Difficulty): Difficulty | null {
-  return UNLOCK_REQ[diff] ?? null;
+/** 难度解锁：全部常开（不再需要全连击前置条件） */
+export function unlockRequirement(_diff: Difficulty): Difficulty | null {
+  return null;
 }
-export function isUnlocked(bests: BestMap, songId: string, diff: Difficulty): boolean {
-  const req = UNLOCK_REQ[diff];
-  if (!req) return true;
-  return bests[`${songId}|${req}`]?.fullCombo === true;
+export function isUnlocked(_bests: BestMap, _songId: string, _diff: Difficulty): boolean {
+  return true;
 }
+
 
 // ================= 收藏 =================
 const FAV_KEY = "taiko.favorites.v1";

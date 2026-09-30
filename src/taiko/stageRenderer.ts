@@ -438,6 +438,89 @@ function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number, parts: r
   ctx.restore();
 }
 
+/**
+ * 引导线上的节拍刻度：正拍实线、反拍虚线、十六分小点。
+ * 与音符同轴同速，从车道起点流向鼓面；没有音符的空拍也能看到节拍流动。
+ */
+function drawBeatMarks(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  parts: readonly PartId[],
+  f: StageFrame,
+) {
+  const bpm = f.chart.bpm;
+  if (!Number.isFinite(bpm) || bpm <= 0) return;
+  const [num, den] = f.chart.timeSignature;
+  const beatMs = (60000 / bpm) * (4 / den);
+  const stepMs = beatMs / 4; // 十六分栅格
+  if (stepMs < 30) return;
+  const span = LEAD_MS / Math.max(0.1, f.speed);
+  const fromStep = Math.max(0, Math.ceil(f.timeMs / stepMs));
+  const toStep = Math.floor((f.timeMs + span) / stepMs);
+  if (toStep < fromStep) return;
+  const beatsPerBar = Math.max(1, num);
+
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const id of parts) {
+    const pad = geomOf(id, w, h);
+    const dx = pad.cx - pad.gx;
+    const dy = pad.cy - pad.gy;
+    const len = Math.max(1, Math.hypot(dx, dy));
+    const px = -dy / len;
+    const py = dx / len;
+    for (let k = fromStep; k <= toStep; k++) {
+      const timeMs = k * stepMs;
+      const t = 1 - ((timeMs - f.timeMs) * f.speed) / LEAD_MS;
+      if (t <= 0.02 || t > 1) continue;
+      const p = flightProgress(pad, t, h);
+      const cx = pad.gx + dx * p;
+      const cy = pad.gy + dy * p;
+      const base = Math.max(3, Math.min(w, h) * 0.05 * (0.18 + 0.82 * p));
+      const fade = Math.min(1, t / 0.12);
+      const sub = ((k % 4) + 4) % 4;
+
+      if (sub === 0) {
+        // 正拍：实线；小节首拍略宽
+        const barHead = ((k / 4) % beatsPerBar + beatsPerBar) % beatsPerBar === 0;
+        const halfW = base * (barHead ? 1.0 : 0.82);
+        ctx.globalAlpha = (0.2 + 0.5 * p) * fade;
+        ctx.strokeStyle = "rgba(255,255,255,0.95)";
+        ctx.lineWidth = Math.max(1, base * 0.14);
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(cx - px * halfW, cy - py * halfW);
+        ctx.lineTo(cx + px * halfW, cy + py * halfW);
+        ctx.stroke();
+      } else if (sub === 2) {
+        // 反拍：虚线
+        const halfW = base * 0.62;
+        ctx.globalAlpha = (0.12 + 0.34 * p) * fade;
+        ctx.strokeStyle = "rgba(255,255,255,0.8)";
+        ctx.lineWidth = Math.max(1, base * 0.1);
+        const dash = Math.max(2, base * 0.26);
+        ctx.setLineDash([dash, dash * 0.9]);
+        ctx.beginPath();
+        ctx.moveTo(cx - px * halfW, cy - py * halfW);
+        ctx.lineTo(cx + px * halfW, cy + py * halfW);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (QUALITY_TIER !== "low") {
+        // 十六分：车道中心小点
+        ctx.globalAlpha = (0.1 + 0.26 * p) * fade;
+        ctx.fillStyle = "rgba(255,255,255,0.75)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(0.8, base * 0.08), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+
+
 /** 评级越高，舞台中心的光照越完整；不改变音符与鼓面的可读性。 */
 function drawRatingLight(ctx: CanvasRenderingContext2D, w: number, h: number, level: number, now: number) {
   if (level < 3 || QUALITY_TIER === "low") return;
@@ -1710,6 +1793,8 @@ export function renderStage(ctx: CanvasRenderingContext2D, w: number, h: number,
   ctx.translate(v.x, v.y);
   drawRatingLight(ctx, v.w, v.h, growth, f.now);
   drawLanes(ctx, v.w, v.h, parts, growth);
+  if (f.showNotes !== false) drawBeatMarks(ctx, v.w, v.h, parts, f);
+
 
   // 固定层级队列：连续色带 → 在途音符 → 全部实体鼓面 → 到达自身鼓面的音符 → 缩圈。
   // 不再使用飞行位置切换层级，因此任意交叉路径经过鼓面边缘都不会突然前后跳动。
