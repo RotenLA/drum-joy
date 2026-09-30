@@ -253,7 +253,10 @@ function AdminPage() {
     const metro = files["metro"];
     if (metro) {
       setBusy(`解析《${title}》节拍器轨…`);
-      const ctx = new (window.AudioContext ?? window.webkitAudioContext)();
+      const AudioCtor = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtor) throw new Error("浏览器不支持音频解码");
+      const ctx = new AudioCtor();
+
       try {
         const analysis = await analyzeMetroFile(metro, ctx);
         if (analysis) {
