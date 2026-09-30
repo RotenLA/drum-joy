@@ -10,6 +10,8 @@
  * 踏板为斜放的立方体（顶面旋转后按 0.42 均匀压扁，与鼓面椭圆同一压扁比）。
  */
 import type { TaikoChart } from "@/shared/taikoChart";
+import { beatIndexAtOrAfter } from "./beatGrid";
+
 import {
   DRUM_PARTS,
   PAD_ANCHORS,
@@ -487,6 +489,73 @@ function beatPhaseOf(chart: StageFrame["chart"], stepMs: number, barSteps: numbe
   return out;
 }
 
+/** 一个节拍刻度：tier 0=正拍 1=反拍 2=十六分；bar=小节首拍 */
+type BeatMark = { timeMs: number; tier: 0 | 1 | 2; bar: boolean };
+
+/**
+ * 视野时间窗内的节拍刻度。
+ * 优先用 Metro（节拍器）轨的真实拍点序列 —— 变速曲会自然地加速变密、减速变疏；
+ * 没有它的旧谱面退回等分栅格，再没有栅格才用音符分布估算相位。
+ */
+function beatMarksIn(f: StageFrame, fromMs: number, toMs: number): BeatMark[] {
+  const marks: BeatMark[] = [];
+  const bm = f.chart.beatMap;
+  if (bm && bm.beats.length >= 2) {
+    const beats = bm.beats;
+    const bar = Math.max(1, bm.beatsPerBar);
+    const sixteenth = QUALITY_TIER === "high";
+    let i = beatIndexAtOrAfter(beats, fromMs) - 1;
+    if (i < 0) i = 0;
+    for (; i < beats.length; i++) {
+      const t0 = beats[i]!;
+      if (t0 > toMs) break;
+      const next = beats[i + 1];
+      const d = next !== undefined ? next - t0 : beats[i]! - beats[i - 1]!;
+      const isBar = ((i - bm.barPhase) % bar + bar) % bar === 0;
+      if (t0 >= fromMs) marks.push({ timeMs: t0, tier: 0, bar: isBar });
+      if (d > 0) {
+        const off = t0 + d / 2;
+        if (off >= fromMs && off <= toMs) marks.push({ timeMs: off, tier: 1, bar: false });
+        if (sixteenth) {
+          for (const r of [0.25, 0.75]) {
+            const t = t0 + d * r;
+            if (t >= fromMs && t <= toMs) marks.push({ timeMs: t, tier: 2, bar: false });
+          }
+        }
+      }
+    }
+    return marks;
+  }
+
+  const bpm = f.chart.bpm;
+  if (!Number.isFinite(bpm) || bpm <= 0) return marks;
+  const [num, den] = f.chart.timeSignature;
+  const g = f.chart.grid;
+  const stepMs = g && g.stepMs > 0 ? g.stepMs : (60000 / bpm) * (4 / den) / 4;
+  if (stepMs < 30) return marks;
+  const stepsPerBeat = Math.max(1, Math.round(g?.stepsPerBeat ?? 4));
+  const barSteps = Math.max(
+    stepsPerBeat,
+    Math.round(g?.stepsPerBar ?? Math.max(1, num) * stepsPerBeat),
+  );
+  const est = g ? null : beatPhaseOf(f.chart, stepMs, barSteps);
+  const phaseMs = g ? g.originMs : (est?.phaseMs ?? 0);
+  const shift = g ? 0 : (est?.shift ?? 0);
+  const half = stepsPerBeat / 2;
+  const fromStep = Math.ceil((fromMs - phaseMs) / stepMs);
+  const toStep = Math.floor((toMs - phaseMs) / stepMs);
+  for (let k = fromStep; k <= toStep; k++) {
+    const timeMs = phaseMs + k * stepMs;
+    if (timeMs < 0) continue;
+    const rel = ((k - shift) % barSteps + barSteps) % barSteps;
+    const sub = rel % stepsPerBeat;
+    if (sub === 0) marks.push({ timeMs, tier: 0, bar: rel === 0 });
+    else if (sub === half) marks.push({ timeMs, tier: 1, bar: false });
+    else if (QUALITY_TIER === "high") marks.push({ timeMs, tier: 2, bar: false });
+  }
+  return marks;
+}
+
 /**
  * 引导线上的节拍刻度：正拍实线、反拍虚线、十六分小点。
  * 与音符同轴同速、同相位；很短、很淡，只作参考不抢视线。
@@ -498,26 +567,9 @@ function drawBeatMarks(
   parts: readonly PartId[],
   f: StageFrame,
 ) {
-  const bpm = f.chart.bpm;
-  if (!Number.isFinite(bpm) || bpm <= 0) return;
-  const [num, den] = f.chart.timeSignature;
-  const g = f.chart.grid;
-  // 新谱面自带栅格（与音符完全同源）；旧谱面回退到音符相位估算
-  const stepMs = g && g.stepMs > 0 ? g.stepMs : (60000 / bpm) * (4 / den) / 4;
-  if (stepMs < 30) return;
-  const stepsPerBeat = Math.max(1, Math.round(g?.stepsPerBeat ?? 4));
-  const barSteps = Math.max(
-    stepsPerBeat,
-    Math.round(g?.stepsPerBar ?? Math.max(1, num) * stepsPerBeat),
-  );
-  const est = g ? null : beatPhaseOf(f.chart, stepMs, barSteps);
-  const phaseMs = g ? g.originMs : (est?.phaseMs ?? 0);
-  const shift = g ? 0 : (est?.shift ?? 0);
   const span = LEAD_MS / Math.max(0.1, f.speed);
-  const fromStep = Math.ceil((f.timeMs - phaseMs) / stepMs);
-  const toStep = Math.floor((f.timeMs + span - phaseMs) / stepMs);
-  if (toStep < fromStep) return;
-
+  const marks = beatMarksIn(f, f.timeMs, f.timeMs + span);
+  if (!marks.length) return;
 
   ctx.save();
   ctx.lineCap = "round";
@@ -528,24 +580,18 @@ function drawBeatMarks(
     const len = Math.max(1, Math.hypot(dx, dy));
     const px = -dy / len;
     const py = dx / len;
-    for (let k = fromStep; k <= toStep; k++) {
-      const timeMs = phaseMs + k * stepMs;
-      if (timeMs < 0) continue;
-      const t = 1 - ((timeMs - f.timeMs) * f.speed) / LEAD_MS;
+    for (const mark of marks) {
+      const t = 1 - ((mark.timeMs - f.timeMs) * f.speed) / LEAD_MS;
       if (t <= 0.02 || t > 1) continue;
       const p = flightProgress(pad, t, h);
       const cx = pad.gx + dx * p;
       const cy = pad.gy + dy * p;
       const base = Math.max(2, Math.min(w, h) * 0.05 * (0.18 + 0.82 * p));
       const fade = Math.min(1, t / 0.12);
-      const rel = ((k - shift) % barSteps + barSteps) % barSteps;
-      const sub = rel % stepsPerBeat;
-      const half = stepsPerBeat / 2;
 
-
-      if (sub === 0) {
+      if (mark.tier === 0) {
         // 正拍：很短的细实线；小节首拍略长
-        const halfW = base * (rel === 0 ? 0.3 : 0.24);
+        const halfW = base * (mark.bar ? 0.3 : 0.24);
         ctx.globalAlpha = (0.05 + 0.16 * p) * fade;
         ctx.strokeStyle = "rgba(255,255,255,0.7)";
         ctx.lineWidth = Math.max(0.8, base * 0.07);
@@ -554,7 +600,7 @@ function drawBeatMarks(
         ctx.moveTo(cx - px * halfW, cy - py * halfW);
         ctx.lineTo(cx + px * halfW, cy + py * halfW);
         ctx.stroke();
-      } else if (sub === half) {
+      } else if (mark.tier === 1) {
         // 反拍：更短更淡的虚线
         const halfW = base * 0.18;
         ctx.globalAlpha = (0.035 + 0.1 * p) * fade;
@@ -567,7 +613,7 @@ function drawBeatMarks(
         ctx.lineTo(cx + px * halfW, cy + py * halfW);
         ctx.stroke();
         ctx.setLineDash([]);
-      } else if (QUALITY_TIER === "high") {
+      } else {
         // 十六分：车道中心极小的点
         ctx.globalAlpha = (0.03 + 0.07 * p) * fade;
         ctx.fillStyle = "rgba(255,255,255,0.6)";
@@ -579,6 +625,7 @@ function drawBeatMarks(
   }
   ctx.restore();
 }
+
 
 
 

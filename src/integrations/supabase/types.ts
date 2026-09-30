@@ -243,10 +243,12 @@ export type Database = {
           artist: string | null
           bass_path: string | null
           bpm: number
+          cover_path: string | null
           created_at: string
           drums_path: string | null
           duration_ms: number
           id: string
+          metro_path: string | null
           midi_fingerprint: string
           midi_path: string
           other_path: string | null
@@ -262,10 +264,12 @@ export type Database = {
           artist?: string | null
           bass_path?: string | null
           bpm?: number
+          cover_path?: string | null
           created_at?: string
           drums_path?: string | null
           duration_ms?: number
           id?: string
+          metro_path?: string | null
           midi_fingerprint?: string
           midi_path: string
           other_path?: string | null
@@ -281,10 +285,12 @@ export type Database = {
           artist?: string | null
           bass_path?: string | null
           bpm?: number
+          cover_path?: string | null
           created_at?: string
           drums_path?: string | null
           duration_ms?: number
           id?: string
+          metro_path?: string | null
           midi_fingerprint?: string
           midi_path?: string
           other_path?: string | null

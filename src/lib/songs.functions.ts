@@ -19,7 +19,10 @@ export interface LibrarySong {
   sizes: Record<string, number>;
   createdAt: string;
   tagIds: string[];
+  /** 原曲内嵌封面的签名直链（无封面为 null） */
+  coverUrl: string | null;
 }
+
 
 export interface LibraryTag {
   id: string;
@@ -44,27 +47,39 @@ export const listLibrarySongs = createServerFn({ method: "GET" }).handler(async 
   const { data, error } = await supabaseAdmin
     .from("songs")
     .select(
-      "id, title, artist, duration_ms, bpm, ts_num, ts_den, midi_fingerprint, sizes, created_at",
+      "id, title, artist, duration_ms, bpm, ts_num, ts_den, midi_fingerprint, sizes, created_at, cover_path",
     )
     .eq("published", true)
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
-  const songs: LibrarySong[] = (data ?? []).map((r) => ({
-    id: r.id,
-    title: r.title,
-    artist: r.artist,
-    durationMs: r.duration_ms,
-    bpm: Number(r.bpm),
-    timeSignature: [r.ts_num, r.ts_den] as [number, number],
-    fingerprint: r.midi_fingerprint,
-    sizes: (r.sizes ?? {}) as Record<string, number>,
-    createdAt: r.created_at,
-    tagIds: [] as string[],
-  }));
+  const signCover = async (path: string | null): Promise<string | null> => {
+    if (!path) return null;
+    if (/^https?:\/\//i.test(path)) return path;
+    const { data: signed } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .createSignedUrl(path, URL_TTL);
+    return signed?.signedUrl ?? null;
+  };
+  const songs: LibrarySong[] = await Promise.all(
+    (data ?? []).map(async (r) => ({
+      id: r.id,
+      title: r.title,
+      artist: r.artist,
+      durationMs: r.duration_ms,
+      bpm: Number(r.bpm),
+      timeSignature: [r.ts_num, r.ts_den] as [number, number],
+      fingerprint: r.midi_fingerprint,
+      sizes: (r.sizes ?? {}) as Record<string, number>,
+      createdAt: r.created_at,
+      tagIds: [] as string[],
+      coverUrl: await signCover(r.cover_path),
+    })),
+  );
   const [tagsRes, linksRes] = await Promise.all([
     supabaseAdmin.from("song_tags").select("id, name, name_en, sort_order").order("sort_order"),
     supabaseAdmin.from("song_tag_links").select("song_id, tag_id"),
   ]);
+
   const byId = new Map(songs.map((s) => [s.id, s]));
   for (const l of linksRes.data ?? []) byId.get(l.song_id)?.tagIds.push(l.tag_id);
   const tags: LibraryTag[] = (tagsRes.data ?? []).map((t) => ({ id: t.id, name: t.name, nameEn: t.name_en }));

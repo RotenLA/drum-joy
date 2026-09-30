@@ -77,12 +77,9 @@ export const stemsDurationMs = (stems: StemMap): number => {
 
 export const hasAnyStem = (stems: StemMap): boolean => STEM_KINDS.some((k) => stems[k] !== null);
 
-/** 静音阈值：约 -24dBFS 以下视为空白（轻微底噪/引子也切掉） */
+/** 静音阈值：约 -24dBFS 以下视为空白（仅供诊断用途） */
 const SILENCE_THRESHOLD = 10 ** (-24 / 20);
-/** 裁切时往前保留的余量，避免削掉音头 */
-const LEAD_GUARD_MS = 30;
-/** 鼓轨真实起振阈值：第一下鼓通常远高于底噪，用更高的门限避开气口/底噪 */
-const ONSET_THRESHOLD = 10 ** (-18 / 20);
+
 
 /** 单轨开头空白长度（毫秒）：首个超过给定阈值的样本时刻 */
 export function leadSilenceMs(buffer: AudioBuffer, threshold = SILENCE_THRESHOLD): number {
@@ -103,34 +100,7 @@ export function leadSilenceMs(buffer: AudioBuffer, threshold = SILENCE_THRESHOLD
   return (len / sr) * 1000;
 }
 
-/**
- * 四条音轨共同的开头空白长度（毫秒）：取最早出声的一轨，并留 30ms 余量。
- * 所有音轨与 MIDI 统一减掉这个值，相对关系不变。
- */
-export function stemsLeadMs(stems: StemMap): number {
-  let min = Infinity;
-  for (const k of STEM_KINDS) {
-    const t = stems[k];
-    if (!t) continue;
-    min = Math.min(min, leadSilenceMs(t.buffer));
-  }
-  if (!Number.isFinite(min)) return 0;
-  return Math.max(0, Math.round(min - LEAD_GUARD_MS));
-}
+// 开头静音裁剪与鼓声起振猜测已废弃：所有音频文件都预留一整小节，
+// 计时基准改由 Metro（节拍器）轨解析出的绝对节拍轴提供，音频一律从 0ms 起播。
 
-/**
- * 鼓轨第一声真实出声时刻（原始文件时间轴，毫秒）。
- * 没有鼓轨时退回最早出声的一轨；用于把谱面第一块咬到真实鼓声上。
- */
-export function drumsOnsetMs(stems: StemMap): number | null {
-  const drums = stems.drums;
-  if (drums) return leadSilenceMs(drums.buffer, ONSET_THRESHOLD);
-  let min = Infinity;
-  for (const k of STEM_KINDS) {
-    const t = stems[k];
-    if (!t) continue;
-    min = Math.min(min, leadSilenceMs(t.buffer, ONSET_THRESHOLD));
-  }
-  return Number.isFinite(min) ? min : null;
-}
 

@@ -78,6 +78,13 @@
       "when": 1790667746410,
       "tag": "0010_add_song_tag_english_name",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790736473619,
+      "tag": "0011_add_song_metro_and_cover",
+      "breakpoints": true
     }
   ]
 }

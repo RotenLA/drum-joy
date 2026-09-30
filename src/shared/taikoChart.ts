@@ -27,6 +27,20 @@ export interface ChartGrid {
   stepsPerBar: number;
 }
 
+/**
+ * Metro（节拍器）轨解析出的绝对节拍时间轴。
+ * 每一项是那一拍的真实毫秒时刻，所以动态变速的真人演奏也能逐拍贴合；
+ * 有它时音符与节拍刻度全部以它为唯一基准，不再用 BPM 反推。
+ */
+export interface ChartBeatMap {
+  /** 每一拍的毫秒时刻（升序，与 notes 同一时间基准） */
+  beats: number[];
+  /** 小节拍数 */
+  beatsPerBar: number;
+  /** 首个重拍在 beats 里的相位下标 */
+  barPhase: number;
+}
+
 export interface TaikoChart {
   title: string;
   bpm: number;
@@ -37,7 +51,10 @@ export interface TaikoChart {
   notes: TaikoNote[];
   /** 节拍栅格（新谱面必带；旧谱面缺省时渲染层回退估算） */
   grid?: ChartGrid;
+  /** Metro 轨绝对节拍轴（有则优先于 grid，支持动态变速） */
+  beatMap?: ChartBeatMap;
 }
+
 
 
 /** 一小节的毫秒长度 */
@@ -84,10 +101,15 @@ export function shiftChart(chart: TaikoChart, shiftMs: number): TaikoChart {
     notes.push({ ...n, timeMs: t });
   }
   const grid = chart.grid ? { ...chart.grid, originMs: chart.grid.originMs - shiftMs } : undefined;
+  const beatMap = chart.beatMap
+    ? { ...chart.beatMap, beats: chart.beatMap.beats.map((t) => t - shiftMs) }
+    : undefined;
   return {
     ...chart,
     durationMs: Math.max(0, chart.durationMs - shiftMs),
     notes,
     ...(grid ? { grid } : {}),
+    ...(beatMap ? { beatMap } : {}),
   };
 }
+

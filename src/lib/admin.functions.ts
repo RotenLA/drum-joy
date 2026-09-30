@@ -93,7 +93,12 @@ export interface SaveSongInput {
     drums: string | null;
     other: string | null;
     midi: string;
+    /** 节拍器基准轨：只在后台解析计时用，玩家端不下载 */
+    metro?: string | null;
+    /** 原曲内嵌封面 */
+    cover?: string | null;
   };
+
   sizes: Record<string, number>;
   published?: boolean;
   charts: { difficulty: string; chart: unknown }[];
@@ -121,6 +126,9 @@ export const saveSong = createServerFn({ method: "POST" })
         drums_path: data.paths.drums,
         other_path: data.paths.other,
         midi_path: data.paths.midi,
+        metro_path: data.paths.metro ?? null,
+        cover_path: data.paths.cover ?? null,
+
         sizes: data.sizes,
         published: data.published ?? true,
       })
@@ -240,7 +248,7 @@ export const deleteSong = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: song } = await supabaseAdmin
       .from("songs")
-      .select("vocals_path, bass_path, drums_path, other_path, midi_path")
+      .select("vocals_path, bass_path, drums_path, other_path, midi_path, metro_path, cover_path")
       .eq("id", data.id)
       .maybeSingle();
     const paths = [
@@ -249,6 +257,8 @@ export const deleteSong = createServerFn({ method: "POST" })
       song?.drums_path,
       song?.other_path,
       song?.midi_path,
+      song?.metro_path,
+      song?.cover_path,
     ].filter((p): p is string => typeof p === "string" && p.length > 0);
     if (paths.length) await supabaseAdmin.storage.from(BUCKET).remove(paths);
     const { error } = await supabaseAdmin.from("songs").delete().eq("id", data.id);
@@ -256,7 +266,7 @@ export const deleteSong = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
-/** 后台重新生成谱面时需要重新下载 MIDI */
+/** 后台重新生成谱面时需要重新下载 MIDI，以及（若有）节拍器基准轨 */
 export const getSongMidiUrl = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
@@ -264,17 +274,24 @@ export const getSongMidiUrl = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: song, error } = await supabaseAdmin
       .from("songs")
-      .select("midi_path")
+      .select("midi_path, metro_path")
       .eq("id", data.id)
       .single();
     if (error || !song) throw new Error("歌曲不存在");
-    if (/^https?:\/\//i.test(song.midi_path)) return { url: song.midi_path };
-    const { data: signed, error: sErr } = await supabaseAdmin.storage
-      .from(BUCKET)
-      .createSignedUrl(song.midi_path, 3600);
-    if (sErr || !signed) throw new Error(sErr?.message ?? "取链接失败");
-    return { url: signed.signedUrl };
+    const sign = async (path: string) => {
+      if (/^https?:\/\//i.test(path)) return path;
+      const { data: signed, error: sErr } = await supabaseAdmin.storage
+        .from(BUCKET)
+        .createSignedUrl(path, 3600);
+      if (sErr || !signed) throw new Error(sErr?.message ?? "取链接失败");
+      return signed.signedUrl;
+    };
+    return {
+      url: await sign(song.midi_path),
+      metroUrl: song.metro_path ? await sign(song.metro_path) : null,
+    };
   });
+
 
 /** 后台速度分析所需资源；优先鼓分轨，无鼓分轨时回退到其他可用分轨。 */
 export const getSongAnalysisAssets = createServerFn({ method: "POST" })

@@ -10,8 +10,8 @@ import { currentLibrarySnapshot, loadLibraryOnce, onLibraryChanged } from "./lib
 import { cancelDownload, downloadSong, readStoredAny, scanDownloads, useDownloads } from "./songDownloads";
 import { LeaderboardDialog } from "./LeaderboardDialog";
 import { songPlayer } from "./player";
-import { emptyStems, hasAnyStem, stemsLeadMs } from "./stems";
-import { audioAlignMs } from "./audioAlign";
+import { emptyStems, hasAnyStem } from "./stems";
+
 
 import { useLanguage } from "./i18n";
 import { isUnlocked, loadFavorites, loadPlayData, setFavorite, type BestMap, type HistoryEntry } from "./history";
@@ -327,9 +327,9 @@ export function SongPicker({
         const stored = await readStoredAny(item);
         if (!stored) throw new Error("not downloaded");
         const loaded = await decodeStoredSong(item, stored);
-        const leadMs = stemsLeadMs(loaded.stems);
-        const alignMs = audioAlignMs(loaded.stems, loaded.midi);
-        songPlayer.setLeadMs(leadMs);
+        // 每首歌的音频都预留了一整小节，计时基准来自 Metro 轨解析出的节拍轴，
+        // 所以不再裁掉开头静音、也不再做鼓声起振猜测：一律从 0ms 物理原点起播。
+        songPlayer.setLeadMs(0);
         songPlayer.load(loaded.stems);
         song.setSong({
           stems: loaded.stems,
@@ -341,8 +341,9 @@ export function SongPicker({
           phaseBeatOffset: 0,
           bpm: item.bpm,
           timeSignature: item.timeSignature,
-          audioLeadMs: leadMs,
-          audioAlignMs: alignMs,
+          audioLeadMs: 0,
+          audioAlignMs: 0,
+
           chart: null,
         });
 
@@ -646,7 +647,16 @@ export function SongPicker({
               className="taiko-detail-card relative flex h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] min-h-0 min-w-0 items-stretch justify-self-center overflow-hidden rounded-lg border border-[var(--taiko-glass-line-strong)] shadow-2xl backdrop-blur-[18px]"
               style={{ transform: `skewX(${DETAIL_SKEW}deg)`, background: activePlaylistBackground }}
             >
+              {selected?.coverUrl ? (
+                // 有专辑封面时详情卡背景用封面（压暗保证文字可读），没有就回退歌单纯色
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url("${selected.coverUrl}")`, opacity: 0.55 }}
+                />
+              ) : null}
               <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
+
               {!selected ? (
                 <p className="relative z-10 m-auto text-sm text-[rgba(255,255,255,0.6)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                   {tr("选择一首歌", "Pick a song")}

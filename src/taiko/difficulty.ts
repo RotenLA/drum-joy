@@ -1,14 +1,19 @@
 /**
- * 四档难度由基础鼓节奏型生成：MIDI 只作对位参考（小节网格、疏密、重音、过门），
- * 音符时间统一取测速后 tempo map 的网格。
+ * 四档难度由基础鼓节奏型生成：MIDI 只作对位参考（小节网格、疏密、重音、过门）。
+ *
+ * 计时基准的优先级：
+ * 1) Metro（节拍器）轨解析出的绝对节拍时间轴 —— 逐拍真实时刻，动态变速也精准；
+ * 2) 没有 Metro 轨的旧歌才回退到 MIDI tempo map + 真实击打回填。
  */
-import type { TaikoChart, TaikoNote } from "@/shared/taikoChart";
+import type { ChartBeatMap, TaikoChart, TaikoNote } from "@/shared/taikoChart";
 import { VISIBLE_PARTS, type LayoutMode, type PartId } from "./laneLayouts";
 import { noteForPart, type MidiChartOptions } from "./midiChart";
 import { tickToMs, type ParsedMidi } from "./midiFile";
 import { cleanMidi, type CleanedMidi } from "./midiClean";
 import { buildSkeleton, type Skeleton } from "./skeleton";
 import { patternEmits } from "./patterns";
+import { averageBeatMs, beatTimeAt } from "./beatGrid";
+
 
 export type Difficulty = "easy" | "beginner" | "standard" | "hard";
 
@@ -191,7 +196,41 @@ function pedalHolds(emits: Emit[], diff: Difficulty, endStep: number): HoldSeg[]
  */
 const ANCHOR_PRIORITY: readonly PartId[] = ["snare", "kick", "hihat", "ride", "crash"];
 
-class HitAligner {
+/** 步 → 毫秒的统一计时接口（Metro 轨优先，旧歌回退 MIDI 回填） */
+interface StepTimer {
+  /** 该格的击打时刻 */
+  timeOf(step: number, part?: PartId): number;
+  /** 该格的纯栅格时刻（长音符结尾等不需要贴合击打的场合） */
+  rawOf(step: number): number;
+}
+
+/**
+ * Metro（节拍器）轨计时：步号换算成拍号后，直接查真实拍点时刻并在拍间线性插值。
+ * 真人演奏的动态推拉因此被逐拍吸收，全曲不会累积偏差。
+ */
+class MetroTimer implements StepTimer {
+  constructor(
+    private beats: readonly number[],
+    private stepsPerBeat: number,
+    private phaseSteps: number,
+    private barPhase: number,
+  ) {}
+
+  private beatFloat(step: number): number {
+    return this.barPhase + (step - this.phaseSteps) / Math.max(1, this.stepsPerBeat);
+  }
+
+  timeOf(step: number): number {
+    return beatTimeAt(this.beats, this.beatFloat(step));
+  }
+
+  rawOf(step: number): number {
+    return this.timeOf(step);
+  }
+}
+
+class HitAligner implements StepTimer {
+
   private byPartStep = new Map<string, number>();
   private byStep = new Map<number, number>();
   private steps: number[] = [];
@@ -215,6 +254,11 @@ class HitAligner {
   private grid(step: number): number {
     return tickToMs(this.midi, step * this.clean.stepTicks);
   }
+
+  rawOf(step: number): number {
+    return this.grid(step);
+  }
+
 
   /** 一格的毫秒长度（按该处 tempo 估算） */
   private stepMs(step: number): number {
@@ -304,12 +348,11 @@ function enforceMinGap(notes: TaikoNote[], diff: Difficulty): TaikoNote[] {
 
 function emitsToNotes(
   emits: Emit[],
-  midi: ParsedMidi,
-  clean: CleanedMidi,
   allowParts: readonly PartId[],
   offsetMs: number,
-  aligner: HitAligner,
+  aligner: StepTimer,
 ): TaikoNote[] {
+
   const allow = new Set(allowParts);
   const seen = new Set<string>();
   const notes: TaikoNote[] = [];
@@ -334,10 +377,8 @@ function emitsToNotes(
 
 function holdsToNotes(
   segs: HoldSeg[],
-  midi: ParsedMidi,
-  clean: CleanedMidi,
   offsetMs: number,
-  aligner: HitAligner,
+  aligner: StepTimer,
 ): TaikoNote[] {
   const notes: TaikoNote[] = [];
   for (const s of segs) {
@@ -345,8 +386,9 @@ function holdsToNotes(
     const startStep = Math.max(0, s.startStep);
     const startMs = Math.max(0, aligner.timeOf(startStep, "pedalHat") + offsetMs);
 
-    const endMs = tickToMs(midi, s.endStep * clean.stepTicks) + offsetMs;
+    const endMs = aligner.rawOf(s.endStep) + offsetMs;
     if (endMs <= startMs) continue;
+
 
     notes.push({
       timeMs: startMs,
@@ -361,6 +403,8 @@ function holdsToNotes(
 export interface PlayChartOptions extends MidiChartOptions {
   /** 小节相位手动微调（拍） */
   phaseBeatOffset?: number | undefined;
+  /** Metro（节拍器）轨解析出的绝对节拍轴；有则作为唯一计时基准 */
+  beatMap?: ChartBeatMap | undefined;
 }
 
 /** MIDI → 按难度成谱（谱面屏与游玩屏共用） */
@@ -371,8 +415,13 @@ export function buildPlayChart(
 ): TaikoChart {
   const { clean, skeleton } = analyzeMidi(midi, opts.phaseBeatOffset ?? 0);
   const offset = opts.offsetMs ?? 0;
+  const beatMap = opts.beatMap && opts.beatMap.beats.length >= 4 ? opts.beatMap : undefined;
+  // Metro 轨给出小节拍数时以它为准（真人录音的拍号比 MIDI 更可信）
+  const timeSignature: [number, number] = beatMap
+    ? [beatMap.beatsPerBar, 4]
+    : midi.timeSignature;
 
-  let emits: Emit[] = patternEmits(skeleton, diff, midi.timeSignature[0]);
+  let emits: Emit[] = patternEmits(skeleton, diff, timeSignature[0]);
 
   // 轻松 / 入门：全部按闭镲处理（不出开镲）
   if (diff === "easy" || diff === "beginner") {
@@ -383,38 +432,54 @@ export function buildPlayChart(
   const lastStep = emits.reduce((m, e) => Math.max(m, e.step), 0);
   const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);
 
-  const aligner = new HitAligner(midi, clean);
+  const aligner: StepTimer = beatMap
+    ? new MetroTimer(beatMap.beats, clean.stepsPerBeat, skeleton.phaseSteps, beatMap.barPhase)
+    : new HitAligner(midi, clean);
   const notes = enforceMinGap(
     [
-      ...emitsToNotes(emits, midi, clean, NOTE_PARTS[diff], offset, aligner),
-      ...holdsToNotes(holds, midi, clean, offset, aligner),
+      ...emitsToNotes(emits, NOTE_PARTS[diff], offset, aligner),
+      ...holdsToNotes(holds, offset, aligner),
     ].sort((a, b) => a.timeMs - b.timeMs),
     diff,
   );
 
-
-
   const last = notes[notes.length - 1]?.timeMs ?? 0;
-  // 节拍栅格：与音符完全同源（同一 tempo map、同一相位、同一 offset）
+  // 节拍栅格：与音符完全同源（同一计时器、同一相位、同一 offset）
   const phaseSteps = skeleton.phaseSteps;
-  const gridAt = (step: number) => tickToMs(midi, step * clean.stepTicks) + offset;
-  const originMs = gridAt(phaseSteps);
-  const stepMs = Math.max(1, (gridAt(phaseSteps + 4) - originMs) / 4);
+  const gridAt = (step: number) => aligner.rawOf(step) + offset;
+  const originMs = beatMap
+    ? beatTimeAt(beatMap.beats, beatMap.barPhase) + offset
+    : gridAt(phaseSteps);
+  const stepsPerBeat = clean.stepsPerBeat;
+  const stepMs = beatMap
+    ? Math.max(1, averageBeatMs(beatMap.beats) / stepsPerBeat)
+    : Math.max(1, (gridAt(phaseSteps + 4) - originMs) / 4);
+  const bpm = beatMap
+    ? Math.round((60000 / averageBeatMs(beatMap.beats)) * 100) / 100
+    : Math.round(midi.bpm * 100) / 100;
+
   return {
     title: opts.title,
-    bpm: Math.round(midi.bpm * 100) / 100,
-    timeSignature: midi.timeSignature,
+    bpm,
+    timeSignature,
     durationMs: opts.durationMs ?? Math.max(last + 2000, midi.durationMs + offset),
     notes,
     grid: {
       originMs,
       stepMs,
-      stepsPerBeat: clean.stepsPerBeat,
-      stepsPerBar: clean.stepsPerBar,
+      stepsPerBeat,
+      stepsPerBar: beatMap ? stepsPerBeat * beatMap.beatsPerBar : clean.stepsPerBar,
     },
+    ...(beatMap
+      ? {
+          beatMap: offset
+            ? { ...beatMap, beats: beatMap.beats.map((t) => t + offset) }
+            : beatMap,
+        }
+      : {}),
   };
-
 }
+
 
 /** 兼容旧接口：按难度加工已有谱面（现只用于渲染层测试） */
 export function applyDifficulty(chart: TaikoChart, diff: Difficulty): TaikoChart {
