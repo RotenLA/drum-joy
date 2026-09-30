@@ -398,19 +398,35 @@ function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: 
   const d = DIAMONDS[n.index];
   const railSlot = TOP_RAIL_SLOTS[n.index];
   if (!image || !d || railSlot === undefined) return;
-  const cx = X(t, n.cx), cy = Y(t, n.cy);
+  // 高度只随透视（跑道宽度）缩放，不随进度拉长，间距保持匀速。
+  const laneRef = railX(railSlot * 2 + 1, PAD_HIT_Y) - railX(railSlot * 2, PAD_HIT_Y);
   const laneW = Math.max(2, railX(railSlot * 2 + 1, n.cy) - railX(railSlot * 2, n.cy));
-  const imageW = laneW * 1.12 * t.s;
-  const targetHeadGap = PAD_HIT_Y - d[1];
-  const headRatio = 0.18;
-  const barRatio = 0.94;
-  const targetImageH = targetHeadGap / (barRatio - headRatio);
-  const imageH = Math.max(imageW * 1.3, targetImageH * (0.28 + n.progress * 0.72) * t.s);
-  const anchorY = imageH * barRatio;
+  const persp = laneW / Math.max(1, laneRef);
+  const headRatio = 0.18, barRatio = 0.94;
+  const fullH = (PAD_HIT_Y - d[1]) / (barRatio - headRatio); // 参考坐标
+  const hRef = fullH * persp;
+  const wRef = hRef * (image.naturalWidth / image.naturalHeight);
+  const topY = n.cy - hRef * barRatio;
+  const iw = image.naturalWidth, ih = image.naturalHeight;
+  // 底部横片按跑道透视切片：左右边贴跑道线（与下排音符同一套透视角度）
+  const baseStart = 0.86;
   ctx.save();
   ctx.globalAlpha = n.alpha;
   ctx.shadowColor = "rgba(255,255,255,0.45)"; ctx.shadowBlur = glow ? 7 * t.s : 0;
-  ctx.drawImage(image, cx - imageW / 2, cy - anchorY, imageW, imageH);
+  // 竖杆+菱形：竖直，水平中心沿跑道中线
+  const bodyH = hRef * baseStart;
+  ctx.drawImage(image, 0, 0, iw, ih * baseStart, X(t, n.cx - wRef / 2), Y(t, topY), wRef * t.s, bodyH * t.s + 0.5);
+  const slices = 6;
+  for (let i = 0; i < slices; i++) {
+    const p0 = baseStart + ((1 - baseStart) * i) / slices;
+    const p1 = baseStart + ((1 - baseStart) * (i + 1)) / slices;
+    const ry0 = topY + hRef * p0, ry1 = topY + hRef * p1;
+    const ry = (ry0 + ry1) / 2;
+    const l = railX(railSlot * 2, ry), r = railX(railSlot * 2 + 1, ry);
+    const scale = (r - l) / Math.max(1, laneW);
+    const dw = wRef * scale;
+    ctx.drawImage(image, 0, ih * p0, iw, Math.max(1, ih * (p1 - p0)), X(t, (l + r) / 2 - dw / 2), Y(t, ry0), dw * t.s, (ry1 - ry0) * t.s + 0.75);
+  }
   ctx.restore();
 }
 
