@@ -83,5 +83,11 @@ export function shiftChart(chart: TaikoChart, shiftMs: number): TaikoChart {
     }
     notes.push({ ...n, timeMs: t });
   }
-  return { ...chart, durationMs: Math.max(0, chart.durationMs - shiftMs), notes };
+  const grid = chart.grid ? { ...chart.grid, originMs: chart.grid.originMs - shiftMs } : undefined;
+  return {
+    ...chart,
+    durationMs: Math.max(0, chart.durationMs - shiftMs),
+    notes,
+    ...(grid ? { grid } : {}),
+  };
 }
