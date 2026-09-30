@@ -13,6 +13,9 @@ class SongPlayer {
   private sources: Partial<Record<StemKind, AudioBufferSourceNode>> = {};
   private gains: Partial<Record<StemKind, GainNode>> = {};
   private makeups: Partial<Record<StemKind, GainNode>> = {};
+  private analyser: AnalyserNode | null = null;
+  private spectrum = new Uint8Array(32);
+  private energy = 0;
   private levels: Record<StemKind, number> = {
     vocals: 1,
     drums: 0,
@@ -78,6 +81,25 @@ class SongPlayer {
     return this.levels[kind];
   }
 
+  /** 供画面使用的平滑音乐能量（0~1）；只读播放总线，不改变声音与时间轴。 */
+  audioEnergy(): number {
+    const analyser = this.analyser;
+    if (!analyser || !this.playing) {
+      this.energy *= 0.82;
+      return this.energy;
+    }
+    analyser.getByteFrequencyData(this.spectrum);
+    let sum = 0;
+    const count = Math.min(14, this.spectrum.length);
+    for (let i = 0; i < count; i++) {
+      const weight = 1.25 - (i / Math.max(1, count - 1)) * 0.45;
+      sum += ((this.spectrum[i] ?? 0) / 255) * weight;
+    }
+    const raw = Math.min(1, sum / Math.max(1, count));
+    this.energy += (raw - this.energy) * (raw > this.energy ? 0.34 : 0.1);
+    return this.energy;
+  }
+
   /**
    * 起播。atCtxSec 给定绝对的 AudioContext 时刻（用于倒计时：先排程，
    * 时钟从负数连续走到 0，切换时不会跳位）。
@@ -92,6 +114,12 @@ class SongPlayer {
     );
     this.startOffsetMs = offset;
     this.startCtxSec = Math.max(atCtxSec ?? ctx.currentTime + 0.05, ctx.currentTime + 0.02);
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 64;
+    analyser.smoothingTimeConstant = 0.76;
+    analyser.connect(ctx.destination);
+    this.analyser = analyser;
 
     // 结束回调挂在最长的一轨上
     let longest: StemKind | null = null;
@@ -112,7 +140,7 @@ class SongPlayer {
       const makeup = ctx.createGain();
       makeup.gain.value = STEM_MAKEUP_GAIN;
       gain.connect(makeup);
-      makeup.connect(ctx.destination);
+      makeup.connect(analyser);
       const src = ctx.createBufferSource();
       src.buffer = track.buffer;
       src.connect(gain);
@@ -211,6 +239,16 @@ class SongPlayer {
         }
       }
     }
+    const analyser = this.analyser;
+    this.analyser = null;
+    if (analyser) {
+      try {
+        analyser.disconnect();
+      } catch {
+        // 已断开
+      }
+    }
+    this.energy = 0;
   }
 }
 

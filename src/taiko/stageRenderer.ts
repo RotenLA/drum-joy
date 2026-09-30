@@ -147,6 +147,10 @@ export interface StageFrame {
   countText?: string | null;
   /** 是否绘制飞行音符（未开始时为 false，只显示鼓阵） */
   showNotes?: boolean;
+  /** 播放总线平滑能量（0~1），供横排背景响应。 */
+  audioEnergy?: number;
+  /** 当前是否推进音乐；暂停/未开始时动态背景冻结。 */
+  motionActive?: boolean;
   /** 精简 HUD（教学用）：不画进度条、分数、连击、判定统计 */
   minimalHud?: boolean;
 
