@@ -4,10 +4,10 @@
  * 静态画面（天空光束、线框山峰、两侧阶梯、六边形框、五条双线跑道、
  * 金色判定线与四个菱形、底部五个箭头判定块、脚印）直接使用从参考视频
  * 截取并清理过的底图 columns-stage.jpg；所有动态元素（音符、命中高亮、
- * 上下排连线）在同一 1564×720 参考坐标系里按实测坐标绘制，保证完全重合。
+ * 动态音符）在同一 1564×720 参考坐标系里按实测坐标绘制，保证完全重合。
  */
 import plateUrl from "@/assets/columns-stage.jpg";
-import { partOfNote, type PartId } from "./laneLayouts";
+import { PART_BY_ID, partOfNote, type PartId } from "./laneLayouts";
 import { quality } from "./perf";
 import { drawHud, hexToRgba, stageViewport, type StageFrame } from "./stageRenderer";
 
@@ -32,22 +32,20 @@ const DIAMONDS: readonly [number, number, number, number][] = [
 ];
 /** 音符厚度 = (y - 地平线) × 系数（由判定块与参考音符实测） */
 const THICK = 0.066;
-/** 最远出现位置对应的深度倍数（y = 地平线 + 距离 / z） */
-const Z_FAR = 16;
+/** 1x 从地平线到判定点的下落时长；速度倍率按反比缩短该时长。 */
 const LEAD_MS = 2200;
 const FLASH_MS = 200;
 
 const GOLD = "#ffd84a";
-const NOTE_ORANGE = "#ff9a1f";
 
 const BOTTOM_SLOTS: readonly (PartId | null)[] = [null, "hihat", "snare", "kick", "floorTom"];
 const TOP_SLOTS: readonly PartId[] = ["crash", "highTom", "midTom", "ride"];
 
 interface Slot { row: 0 | 1; index: number }
-interface Pt { x: number; y: number }
 interface Xf { s: number; tx: number; ty: number }
 interface Placed {
   row: 0 | 1; index: number; timeMs: number; label: string | null;
+  color: string;
   /** 参考坐标 */
   cx: number; cy: number; halfW: number; halfH: number; alpha: number;
   tail: { y: number; halfW: number } | null;
@@ -181,9 +179,9 @@ function drawTargetsFeedback(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame
   }
 }
 
-/** 时间 → 参考坐标 y（地面透视：y = 地平线 + D / z）。 */
-function depthOf(dtMs: number, speed: number): number {
-  return 1 + (dtMs * speed / LEAD_MS) * (Z_FAR - 1);
+/** 时间 → 线性画面进度；0 为地平线，1 为判定点。 */
+function fallProgress(dtMs: number, speed: number): number {
+  return 1 - (dtMs * speed) / LEAD_MS;
 }
 
 function placeNotes(f: StageFrame): Placed[] {
@@ -194,63 +192,41 @@ function placeNotes(f: StageFrame): Placed[] {
     const part = partOfNote(n.note);
     const slot = part ? slotOf(part) : null;
     if (!part || !slot) continue;
-    const z = depthOf(n.timeMs - f.timeMs, f.speed);
-    if (z > Z_FAR || z < 0.86) continue;
-    const alpha = Math.min(1, (Z_FAR - z) / 2.2);
+    const progress = fallProgress(n.timeMs - f.timeMs, f.speed);
+    if (progress < 0 || progress > 1.08) continue;
+    const alpha = Math.min(1, progress * 8);
+    const color = PART_BY_ID[part].color;
     let tail: Placed["tail"] = null;
     if (slot.row === 1) {
-      const y = HORIZON_Y + bottomD / z;
+      const y = HORIZON_Y + bottomD * progress;
       const l = railX(slot.index * 2, y), r = railX(slot.index * 2 + 1, y);
       const halfH = (y - HORIZON_Y) * THICK * 0.5;
       if (n.holdMs) {
-        const zt = Math.min(Z_FAR, depthOf(n.timeMs + n.holdMs - f.timeMs, f.speed));
-        const ty = HORIZON_Y + bottomD / zt;
+        const tailProgress = Math.max(0, Math.min(1.08, fallProgress(n.timeMs + n.holdMs - f.timeMs, f.speed)));
+        const ty = HORIZON_Y + bottomD * tailProgress;
         tail = { y: ty, halfW: (railX(slot.index * 2 + 1, ty) - railX(slot.index * 2, ty)) * 0.5 - 1 };
       }
       out.push({
         row: 1, index: slot.index, timeMs: n.timeMs, label: hatLabel(part, n.note),
-        cx: (l + r) / 2, cy: y, halfW: (r - l) / 2 - 1, halfH, alpha, tail,
+        color, cx: (l + r) / 2, cy: y, halfW: (r - l) / 2 - 1, halfH, alpha, tail,
       });
     } else {
       const d = DIAMONDS[slot.index]; if (!d) continue;
       const topD = d[1] - HORIZON_Y;
-      const y = HORIZON_Y + topD / z;
-      const k = (y - HORIZON_Y) / topD;
-      const cx = 782 + (d[0] - 782) * k;
+      const y = HORIZON_Y + topD * progress;
+      const cx = 782 + (d[0] - 782) * progress;
       if (n.holdMs) {
-        const zt = Math.min(Z_FAR, depthOf(n.timeMs + n.holdMs - f.timeMs, f.speed));
-        const ty = HORIZON_Y + topD / zt;
+        const tailProgress = Math.max(0, Math.min(1.08, fallProgress(n.timeMs + n.holdMs - f.timeMs, f.speed)));
+        const ty = HORIZON_Y + topD * tailProgress;
         tail = { y: ty, halfW: d[2] * 0.35 * ((ty - HORIZON_Y) / topD) };
       }
       out.push({
         row: 0, index: slot.index, timeMs: n.timeMs, label: null,
-        cx, cy: y, halfW: d[2] * 0.82 * k, halfH: d[3] * 0.82 * k, alpha, tail,
+        color, cx, cy: y, halfW: d[2] * 0.82 * progress, halfH: d[3] * 0.82 * progress, alpha, tail,
       });
     }
   }
   return out.sort((a, b) => a.cy - b.cy);
-}
-
-function drawChordLinks(ctx: CanvasRenderingContext2D, t: Xf, placed: Placed[], glow: boolean) {
-  const groups = new Map<number, Placed[]>();
-  for (const p of placed) {
-    const k = Math.round(p.timeMs / 15);
-    const a = groups.get(k); if (a) a.push(p); else groups.set(k, [p]);
-  }
-  for (const g of groups.values()) {
-    const tops = g.filter((x) => x.row === 0), bottoms = g.filter((x) => x.row === 1);
-    for (const a of tops) for (const b of bottoms) {
-      const p1: Pt = { x: X(t, a.cx), y: Y(t, a.cy + a.halfH) };
-      const p2: Pt = { x: X(t, b.cx), y: Y(t, b.cy - b.halfH) };
-      ctx.save();
-      ctx.globalAlpha = Math.min(a.alpha, b.alpha) * 0.55;
-      ctx.strokeStyle = NOTE_ORANGE;
-      ctx.lineWidth = 1.4 * t.s;
-      ctx.shadowColor = NOTE_ORANGE; ctx.shadowBlur = glow ? 5 * t.s : 0;
-      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
-      ctx.restore();
-    }
-  }
 }
 
 function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
@@ -259,23 +235,23 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
   const w = x1 - x0, h = Math.max(1.5, y1 - y0);
   if (n.tail) {
     const ty = Y(t, n.tail.y), thw = n.tail.halfW * t.s, cx = X(t, n.cx);
-    ctx.save(); ctx.globalAlpha = n.alpha * 0.28; ctx.fillStyle = NOTE_ORANGE;
+    ctx.save(); ctx.globalAlpha = n.alpha * 0.28; ctx.fillStyle = n.color;
     ctx.beginPath(); ctx.moveTo(cx - thw, ty); ctx.lineTo(cx + thw, ty); ctx.lineTo(x1, y0); ctx.lineTo(x0, y0); ctx.closePath(); ctx.fill();
     ctx.restore();
   }
   ctx.save();
   ctx.globalAlpha = n.alpha;
   // 外层橙色发光底
-  ctx.shadowColor = NOTE_ORANGE; ctx.shadowBlur = glow ? Math.max(3, h * 0.9) : 0;
+  ctx.shadowColor = n.color; ctx.shadowBlur = glow ? Math.max(3, h * 0.9) : 0;
   const body = ctx.createLinearGradient(0, y0, 0, y1);
-  body.addColorStop(0, "#ffb347"); body.addColorStop(0.5, "#ff9a1f"); body.addColorStop(1, "#d86a08");
+  body.addColorStop(0, hexToRgba(n.color, 0.72)); body.addColorStop(0.5, n.color); body.addColorStop(1, hexToRgba(n.color, 0.68));
   ctx.fillStyle = body; ctx.fillRect(x0, y0, w, h);
   ctx.shadowBlur = 0;
   // 内层浅色牌面 + 亮边
   if (h > 4) {
     const ix = w * 0.035, iy = h * 0.2;
     const face = ctx.createLinearGradient(0, y0 + iy, 0, y1 - iy);
-    face.addColorStop(0, "rgba(255,236,200,0.95)"); face.addColorStop(0.55, "rgba(255,206,140,0.9)"); face.addColorStop(1, "rgba(240,160,70,0.9)");
+    face.addColorStop(0, hexToRgba(n.color, 0.42)); face.addColorStop(0.55, hexToRgba(n.color, 0.72)); face.addColorStop(1, hexToRgba(n.color, 0.9));
     ctx.fillStyle = face; ctx.fillRect(x0 + ix, y0 + iy, w - ix * 2, h - iy * 2);
     ctx.strokeStyle = "rgba(255,250,225,0.95)"; ctx.lineWidth = Math.max(0.8, h * 0.06);
     ctx.strokeRect(x0 + ix, y0 + iy, w - ix * 2, h - iy * 2);
@@ -289,7 +265,7 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
     ctx.font = `italic 500 ${fs}px system-ui, sans-serif`;
     const tw = ctx.measureText(n.label).width, max = w * 0.74;
     if (tw > max) ctx.scale(max / tw, 1);
-    ctx.fillStyle = "rgba(128,68,12,0.92)";
+    ctx.fillStyle = "rgba(12,16,24,0.9)";
     ctx.fillText(n.label, 0, fs * 0.04);
   }
   ctx.restore();
@@ -297,7 +273,7 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
 
 function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
   if (n.tail) {
-    ctx.save(); ctx.globalAlpha = n.alpha * 0.28; ctx.fillStyle = NOTE_ORANGE;
+    ctx.save(); ctx.globalAlpha = n.alpha * 0.28; ctx.fillStyle = n.color;
     const ty = Y(t, n.tail.y), thw = n.tail.halfW * t.s, cx = X(t, n.cx), hw = n.halfW * 0.35 * t.s;
     ctx.beginPath(); ctx.moveTo(cx - thw, ty); ctx.lineTo(cx + thw, ty); ctx.lineTo(cx + hw, Y(t, n.cy)); ctx.lineTo(cx - hw, Y(t, n.cy)); ctx.closePath(); ctx.fill();
     ctx.restore();
@@ -308,8 +284,8 @@ function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: 
   ctx.beginPath();
   ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath();
   const g = ctx.createLinearGradient(0, cy - hh, 0, cy + hh);
-  g.addColorStop(0, "#ffd08a"); g.addColorStop(0.5, "#ff9a1f"); g.addColorStop(1, "#d86a08");
-  ctx.fillStyle = g; ctx.shadowColor = NOTE_ORANGE; ctx.shadowBlur = glow ? Math.max(3, hh * 0.6) : 0; ctx.fill();
+  g.addColorStop(0, hexToRgba(n.color, 0.62)); g.addColorStop(0.5, n.color); g.addColorStop(1, hexToRgba(n.color, 0.7));
+  ctx.fillStyle = g; ctx.shadowColor = n.color; ctx.shadowBlur = glow ? Math.max(3, hh * 0.6) : 0; ctx.fill();
   ctx.shadowBlur = 0;
   ctx.strokeStyle = "rgba(255,248,220,0.95)"; ctx.lineWidth = Math.max(0.8, hh * 0.08); ctx.stroke();
   ctx.restore();
@@ -323,7 +299,6 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
   drawTargetsFeedback(ctx, t, f, glow);
   if (f.showNotes !== false) {
     const placed = placeNotes(f);
-    drawChordLinks(ctx, t, placed, glow);
     for (const n of placed) {
       if (n.row === 1) drawBar(ctx, t, n, glow); else drawDiamondNote(ctx, t, n, glow);
     }
