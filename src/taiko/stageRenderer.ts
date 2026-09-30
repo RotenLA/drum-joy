@@ -137,6 +137,10 @@ export interface StageFrame {
   flashes: Record<string, number>;
   /** partId -> Miss 暗闪截止时间戳 */
   missFlashes?: Record<string, number>;
+  /** 每个谱面音符的判定状态：0 未判定 / 1 命中 / 2 Miss。 */
+  noteJudgements?: Uint8Array;
+  /** 每个谱面音符发生判定时的 performance.now()。 */
+  noteJudgementAt?: Float64Array;
   combo: number;
   score: number;
   /** 参与渲染的鼓盘（默认全部 9 件；5 分区模式只传 5 件） */
