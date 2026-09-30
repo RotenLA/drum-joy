@@ -7,7 +7,18 @@
  * 动态音符）在同一 1564×720 参考坐标系里按实测坐标绘制，保证完全重合。
  */
 import plateUrl from "@/assets/columns-stage.jpg";
-import { PART_BY_ID, partOfNote, type PartId } from "./laneLayouts";
+import noteB01 from "@/assets/columns-game/NoteB01.png.asset.json";
+import noteB02 from "@/assets/columns-game/NoteB02.png.asset.json";
+import noteB03 from "@/assets/columns-game/NoteB03.png.asset.json";
+import noteB04 from "@/assets/columns-game/NoteB04.png.asset.json";
+import noteT01 from "@/assets/columns-game/NoteT01.png.asset.json";
+import noteT02 from "@/assets/columns-game/NoteT02.png.asset.json";
+import noteT03 from "@/assets/columns-game/NoteT03.png.asset.json";
+import noteT04 from "@/assets/columns-game/NoteT04.png.asset.json";
+import motionLight from "@/assets/columns-game/运动光线.png.asset.json";
+import farLight from "@/assets/columns-game/远光.png.asset.json";
+import waveform from "@/assets/columns-game/音波.png.asset.json";
+import { partOfNote, type PartId } from "./laneLayouts";
 import { quality } from "./perf";
 import { drawHud, hexToRgba, stageViewport, type StageFrame } from "./stageRenderer";
 
@@ -30,10 +41,13 @@ const PAD_HIT_Y = (PAD_TOP + PAD_BOTTOM) / 2;
 const DIAMONDS: readonly [number, number, number, number][] = [
   [478.5, 393.5, 26.5, 27.5], [783.5, 396, 27.5, 31], [928, 396, 27, 31], [1082.5, 392.5, 24.5, 26.5],
 ];
-/** 音符厚度 = (y - 地平线) × 系数（由判定块与参考音符实测） */
-const THICK = 0.066;
-/** 1x 从地平线到判定点的下落时长；速度倍率按反比缩短该时长。 */
-const LEAD_MS = 2200;
+/**
+ * 上排四条红线的独立出生点。红线标注的斜率依次约为
+ * -0.94 / 0 / 0.49 / 0.91，不与下排中央消失点共用。
+ */
+const TOP_SPAWNS: readonly [number, number][] = [[713, 145], [783, 145], [807, 145], [857, 145]];
+/** 1x 在 1564×720 参考画面中的恒定移动速度（px/ms）。 */
+const FALL_PX_PER_MS = (PAD_HIT_Y - HORIZON_Y) / 2200;
 const FLASH_MS = 200;
 
 const GOLD = "#ffd84a";
@@ -45,12 +59,12 @@ interface Slot { row: 0 | 1; index: number }
 interface Xf { s: number; tx: number; ty: number }
 interface Placed {
   row: 0 | 1; index: number; timeMs: number; label: string | null;
-  color: string;
   /** 参考坐标 */
-  cx: number; cy: number; halfW: number; halfH: number; alpha: number;
+  cx: number; cy: number; progress: number; alpha: number;
 }
 
 let plate: HTMLImageElement | null = null;
+const images = new Map<string, HTMLImageElement>();
 function plateImage(): HTMLImageElement | null {
   if (typeof Image === "undefined") return null;
   if (!plate) {
@@ -60,6 +74,21 @@ function plateImage(): HTMLImageElement | null {
   }
   return plate.complete && plate.naturalWidth > 0 ? plate : null;
 }
+
+function loadedImage(url: string): HTMLImageElement | null {
+  if (typeof Image === "undefined") return null;
+  let image = images.get(url);
+  if (!image) {
+    image = new Image();
+    image.decoding = "async";
+    image.src = url;
+    images.set(url, image);
+  }
+  return image.complete && image.naturalWidth > 0 ? image : null;
+}
+
+const BOTTOM_IMAGES = [noteB01.url, noteB01.url, noteB02.url, noteB01.url, noteB03.url] as const;
+const TOP_IMAGES = [noteT01.url, noteT02.url, noteT03.url, noteT04.url] as const;
 
 function slotOf(part: PartId): Slot | null {
   if (part === "pedalHat") return { row: 1, index: 1 };
@@ -143,6 +172,30 @@ function drawReactiveBackdrop(ctx: CanvasRenderingContext2D, t: Xf, f: StageFram
   ctx.save();
   ctx.globalCompositeOperation = "screen";
 
+  // 同事提供的原始运动光、远光与音波素材；只做平移/透明度，避免程序近似重画。
+  const motion = loadedImage(motionLight.url);
+  if (motion) {
+    const drift = Math.sin(clock * 0.7) * 18;
+    ctx.globalAlpha = 0.08 + energy * 0.12;
+    ctx.drawImage(motion, X(t, 69 + drift), Y(t, 64), 1426 * t.s, 577 * t.s);
+  }
+  const far = loadedImage(farLight.url);
+  if (far) {
+    ctx.globalAlpha = 0.18 + energy * 0.18;
+    ctx.drawImage(far, X(t, 216), Y(t, 119), 1133 * t.s, 107 * t.s);
+  }
+  const wave = loadedImage(waveform.url);
+  if (wave) {
+    const waveAlpha = 0.05 + energy * 0.16;
+    ctx.globalAlpha = waveAlpha;
+    ctx.drawImage(wave, X(t, 54), Y(t, 153), 181 * t.s, 540 * t.s);
+    ctx.save();
+    ctx.translate(X(t, 1510), 0); ctx.scale(-1, 1);
+    ctx.drawImage(wave, 0, Y(t, 153), 181 * t.s, 540 * t.s);
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
   // 顶部光束与地平线光晕缓慢扫动。
   const sweep = Math.sin(clock * 0.55) * 48;
   const halo = ctx.createRadialGradient(X(t, 782 + sweep), Y(t, 169), 0, X(t, 782 + sweep), Y(t, 169), 210 * t.s);
@@ -192,25 +245,6 @@ function drawReactiveBackdrop(ctx: CanvasRenderingContext2D, t: Xf, f: StageFram
       }
       ctx.stroke();
     }
-  }
-  ctx.restore();
-}
-
-function drawTopGuides(ctx: CanvasRenderingContext2D, t: Xf) {
-  ctx.save();
-  ctx.globalCompositeOperation = "screen";
-  ctx.lineWidth = 1.5 * t.s;
-  for (let i = 0; i < DIAMONDS.length; i++) {
-    const d = DIAMONDS[i];
-    if (!d) continue;
-    const g = ctx.createLinearGradient(X(t, 782), Y(t, HORIZON_Y), X(t, d[0]), Y(t, d[1]));
-    g.addColorStop(0, "rgba(123,223,255,0.12)");
-    g.addColorStop(1, "rgba(123,223,255,0.56)");
-    ctx.strokeStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(X(t, 782), Y(t, HORIZON_Y));
-    ctx.lineTo(X(t, d[0]), Y(t, d[1]));
-    ctx.stroke();
   }
   ctx.restore();
 }
@@ -284,39 +318,42 @@ function drawTargetsFeedback(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame
   }
 }
 
-/** 时间 → 线性画面进度；0 为地平线，1 为判定点。 */
-function fallProgress(dtMs: number, speed: number): number {
-  return 1 - (dtMs * speed) / LEAD_MS;
+/** 时间 → 沿实际路径长度的线性进度；缩放不参与位置计算。 */
+function fallProgress(dtMs: number, speed: number, pathLength: number): number {
+  return 1 - (dtMs * speed * FALL_PX_PER_MS) / Math.max(1, pathLength);
 }
 
 function placeNotes(f: StageFrame): Placed[] {
   const out: Placed[] = [];
-  const bottomD = PAD_HIT_Y - HORIZON_Y;
   for (const n of f.chart.notes) {
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
     const slot = part ? slotOf(part) : null;
     if (!part || !slot) continue;
-    const progress = fallProgress(n.timeMs - f.timeMs, f.speed);
-    if (progress < 0 || progress > 1.08) continue;
-    const alpha = Math.min(1, progress * 8);
-    const color = PART_BY_ID[part].color;
     if (slot.row === 1) {
-      const y = HORIZON_Y + bottomD * progress;
+      const startY = HORIZON_Y;
+      const startX = (railX(slot.index * 2, startY) + railX(slot.index * 2 + 1, startY)) / 2;
+      const endX = (railX(slot.index * 2, PAD_HIT_Y) + railX(slot.index * 2 + 1, PAD_HIT_Y)) / 2;
+      const pathLength = Math.hypot(endX - startX, PAD_HIT_Y - startY);
+      const progress = fallProgress(n.timeMs - f.timeMs, f.speed, pathLength);
+      if (progress < 0 || progress > 1) continue;
+      const y = startY + (PAD_HIT_Y - startY) * progress;
       const l = railX(slot.index * 2, y), r = railX(slot.index * 2 + 1, y);
-      const halfH = (y - HORIZON_Y) * THICK * 0.5;
       out.push({
         row: 1, index: slot.index, timeMs: n.timeMs, label: hatLabel(part, n.note),
-        color, cx: (l + r) / 2, cy: y, halfW: (r - l) / 2 - 1, halfH, alpha,
+        cx: (l + r) / 2, cy: y, progress, alpha: Math.min(1, progress * 8),
       });
     } else {
       const d = DIAMONDS[slot.index]; if (!d) continue;
-      const topD = d[1] - HORIZON_Y;
-      const y = HORIZON_Y + topD * progress;
-      const cx = 782 + (d[0] - 782) * progress;
+      const spawn = TOP_SPAWNS[slot.index]; if (!spawn) continue;
+      const pathLength = Math.hypot(d[0] - spawn[0], d[1] - spawn[1]);
+      const progress = fallProgress(n.timeMs - f.timeMs, f.speed, pathLength);
+      if (progress < 0 || progress > 1) continue;
       out.push({
         row: 0, index: slot.index, timeMs: n.timeMs, label: null,
-        color, cx, cy: y, halfW: d[2] * 0.82 * progress, halfH: d[3] * 0.82 * progress, alpha,
+        cx: spawn[0] + (d[0] - spawn[0]) * progress,
+        cy: spawn[1] + (d[1] - spawn[1]) * progress,
+        progress, alpha: Math.min(1, progress * 8),
       });
     }
   }
@@ -324,55 +361,43 @@ function placeNotes(f: StageFrame): Placed[] {
 }
 
 function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
-  const yNear = n.cy + n.halfH, yFar = n.cy - n.halfH;
-  const leftFar = railX(n.index * 2, yFar) + 1, rightFar = railX(n.index * 2 + 1, yFar) - 1;
-  const leftNear = railX(n.index * 2, yNear) + 1, rightNear = railX(n.index * 2 + 1, yNear) - 1;
-  const x0 = Math.min(X(t, leftFar), X(t, leftNear)), x1 = Math.max(X(t, rightFar), X(t, rightNear));
-  const y0 = Y(t, yFar), y1 = Y(t, yNear);
-  const w = Math.max(1, X(t, rightNear) - X(t, leftNear)), h = Math.max(1.5, y1 - y0);
+  const image = loadedImage(BOTTOM_IMAGES[n.index] ?? noteB01.url);
+  if (!image) return;
+  const laneW = Math.max(2, railX(n.index * 2 + 1, n.cy) - railX(n.index * 2, n.cy));
+  const imageW = laneW * 1.05 * t.s;
+  const imageH = imageW * (image.naturalHeight / image.naturalWidth);
+  const cx = X(t, n.cx), cy = Y(t, n.cy);
   ctx.save();
   ctx.globalAlpha = n.alpha;
-  ctx.shadowColor = n.color; ctx.shadowBlur = glow ? Math.max(3, h * 0.9) : 0;
-  const body = ctx.createLinearGradient(0, y0, 0, y1);
-  body.addColorStop(0, hexToRgba(n.color, 0.68)); body.addColorStop(0.5, n.color); body.addColorStop(1, hexToRgba(n.color, 0.72));
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.moveTo(X(t, leftFar), y0); ctx.lineTo(X(t, rightFar), y0);
-  ctx.lineTo(X(t, rightNear), y1); ctx.lineTo(X(t, leftNear), y1); ctx.closePath(); ctx.fill();
-  ctx.clip();
-  ctx.shadowBlur = 0;
-  // 中央高亮，不再画白色外框。
-  if (h > 4) {
-    const midY = (y0 + y1) / 2;
-    const shine = ctx.createLinearGradient(0, y0, 0, y1);
-    shine.addColorStop(0, "rgba(255,255,255,0)");
-    shine.addColorStop(0.5, "rgba(255,255,255,0.68)");
-    shine.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = shine;
-    ctx.fillRect(x0 + w * 0.04, midY - h * 0.23, Math.max(1, x1 - x0 - w * 0.08), h * 0.46);
-  }
-  if (n.label && h > 5) {
-    const fs = h * 0.78;
-    ctx.translate((x0 + x1) / 2, (y0 + y1) / 2);
+  ctx.shadowColor = "rgba(255,255,255,0.45)"; ctx.shadowBlur = glow ? imageH * 0.18 : 0;
+  ctx.drawImage(image, cx - imageW / 2, cy - imageH / 2, imageW, imageH);
+  if (n.label && imageH > 7) {
+    const fs = imageH * 0.24;
+    ctx.shadowBlur = 0;
+    ctx.translate(cx, cy);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = `italic 500 ${fs}px system-ui, sans-serif`;
-    const tw = ctx.measureText(n.label).width, max = (x1 - x0) * 0.78;
+    const tw = ctx.measureText(n.label).width, max = imageW * 0.64;
     if (tw > max) ctx.scale(max / tw, 1);
     ctx.fillStyle = "rgba(12,16,24,0.9)";
-    ctx.fillText(n.label, 0, fs * 0.04);
+    ctx.fillText(n.label, 0, fs * 0.08);
   }
   ctx.restore();
 }
 
 function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
-  const cx = X(t, n.cx), cy = Y(t, n.cy), hw = Math.max(1.5, n.halfW * t.s), hh = Math.max(1.5, n.halfH * t.s);
+  const image = loadedImage(TOP_IMAGES[n.index] ?? noteT01.url);
+  const d = DIAMONDS[n.index];
+  if (!image || !d) return;
+  const cx = X(t, n.cx), cy = Y(t, n.cy);
+  const scale = (0.36 + n.progress * 0.64) * ((d[2] * 2) / 202) * t.s;
+  const imageW = image.naturalWidth * scale, imageH = image.naturalHeight * scale;
+  // 原图菱形头中心在素材顶部约 17%；中心严格跟随匀速轨迹，尾光只改变外观。
+  const headY = imageH * 0.17;
   ctx.save();
   ctx.globalAlpha = n.alpha;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath();
-  const g = ctx.createLinearGradient(cx - hw, cy, cx + hw, cy);
-  g.addColorStop(0, hexToRgba(n.color, 0.68)); g.addColorStop(0.5, "rgba(255,255,255,0.74)"); g.addColorStop(1, hexToRgba(n.color, 0.72));
-  ctx.fillStyle = g; ctx.shadowColor = n.color; ctx.shadowBlur = glow ? Math.max(3, hh * 0.6) : 0; ctx.fill();
+  ctx.shadowColor = "rgba(255,255,255,0.45)"; ctx.shadowBlur = glow ? 7 * t.s : 0;
+  ctx.drawImage(image, cx - imageW / 2, cy - headY, imageW, imageH);
   ctx.restore();
 }
 
@@ -405,7 +430,6 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
   ctx.save();
   drawPlate(ctx, w, h, t);
   drawReactiveBackdrop(ctx, t, f);
-  drawTopGuides(ctx, t);
   drawBeatTargets(ctx, t, f);
   drawTargetsFeedback(ctx, t, f, glow);
   if (f.showNotes !== false) {
