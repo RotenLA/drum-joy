@@ -464,7 +464,7 @@ export function FallScreen({
   }, [hasAudio, readTimeMs, setPhaseBoth]);
 
   const resume = useCallback(
-    () => { wakeAudio(); return beginCountdown(Math.max(0, timeRef.current), false),
+    () => { wakeAudio(); beginCountdown(Math.max(0, timeRef.current), false); },
     [beginCountdown],
   );
 
