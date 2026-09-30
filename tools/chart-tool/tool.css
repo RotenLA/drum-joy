@@ -1,0 +1,24 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #14161b; color: #e8e8ea; font: 14px "Microsoft YaHei", "Segoe UI", system-ui, sans-serif; }
+.wrap { display: flex; flex-direction: column; height: 100vh; padding: 20px 24px; gap: 12px; }
+h1 { font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+.pick { display: flex; align-items: center; gap: 12px; }
+.path { color: #9aa0ab; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button { background: #232730; color: #e8e8ea; border: 1px solid #353a45; border-radius: 6px; padding: 7px 14px; cursor: pointer; font: inherit; }
+button:hover:not(:disabled) { border-color: #f2a33a; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: #f2a33a; color: #1a1a1a; border-color: #f2a33a; font-weight: 600; }
+.list { flex: 1; overflow: auto; border: 1px solid #2a2e37; border-radius: 8px; }
+.empty { padding: 16px; color: #7c828d; }
+.row { display: grid; grid-template-columns: 32px 1.4fr 1.4fr 80px 1.6fr; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid #22262e; }
+.row .idx { grid-column: 1; grid-row: 1; color: #6b717c; }
+.row .title { grid-column: 2; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .files { grid-column: 3; color: #9aa0ab; font-size: 12px; }
+.row .bpm { grid-column: 4; color: #9aa0ab; }
+.row .step { grid-column: 5; font-size: 12px; color: #9aa0ab; }
+.row.run .step { color: #f2a33a; }
+.row.done .step { color: #5fce8a; }
+.row.fail .step { color: #ef6b6b; }
+.foot { display: flex; align-items: center; gap: 12px; }
+.foot span { flex: 1; color: #9aa0ab; }
