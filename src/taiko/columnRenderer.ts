@@ -1,39 +1,68 @@
 /**
- * 横排下落式渲染器。
- * 五条跑道分别绘制；底排音符沿所属跑道投影，上排使用独立的竖立菱形目标。
+ * 横排下落式渲染器（按参考画面逐像素标定）。
+ *
+ * 静态画面（天空光束、线框山峰、两侧阶梯、六边形框、五条双线跑道、
+ * 金色判定线与四个菱形、底部五个箭头判定块、脚印）直接使用从参考视频
+ * 截取并清理过的底图 columns-stage.jpg；所有动态元素（音符、命中高亮、
+ * 上下排连线）在同一 1564×720 参考坐标系里按实测坐标绘制，保证完全重合。
  */
-import { PART_BY_ID, partOfNote, type PartId } from "./laneLayouts";
+import plateUrl from "@/assets/columns-stage.jpg";
+import { partOfNote, type PartId } from "./laneLayouts";
 import { quality } from "./perf";
 import { drawHud, hexToRgba, stageViewport, type StageFrame } from "./stageRenderer";
 
+/* ---------------- 参考坐标系（1564×720，全部实测） ---------------- */
+const REF_W = 1564;
+const REF_H = 720;
+/** 跑道线汇聚的地平线 y */
+const HORIZON_Y = 172;
+/** 十根跑道线：x = c + k·y（左外单线、四组双线、右外单线） */
+const RAILS: readonly [number, number][] = [
+  [856.54, -0.739], [829.51, -0.4659], [824.62, -0.4376], [798.4, -0.1598], [793.11, -0.1328],
+  [768.59, 0.136], [763.54, 0.1629], [737.44, 0.4405], [732.47, 0.4686], [706.7, 0.7395],
+];
+/** 底部五个判定块：上沿 y、下沿 y、上沿左右 x */
+const PAD_TOP = 601;
+const PAD_BOTTOM = 630;
+const PAD_X: readonly [number, number][] = [[418, 544], [570, 695], [720, 845], [870, 995], [1020, 1146]];
+const PAD_HIT_Y = (PAD_TOP + PAD_BOTTOM) / 2;
+/** 上排四个菱形：中心 x、中心 y、半宽、半高 */
+const DIAMONDS: readonly [number, number, number, number][] = [
+  [478.5, 393.5, 26.5, 27.5], [783.5, 396, 27.5, 31], [928, 396, 27, 31], [1082.5, 392.5, 24.5, 26.5],
+];
+/** 音符厚度 = (y - 地平线) × 系数（由判定块与参考音符实测） */
+const THICK = 0.066;
+/** 最远出现位置对应的深度倍数（y = 地平线 + 距离 / z） */
+const Z_FAR = 16;
 const LEAD_MS = 2200;
 const FLASH_MS = 200;
-const ACCENT = "#f6c928";
-const NOTE_ORANGE = "#ff9d24";
-const RAIL = "#55dff0";
-const SKY = "#07101e";
+
+const GOLD = "#ffd84a";
+const NOTE_ORANGE = "#ff9a1f";
 
 const BOTTOM_SLOTS: readonly (PartId | null)[] = [null, "hihat", "snare", "kick", "floorTom"];
 const TOP_SLOTS: readonly PartId[] = ["crash", "highTom", "midTom", "ride"];
-const FOOT_SLOTS = new Set([1, 3]);
 
 interface Slot { row: 0 | 1; index: number }
-interface Point { x: number; y: number }
-interface Quad { farLeft: Point; farRight: Point; nearRight: Point; nearLeft: Point; cx: number; cy: number; width: number; height: number }
-interface Geom {
-  w: number; h: number; cx: number; horizonY: number; nearY: number;
-  farHalf: number; nearHalf: number; topDepth: number; bottomDepth: number;
-}
-interface StandingTarget { center: Point; width: number; height: number; skew: number; depth: number }
+interface Pt { x: number; y: number }
+interface Xf { s: number; tx: number; ty: number }
 interface Placed {
-  part: PartId; row: 0 | 1; quad: Quad; color: string; label: string | null;
-  timeMs: number; tailQuad: Quad | null;
+  row: 0 | 1; index: number; timeMs: number; label: string | null;
+  /** 参考坐标 */
+  cx: number; cy: number; halfW: number; halfH: number; alpha: number;
+  tail: { y: number; halfW: number } | null;
 }
 
-const LANE_CENTERS = [-0.8, -0.4, 0, 0.4, 0.8] as const;
-const LANE_WIDTH = 0.36;
-const TOP_U = [-0.82, -0.22, 0.22, 0.78] as const;
-const TOP_DEPTH = [0.505, 0.47, 0.47, 0.505] as const;
+let plate: HTMLImageElement | null = null;
+function plateImage(): HTMLImageElement | null {
+  if (typeof Image === "undefined") return null;
+  if (!plate) {
+    plate = new Image();
+    plate.decoding = "async";
+    plate.src = plateUrl;
+  }
+  return plate.complete && plate.naturalWidth > 0 ? plate : null;
+}
 
 function slotOf(part: PartId): Slot | null {
   if (part === "pedalHat") return { row: 1, index: 1 };
@@ -49,312 +78,260 @@ function hatLabel(part: PartId, note: number | undefined): string | null {
   return note === 46 ? "Open" : "Closed";
 }
 
-function geomOf(w: number, h: number): Geom {
-  return {
-    w, h, cx: w * 0.5,
-    horizonY: h * 0.238,
-    nearY: h * 0.94,
-    farHalf: w * 0.054,
-    nearHalf: Math.min(w * 0.292, h * 0.61),
-    topDepth: 0.49,
-    bottomDepth: 0.865,
-  };
+function railX(i: number, y: number): number {
+  const r = RAILS[i] ?? [782, 0];
+  return r[0] + r[1] * y;
 }
 
-/** u: -1..1 across the road; depth: far entrance 0, player 1. */
-function groundPoint(g: Geom, u: number, depth: number): Point {
-  const d = Math.max(0, Math.min(1.05, depth));
-  const spread = g.farHalf + (g.nearHalf - g.farHalf) * Math.pow(d, 1.02);
-  const y = g.horizonY + (g.nearY - g.horizonY) * Math.pow(d, 1.22);
-  return { x: g.cx + u * spread, y };
+/** 参考坐标 → 画布坐标：以高度为主等比缩放、水平居中；过窄时保证跑道完整。 */
+function transformOf(w: number, h: number): Xf {
+  let s = Math.max(w / REF_W, h / REF_H);
+  s = Math.min(s, w / 1180);
+  const tx = (w - REF_W * s) / 2;
+  const ty = (h - REF_H * s) * 0.6;
+  return { s, tx, ty };
+}
+const X = (t: Xf, x: number) => t.tx + x * t.s;
+const Y = (t: Xf, y: number) => t.ty + y * t.s;
+
+function drawPlate(ctx: CanvasRenderingContext2D, w: number, h: number, t: Xf) {
+  ctx.fillStyle = "#0b1428";
+  ctx.fillRect(0, 0, w, h);
+  const img = plateImage();
+  if (img) ctx.drawImage(img, t.tx, t.ty, REF_W * t.s, REF_H * t.s);
+  const top = t.ty, bottom = t.ty + REF_H * t.s;
+  if (top > 0) {
+    const g = ctx.createLinearGradient(0, 0, 0, top + 2);
+    g.addColorStop(0, "#070d1c"); g.addColorStop(1, "#0f1a2e");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, top + 1);
+  }
+  if (bottom < h) {
+    const g = ctx.createLinearGradient(0, bottom - 1, 0, h);
+    g.addColorStop(0, "#0c1428"); g.addColorStop(1, "#050a16");
+    ctx.fillStyle = g; ctx.fillRect(0, bottom - 1, w, h - bottom + 1);
+  }
 }
 
-function laneCenter(index: number): number { return LANE_CENTERS[index] ?? 0; }
-
-function groundQuad(g: Geom, centerU: number, widthU: number, centerDepth: number, depthSize: number): Quad {
-  const farD = Math.max(0.006, centerDepth - depthSize * 0.5);
-  const nearD = Math.min(1.045, centerDepth + depthSize * 0.5);
-  const farLeft = groundPoint(g, centerU - widthU * 0.5, farD);
-  const farRight = groundPoint(g, centerU + widthU * 0.5, farD);
-  const nearRight = groundPoint(g, centerU + widthU * 0.5, nearD);
-  const nearLeft = groundPoint(g, centerU - widthU * 0.5, nearD);
-  return {
-    farLeft, farRight, nearRight, nearLeft,
-    cx: (farLeft.x + farRight.x + nearRight.x + nearLeft.x) / 4,
-    cy: (farLeft.y + farRight.y + nearRight.y + nearLeft.y) / 4,
-    width: ((farRight.x - farLeft.x) + (nearRight.x - nearLeft.x)) / 2,
-    height: nearLeft.y - farLeft.y,
-  };
+function hitAmount(f: StageFrame, part: PartId | null): number {
+  if (!part) return 0;
+  const exp = Math.max(f.flashes[part] ?? 0, part === "hihat" ? f.flashes["pedalHat"] ?? 0 : 0);
+  return Math.max(0, Math.min(1, (exp - f.now) / FLASH_MS));
+}
+function missAmount(f: StageFrame, part: PartId | null): number {
+  if (!part) return 0;
+  const exp = Math.max(f.missFlashes?.[part] ?? 0, part === "hihat" ? f.missFlashes?.["pedalHat"] ?? 0 : 0);
+  return Math.max(0, Math.min(1, (exp - f.now) / 240));
 }
 
-function quadPath(ctx: CanvasRenderingContext2D, q: Quad) {
+function padPath(ctx: CanvasRenderingContext2D, t: Xf, i: number) {
+  const [l, r] = PAD_X[i] ?? [0, 0];
+  const kl = RAILS[i * 2]?.[1] ?? 0, kr = RAILS[i * 2 + 1]?.[1] ?? 0;
+  const dy = PAD_BOTTOM - PAD_TOP;
   ctx.beginPath();
-  ctx.moveTo(q.farLeft.x, q.farLeft.y);
-  ctx.lineTo(q.farRight.x, q.farRight.y);
-  ctx.lineTo(q.nearRight.x, q.nearRight.y);
-  ctx.lineTo(q.nearLeft.x, q.nearLeft.y);
+  ctx.moveTo(X(t, l), Y(t, PAD_TOP));
+  ctx.lineTo(X(t, r), Y(t, PAD_TOP));
+  ctx.lineTo(X(t, r + kr * dy), Y(t, PAD_BOTTOM));
+  ctx.lineTo(X(t, l + kl * dy), Y(t, PAD_BOTTOM));
   ctx.closePath();
 }
 
-function drawGlowLine(ctx: CanvasRenderingContext2D, a: Point, b: Point, alpha: number, width: number, glow: boolean) {
+function diamondPath(ctx: CanvasRenderingContext2D, t: Xf, cx: number, cy: number, hw: number, hh: number) {
+  ctx.beginPath();
+  ctx.moveTo(X(t, cx), Y(t, cy - hh));
+  ctx.lineTo(X(t, cx + hw), Y(t, cy - 2.5));
+  ctx.lineTo(X(t, cx + hw), Y(t, cy + 2.5));
+  ctx.lineTo(X(t, cx), Y(t, cy + hh));
+  ctx.lineTo(X(t, cx - hw), Y(t, cy + 2.5));
+  ctx.lineTo(X(t, cx - hw), Y(t, cy - 2.5));
+  ctx.closePath();
+}
+
+/** 命中/失误时在底图的判定块与菱形上叠加高亮（静止时完全不画，保持与参考一致）。 */
+function drawTargetsFeedback(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame, glow: boolean) {
+  for (let i = 0; i < 5; i++) {
+    const part = BOTTOM_SLOTS[i] ?? null;
+    const hit = hitAmount(f, part), miss = missAmount(f, part);
+    if (!hit && !miss) continue;
+    ctx.save();
+    padPath(ctx, t, i);
+    ctx.fillStyle = miss && !hit ? `rgba(248,113,113,${0.35 * miss})` : hexToRgba(GOLD, 0.2 + hit * 0.45);
+    ctx.shadowColor = miss && !hit ? "#f87171" : GOLD;
+    ctx.shadowBlur = glow ? 18 * Math.max(hit, miss) * t.s : 0;
+    ctx.fill();
+    ctx.strokeStyle = hexToRgba("#fff6c4", 0.5 + hit * 0.5);
+    ctx.lineWidth = 1.6 * t.s;
+    ctx.stroke();
+    ctx.restore();
+  }
+  for (let i = 0; i < 4; i++) {
+    const part = TOP_SLOTS[i] ?? null;
+    const hit = hitAmount(f, part), miss = missAmount(f, part);
+    if (!hit && !miss) continue;
+    const d = DIAMONDS[i]; if (!d) continue;
+    ctx.save();
+    diamondPath(ctx, t, d[0], d[1], d[2], d[3]);
+    ctx.fillStyle = miss && !hit ? `rgba(248,113,113,${0.35 * miss})` : hexToRgba(GOLD, 0.18 + hit * 0.5);
+    ctx.shadowColor = miss && !hit ? "#f87171" : GOLD;
+    ctx.shadowBlur = glow ? 16 * Math.max(hit, miss) * t.s : 0;
+    ctx.fill();
+    ctx.strokeStyle = hexToRgba("#fff6c4", 0.55 + hit * 0.45);
+    ctx.lineWidth = 1.5 * t.s;
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/** 时间 → 参考坐标 y（地面透视：y = 地平线 + D / z）。 */
+function depthOf(dtMs: number, speed: number): number {
+  return 1 + (dtMs * speed / LEAD_MS) * (Z_FAR - 1);
+}
+
+function placeNotes(f: StageFrame): Placed[] {
+  const out: Placed[] = [];
+  const bottomD = PAD_HIT_Y - HORIZON_Y;
+  for (const n of f.chart.notes) {
+    if (n.note === undefined) continue;
+    const part = partOfNote(n.note);
+    const slot = part ? slotOf(part) : null;
+    if (!part || !slot) continue;
+    const z = depthOf(n.timeMs - f.timeMs, f.speed);
+    if (z > Z_FAR || z < 0.86) continue;
+    const alpha = Math.min(1, (Z_FAR - z) / 2.2);
+    let tail: Placed["tail"] = null;
+    if (slot.row === 1) {
+      const y = HORIZON_Y + bottomD / z;
+      const l = railX(slot.index * 2, y), r = railX(slot.index * 2 + 1, y);
+      const halfH = (y - HORIZON_Y) * THICK * 0.5;
+      if (n.holdMs) {
+        const zt = Math.min(Z_FAR, depthOf(n.timeMs + n.holdMs - f.timeMs, f.speed));
+        const ty = HORIZON_Y + bottomD / zt;
+        tail = { y: ty, halfW: (railX(slot.index * 2 + 1, ty) - railX(slot.index * 2, ty)) * 0.5 - 1 };
+      }
+      out.push({
+        row: 1, index: slot.index, timeMs: n.timeMs, label: hatLabel(part, n.note),
+        cx: (l + r) / 2, cy: y, halfW: (r - l) / 2 - 1, halfH, alpha, tail,
+      });
+    } else {
+      const d = DIAMONDS[slot.index]; if (!d) continue;
+      const topD = d[1] - HORIZON_Y;
+      const y = HORIZON_Y + topD / z;
+      const k = (y - HORIZON_Y) / topD;
+      const cx = 782 + (d[0] - 782) * k;
+      if (n.holdMs) {
+        const zt = Math.min(Z_FAR, depthOf(n.timeMs + n.holdMs - f.timeMs, f.speed));
+        const ty = HORIZON_Y + topD / zt;
+        tail = { y: ty, halfW: d[2] * 0.35 * ((ty - HORIZON_Y) / topD) };
+      }
+      out.push({
+        row: 0, index: slot.index, timeMs: n.timeMs, label: null,
+        cx, cy: y, halfW: d[2] * 0.82 * k, halfH: d[3] * 0.82 * k, alpha, tail,
+      });
+    }
+  }
+  return out.sort((a, b) => a.cy - b.cy);
+}
+
+function drawChordLinks(ctx: CanvasRenderingContext2D, t: Xf, placed: Placed[], glow: boolean) {
+  const groups = new Map<number, Placed[]>();
+  for (const p of placed) {
+    const k = Math.round(p.timeMs / 15);
+    const a = groups.get(k); if (a) a.push(p); else groups.set(k, [p]);
+  }
+  for (const g of groups.values()) {
+    const tops = g.filter((x) => x.row === 0), bottoms = g.filter((x) => x.row === 1);
+    for (const a of tops) for (const b of bottoms) {
+      const p1: Pt = { x: X(t, a.cx), y: Y(t, a.cy + a.halfH) };
+      const p2: Pt = { x: X(t, b.cx), y: Y(t, b.cy - b.halfH) };
+      ctx.save();
+      ctx.globalAlpha = Math.min(a.alpha, b.alpha) * 0.55;
+      ctx.strokeStyle = NOTE_ORANGE;
+      ctx.lineWidth = 1.4 * t.s;
+      ctx.shadowColor = NOTE_ORANGE; ctx.shadowBlur = glow ? 5 * t.s : 0;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
+function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
+  const x0 = X(t, n.cx - n.halfW), x1 = X(t, n.cx + n.halfW);
+  const y0 = Y(t, n.cy - n.halfH), y1 = Y(t, n.cy + n.halfH);
+  const w = x1 - x0, h = Math.max(1.5, y1 - y0);
+  if (n.tail) {
+    const ty = Y(t, n.tail.y), thw = n.tail.halfW * t.s, cx = X(t, n.cx);
+    ctx.save(); ctx.globalAlpha = n.alpha * 0.28; ctx.fillStyle = NOTE_ORANGE;
+    ctx.beginPath(); ctx.moveTo(cx - thw, ty); ctx.lineTo(cx + thw, ty); ctx.lineTo(x1, y0); ctx.lineTo(x0, y0); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
   ctx.save();
-  ctx.strokeStyle = hexToRgba(RAIL, alpha);
-  ctx.lineWidth = width;
-  ctx.shadowColor = RAIL;
-  ctx.shadowBlur = glow ? width * 3.2 : 0;
-  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.globalAlpha = n.alpha;
+  // 外层橙色发光底
+  ctx.shadowColor = NOTE_ORANGE; ctx.shadowBlur = glow ? Math.max(3, h * 0.9) : 0;
+  const body = ctx.createLinearGradient(0, y0, 0, y1);
+  body.addColorStop(0, "#ffb347"); body.addColorStop(0.5, "#ff9a1f"); body.addColorStop(1, "#d86a08");
+  ctx.fillStyle = body; ctx.fillRect(x0, y0, w, h);
+  ctx.shadowBlur = 0;
+  // 内层浅色牌面 + 亮边
+  if (h > 4) {
+    const ix = w * 0.035, iy = h * 0.2;
+    const face = ctx.createLinearGradient(0, y0 + iy, 0, y1 - iy);
+    face.addColorStop(0, "rgba(255,236,200,0.95)"); face.addColorStop(0.55, "rgba(255,206,140,0.9)"); face.addColorStop(1, "rgba(240,160,70,0.9)");
+    ctx.fillStyle = face; ctx.fillRect(x0 + ix, y0 + iy, w - ix * 2, h - iy * 2);
+    ctx.strokeStyle = "rgba(255,250,225,0.95)"; ctx.lineWidth = Math.max(0.8, h * 0.06);
+    ctx.strokeRect(x0 + ix, y0 + iy, w - ix * 2, h - iy * 2);
+  } else {
+    ctx.strokeStyle = "rgba(255,230,180,0.9)"; ctx.lineWidth = 0.8; ctx.strokeRect(x0, y0, w, h);
+  }
+  if (n.label && h > 5) {
+    const fs = h * 0.78;
+    ctx.translate((x0 + x1) / 2, (y0 + y1) / 2);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = `italic 500 ${fs}px system-ui, sans-serif`;
+    const tw = ctx.measureText(n.label).width, max = w * 0.74;
+    if (tw > max) ctx.scale(max / tw, 1);
+    ctx.fillStyle = "rgba(128,68,12,0.92)";
+    ctx.fillText(n.label, 0, fs * 0.04);
+  }
   ctx.restore();
 }
 
-function drawMountains(ctx: CanvasRenderingContext2D, g: Geom, glow: boolean) {
-  const ridges = [
-    [0,.10,.08,.18,.16,.13,.24,.25,.33,.19,.42,.30,.51,.20,.60,.27,.70,.16,.80,.22,.90,.12,1,.17],
-    [0,.06,.10,.12,.20,.08,.30,.17,.40,.11,.50,.20,.61,.12,.72,.16,.84,.08,.94,.13,1.04,.07],
-  ];
-  for (const side of [-1, 1] as const) {
-    for (let layer = 0; layer < ridges.length; layer++) {
-      const values = ridges[layer] ?? [];
-      const inner = groundPoint(g, side * (1.07 + layer * 0.03), 0.025 + layer * 0.02);
-      const outerX = side < 0 ? 0 : g.w;
-      const span = Math.abs(outerX - inner.x);
-      const baseAt = (t: number) => g.horizonY + g.h * (0.015 + t * 0.19);
-      const xAt = (t: number) => inner.x + side * span * t;
-      const yAt = (t: number, peak: number) => baseAt(t) - peak * g.h * (0.32 + t * 0.08);
-      ctx.save();
-      ctx.strokeStyle = hexToRgba(RAIL, layer === 0 ? 0.32 : 0.16);
-      ctx.lineWidth = layer === 0 ? 1.25 : 0.8;
-      ctx.shadowColor = RAIL; ctx.shadowBlur = glow ? 4 : 0;
-      ctx.beginPath();
-      for (let i = 0; i < values.length; i += 2) {
-        const t = values[i] ?? 0, peak = values[i + 1] ?? 0;
-        if (i === 0) ctx.moveTo(xAt(t), yAt(t, peak)); else ctx.lineTo(xAt(t), yAt(t, peak));
-      }
-      ctx.stroke();
-      for (let i = 0; i + 3 < values.length; i += 2) {
-        const ta = values[i] ?? 0, pa = values[i + 1] ?? 0;
-        const tb = values[i + 2] ?? 0, pb = values[i + 3] ?? 0;
-        const mid = (ta + tb) * 0.5;
-        ctx.beginPath();
-        ctx.moveTo(xAt(ta), yAt(ta, pa));
-        ctx.lineTo(xAt(mid), baseAt(mid));
-        ctx.lineTo(xAt(tb), yAt(tb, pb));
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-  }
-}
-
-function drawLane(ctx: CanvasRenderingContext2D, g: Geom, index: number, glow: boolean) {
-  const center = laneCenter(index);
-  const q = groundQuad(g, center, LANE_WIDTH, 0.515, 1.018);
-  const floor = ctx.createLinearGradient(0, g.horizonY, 0, g.nearY);
-  floor.addColorStop(0, "rgba(8,30,48,0.28)");
-  floor.addColorStop(1, "rgba(2,10,21,0.78)");
-  ctx.save(); quadPath(ctx, q); ctx.fillStyle = floor; ctx.fill(); ctx.restore();
-
-  for (const edge of [-1, 1] as const) {
-    const u = center + edge * LANE_WIDTH * 0.5;
-    drawGlowLine(ctx, groundPoint(g, u, 0.004), groundPoint(g, u, 1.025), 0.65, 1.15, glow);
-    const inset = u - edge * 0.012;
-    drawGlowLine(ctx, groundPoint(g, inset, 0.035), groundPoint(g, inset, 1.01), 0.2, 0.7, false);
-  }
-}
-
-function drawScene(ctx: CanvasRenderingContext2D, g: Geom, now: number, glow: boolean) {
-  const sky = ctx.createLinearGradient(0, 0, 0, g.h);
-  sky.addColorStop(0, "rgba(5,11,24,0.93)");
-  sky.addColorStop(0.52, "rgba(7,17,34,0.90)");
-  sky.addColorStop(1, "rgba(2,7,15,0.97)");
-  ctx.fillStyle = sky; ctx.fillRect(0, 0, g.w, g.h);
-
-  const halo = ctx.createLinearGradient(g.cx - g.w * 0.12, 0, g.cx + g.w * 0.12, 0);
-  halo.addColorStop(0, "rgba(0,0,0,0)");
-  halo.addColorStop(0.38, hexToRgba(RAIL, 0.04));
-  halo.addColorStop(0.5, hexToRgba(RAIL, 0.34));
-  halo.addColorStop(0.62, hexToRgba(RAIL, 0.04));
-  halo.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.save(); ctx.fillStyle = halo; ctx.fillRect(g.cx-g.w*.13,g.horizonY-g.h*.018,g.w*.26,g.h*.04); ctx.restore();
-
-  drawMountains(ctx, g, glow);
-  for (let i = 0; i < 5; i++) drawLane(ctx, g, i, glow);
-
-  const flow = (now / 5000) % 0.03;
-  for (let i = 0; i < 43; i++) {
-    const d = Math.min(1.02, Math.pow((i + 1) / 43, 1.58) + flow * (i / 43));
-    const leftInner = groundPoint(g, -1.08, d), leftOuter = groundPoint(g, -1.43, d);
-    const rightInner = groundPoint(g, 1.08, d), rightOuter = groundPoint(g, 1.43, d);
-    const alpha = 0.08 + d * 0.19;
-    drawGlowLine(ctx, leftInner, { x: leftOuter.x, y: leftInner.y }, alpha, 0.85, false);
-    drawGlowLine(ctx, rightInner, { x: rightOuter.x, y: rightInner.y }, alpha, 0.85, false);
-  }
-}
-
-function topTarget(g: Geom, index: number): StandingTarget {
-  const depth = TOP_DEPTH[index] ?? g.topDepth;
-  const floor = groundPoint(g, TOP_U[index] ?? 0, depth);
-  const scale = 0.72 + depth * 0.28;
-  return {
-    center: { x: floor.x, y: floor.y - g.h * (index === 0 || index === 3 ? 0.016 : 0.027) },
-    width: g.w * 0.037 * scale,
-    height: g.h * 0.085 * scale,
-    skew: (index - 1.5) * g.w * 0.0028,
-    depth,
-  };
-}
-
-function diamondPoints(t: StandingTarget, lift = 0): [Point, Point, Point, Point] {
-  const cx = t.center.x, cy = t.center.y - lift;
-  return [
-    { x: cx + t.skew, y: cy - t.height * 0.5 },
-    { x: cx + t.width * 0.5, y: cy },
-    { x: cx - t.skew, y: cy + t.height * 0.5 },
-    { x: cx - t.width * 0.5, y: cy },
-  ];
-}
-
-function diamondPath(ctx: CanvasRenderingContext2D, points: readonly Point[]) {
-  const first = points[0]; if (!first) return;
-  ctx.beginPath(); ctx.moveTo(first.x, first.y);
-  for (let i = 1; i < points.length; i++) { const p = points[i]; if (p) ctx.lineTo(p.x, p.y); }
-  ctx.closePath();
-}
-
-function drawTopRow(ctx: CanvasRenderingContext2D, g: Geom, f: StageFrame, glow: boolean) {
-  const bandLeft = groundPoint(g, -1.04, g.topDepth);
-  const bandRight = groundPoint(g, 1.04, g.topDepth);
-  ctx.save(); ctx.strokeStyle = hexToRgba(ACCENT, 0.62); ctx.lineWidth = 1.25;
-  ctx.shadowColor = ACCENT; ctx.shadowBlur = glow ? 5 : 0;
-  ctx.beginPath(); ctx.moveTo(bandLeft.x, bandLeft.y); ctx.lineTo(bandRight.x, bandRight.y); ctx.stroke(); ctx.restore();
-
-  for (let i = 0; i < TOP_SLOTS.length; i++) {
-    const part = TOP_SLOTS[i]; if (!part) continue;
-    const hit = Math.max(0, Math.min(1, ((f.flashes[part] ?? 0) - f.now) / FLASH_MS));
-    const miss = Math.max(0, Math.min(1, ((f.missFlashes?.[part] ?? 0) - f.now) / 240));
-    const target = topTarget(g, i);
-    const rear = diamondPoints(target, g.h * 0.008);
-    const front = diamondPoints(target);
-    ctx.save();
-    ctx.strokeStyle = miss ? "rgba(248,113,113,0.95)" : hexToRgba(ACCENT, 0.42 + hit * 0.48);
-    ctx.fillStyle = hit ? hexToRgba(PART_BY_ID[part].color, 0.25 + hit * 0.48) : "rgba(8,14,24,0.2)";
-    ctx.lineWidth = 1.25; ctx.shadowColor = hit ? PART_BY_ID[part].color : ACCENT; ctx.shadowBlur = glow ? 5 + hit * 10 : 0;
-    diamondPath(ctx, rear); ctx.stroke();
-    for (let p = 0; p < 4; p++) {
-      const a = rear[p], b = front[p]; if (!a || !b) continue;
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
-    }
-    diamondPath(ctx, front); ctx.fill(); ctx.stroke();
+function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
+  if (n.tail) {
+    ctx.save(); ctx.globalAlpha = n.alpha * 0.28; ctx.fillStyle = NOTE_ORANGE;
+    const ty = Y(t, n.tail.y), thw = n.tail.halfW * t.s, cx = X(t, n.cx), hw = n.halfW * 0.35 * t.s;
+    ctx.beginPath(); ctx.moveTo(cx - thw, ty); ctx.lineTo(cx + thw, ty); ctx.lineTo(cx + hw, Y(t, n.cy)); ctx.lineTo(cx - hw, Y(t, n.cy)); ctx.closePath(); ctx.fill();
     ctx.restore();
   }
-}
-
-function drawChevron(ctx: CanvasRenderingContext2D, q: Quad, direction: -1 | 1, offset: number) {
-  const centerX = q.cx + direction * q.width * offset;
-  const sy = Math.max(2, q.height * 0.31), sx = q.width * 0.075;
+  const cx = X(t, n.cx), cy = Y(t, n.cy), hw = Math.max(1.5, n.halfW * t.s), hh = Math.max(1.5, n.halfH * t.s);
+  ctx.save();
+  ctx.globalAlpha = n.alpha;
   ctx.beginPath();
-  ctx.moveTo(centerX - direction * sx, q.cy - sy);
-  ctx.lineTo(centerX, q.cy);
-  ctx.lineTo(centerX - direction * sx, q.cy + sy);
-  ctx.stroke();
+  ctx.moveTo(cx, cy - hh); ctx.lineTo(cx + hw, cy); ctx.lineTo(cx, cy + hh); ctx.lineTo(cx - hw, cy); ctx.closePath();
+  const g = ctx.createLinearGradient(0, cy - hh, 0, cy + hh);
+  g.addColorStop(0, "#ffd08a"); g.addColorStop(0.5, "#ff9a1f"); g.addColorStop(1, "#d86a08");
+  ctx.fillStyle = g; ctx.shadowColor = NOTE_ORANGE; ctx.shadowBlur = glow ? Math.max(3, hh * 0.6) : 0; ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(255,248,220,0.95)"; ctx.lineWidth = Math.max(0.8, hh * 0.08); ctx.stroke();
+  ctx.restore();
 }
 
-function drawBottomRow(ctx: CanvasRenderingContext2D, g: Geom, f: StageFrame, glow: boolean) {
-  for (let i = 0; i < 5; i++) {
-    const part = BOTTOM_SLOTS[i];
-    const expiry = part ? Math.max(f.flashes[part] ?? 0, part === "hihat" ? f.flashes["pedalHat"] ?? 0 : 0) : 0;
-    const hit = Math.max(0, Math.min(1, (expiry - f.now) / FLASH_MS));
-    const q = groundQuad(g, laneCenter(i), LANE_WIDTH * 0.94, g.bottomDepth, 0.052);
-    ctx.save(); quadPath(ctx, q); ctx.clip();
-    ctx.fillStyle = hit ? hexToRgba(ACCENT, 0.25 + hit * 0.45) : "rgba(5,12,20,0.82)";
-    ctx.fillRect(q.farLeft.x, q.farLeft.y, q.nearRight.x-q.farLeft.x, q.nearRight.y-q.farLeft.y);
-    ctx.strokeStyle = hexToRgba(ACCENT, 0.78 + hit * 0.2); ctx.lineWidth = Math.max(1.2, g.h*0.0018);
-    ctx.shadowColor = ACCENT; ctx.shadowBlur = glow ? 5 + hit*10 : 0;
-    for (const dir of [-1,1] as const) for (const off of [0.08,0.19,0.30]) drawChevron(ctx,q,dir,off);
-    ctx.restore();
-    ctx.save(); quadPath(ctx,q); ctx.strokeStyle=hexToRgba(ACCENT,0.92); ctx.lineWidth=1.25; ctx.shadowColor=ACCENT; ctx.shadowBlur=glow?6:0; ctx.stroke(); ctx.restore();
-
-    if (FOOT_SLOTS.has(i)) {
-      const p = groundPoint(g, laneCenter(i), 0.97);
-      ctx.save(); ctx.fillStyle=hexToRgba(ACCENT,0.27); ctx.translate(p.x,p.y); ctx.rotate(i===1?-0.07:0.07);
-      ctx.beginPath(); ctx.ellipse(0,0,g.w*0.008,g.h*0.021,0,0,Math.PI*2); ctx.fill();
-      for(let t=0;t<4;t++){ctx.beginPath();ctx.arc((t-1.5)*g.w*0.0045,-g.h*0.022,g.w*0.0019,0,Math.PI*2);ctx.fill();}
-      ctx.restore();
+export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: number, f: StageFrame) {
+  const glow = quality.params.glow;
+  const t = transformOf(w, h);
+  ctx.save();
+  drawPlate(ctx, w, h, t);
+  drawTargetsFeedback(ctx, t, f, glow);
+  if (f.showNotes !== false) {
+    const placed = placeNotes(f);
+    drawChordLinks(ctx, t, placed, glow);
+    for (const n of placed) {
+      if (n.row === 1) drawBar(ctx, t, n, glow); else drawDiamondNote(ctx, t, n, glow);
     }
   }
+  ctx.restore();
+  const v = stageViewport(w, h);
+  ctx.save(); ctx.translate(v.x, v.y); drawHud(ctx, v.w, v.h, f); ctx.restore();
 }
 
-function bottomNoteQuad(g: Geom, slot: Slot, depth: number): Quad {
-  return groundQuad(g, laneCenter(slot.index), LANE_WIDTH * 0.79, depth, 0.034);
-}
-
-function topNoteQuad(g: Geom, slot: Slot, progress: number): Quad {
-  const target = topTarget(g, slot.index);
-  const start = groundPoint(g, TOP_U[slot.index] ?? 0, 0.025);
-  const eased = Math.pow(Math.max(0, Math.min(1, progress)), 1.36);
-  const cx = start.x + (target.center.x - start.x) * eased;
-  const cy = start.y + (target.center.y - start.y) * eased;
-  const width = Math.max(3, target.width * (0.12 + eased * 0.88));
-  const height = Math.max(2, target.height * (0.12 + eased * 0.88));
-  const farLeft = { x: cx - width * 0.5, y: cy };
-  const farRight = { x: cx, y: cy - height * 0.5 };
-  const nearRight = { x: cx + width * 0.5, y: cy };
-  const nearLeft = { x: cx, y: cy + height * 0.5 };
-  return { farLeft, farRight, nearRight, nearLeft, cx, cy, width, height };
-}
-
-function placeNotes(g: Geom, f: StageFrame): Placed[] {
-  const out: Placed[]=[];
-  for(const n of f.chart.notes){
-    if(n.note===undefined) continue;
-    const part=partOfNote(n.note), slot=part?slotOf(part):null;
-    if(!part||!slot) continue;
-    const linear=1-((n.timeMs-f.timeMs)*f.speed)/LEAD_MS;
-    const tailLinear=n.holdMs?1-((n.timeMs+n.holdMs-f.timeMs)*f.speed)/LEAD_MS:linear;
-    if(linear<=0.012||tailLinear>=1.025) continue;
-    const progress=Math.max(0.012,Math.min(1,linear));
-    const tailProgress=Math.max(0.012,Math.min(1,tailLinear));
-    const target=slot.row===0?g.topDepth:g.bottomDepth;
-    const depth=(v:number)=>target*Math.pow(v,1.43);
-    const quad=slot.row===0?topNoteQuad(g,slot,progress):bottomNoteQuad(g,slot,depth(progress));
-    const tailQuad=n.holdMs?(slot.row===0?topNoteQuad(g,slot,tailProgress):bottomNoteQuad(g,slot,depth(tailProgress))):null;
-    out.push({part,row:slot.row,quad,color:PART_BY_ID[part].color,label:hatLabel(part,n.note),timeMs:n.timeMs,tailQuad});
-  }
-  return out.sort((a,b)=>a.quad.cy-b.quad.cy);
-}
-
-function drawChordLinks(ctx:CanvasRenderingContext2D, placed:Placed[], glow:boolean){
-  const groups=new Map<number,Placed[]>();
-  for(const p of placed){const k=Math.round(p.timeMs/15);const a=groups.get(k);if(a)a.push(p);else groups.set(k,[p]);}
-  for(const group of groups.values()){
-    const tops=group.filter(x=>x.row===0), bottoms=group.filter(x=>x.row===1);
-    for(const a of tops)for(const b of bottoms){
-      const dx=b.quad.cx-a.quad.cx,dy=b.quad.cy-a.quad.cy,len=Math.max(1,Math.hypot(dx,dy));
-      const aPad=Math.min(a.quad.width,a.quad.height)*0.45,bPad=Math.min(b.quad.width,b.quad.height)*0.45;
-      const p1={x:a.quad.cx+dx/len*aPad,y:a.quad.cy+dy/len*aPad},p2={x:b.quad.cx-dx/len*bPad,y:b.quad.cy-dy/len*bPad};
-      const grad=ctx.createLinearGradient(p1.x,p1.y,p2.x,p2.y);grad.addColorStop(0,hexToRgba(a.color,.43));grad.addColorStop(1,hexToRgba(b.color,.43));
-      ctx.save();ctx.strokeStyle=grad;ctx.lineWidth=1.25;ctx.shadowColor=a.color;ctx.shadowBlur=glow?4:0;ctx.beginPath();ctx.moveTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.stroke();ctx.restore();
-    }
-  }
-}
-
-function drawNote(ctx:CanvasRenderingContext2D,n:Placed,glow:boolean){
-  const q=n.quad;
-  if(n.tailQuad){const t=n.tailQuad;ctx.save();ctx.beginPath();ctx.moveTo(t.farLeft.x,t.farLeft.y);ctx.lineTo(t.farRight.x,t.farRight.y);ctx.lineTo(q.nearRight.x,q.nearRight.y);ctx.lineTo(q.nearLeft.x,q.nearLeft.y);ctx.closePath();ctx.fillStyle=hexToRgba(n.color,.16);ctx.fill();ctx.restore();}
-  ctx.save();quadPath(ctx,q);
-  const base=n.label?NOTE_ORANGE:n.color;
-  const grad=ctx.createLinearGradient(0,q.farLeft.y,0,q.nearLeft.y);grad.addColorStop(0,hexToRgba(base,.98));grad.addColorStop(1,hexToRgba(base,.72));
-  ctx.fillStyle=grad;ctx.shadowColor=base;ctx.shadowBlur=glow?7:0;ctx.fill();ctx.strokeStyle="rgba(255,234,178,.88)";ctx.lineWidth=.9;ctx.stroke();ctx.restore();
-  if(n.label&&q.height>4){
-    const fs=Math.max(7,Math.min(19,q.height*0.82));ctx.save();ctx.translate(q.cx,q.cy);ctx.textAlign="center";ctx.textBaseline="middle";ctx.font=`700 ${fs}px system-ui, sans-serif`;
-    const tw=ctx.measureText(n.label).width,max=q.width*.82;if(tw>max)ctx.scale(max/tw,1);
-    ctx.strokeStyle="rgba(70,34,4,.72)";ctx.lineWidth=Math.max(1.2,fs*.13);ctx.strokeText(n.label,0,0);ctx.fillStyle="rgba(255,245,220,.98)";ctx.fillText(n.label,0,0);ctx.restore();
-  }
-}
-
-export function renderColumns(ctx:CanvasRenderingContext2D,w:number,h:number,f:StageFrame){
-  const glow=quality.params.glow,v=stageViewport(w,h);
-  ctx.save();ctx.fillStyle=SKY;ctx.fillRect(0,0,w,h);ctx.translate(v.x,v.y);ctx.beginPath();ctx.rect(0,0,v.w,v.h);ctx.clip();
-  const g=geomOf(v.w,v.h);drawScene(ctx,g,f.now,glow);drawTopRow(ctx,g,f,glow);drawBottomRow(ctx,g,f,glow);
-  if(f.showNotes!==false){const placed=placeNotes(g,f);drawChordLinks(ctx,placed,glow);for(const n of placed)drawNote(ctx,n,glow);}
-  ctx.restore();ctx.save();ctx.translate(v.x,v.y);drawHud(ctx,v.w,v.h,f);ctx.restore();
-}
+/** 供校验脚本使用：参考坐标系常量。 */
+export const COLUMNS_REF = { REF_W, REF_H, HORIZON_Y, PAD_HIT_Y } as const;
