@@ -126,6 +126,9 @@ export const saveSong = createServerFn({ method: "POST" })
         drums_path: data.paths.drums,
         other_path: data.paths.other,
         midi_path: data.paths.midi,
+        metro_path: data.paths.metro ?? null,
+        cover_path: data.paths.cover ?? null,
+
         sizes: data.sizes,
         published: data.published ?? true,
       })
