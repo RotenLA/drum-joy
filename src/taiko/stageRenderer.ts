@@ -539,7 +539,9 @@ function drawBeatMarks(
       const base = Math.max(2, Math.min(w, h) * 0.05 * (0.18 + 0.82 * p));
       const fade = Math.min(1, t / 0.12);
       const rel = ((k - shift) % barSteps + barSteps) % barSteps;
-      const sub = rel % 4;
+      const sub = rel % stepsPerBeat;
+      const half = stepsPerBeat / 2;
+
 
       if (sub === 0) {
         // 正拍：很短的细实线；小节首拍略长
