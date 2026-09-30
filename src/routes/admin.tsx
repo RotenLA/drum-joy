@@ -419,18 +419,38 @@ function AdminPage() {
   const regen = async (row: AdminSongRow) => {
     setBusy(`重新生成《${row.title}》谱面…`);
     try {
-      const { url } = await midiUrlOf({ data: { id: row.id } });
+      const { url, metroUrl } = await midiUrlOf({ data: { id: row.id } });
       const buf = await (await fetch(url)).arrayBuffer();
       const parsed = applyConstantTempo(parseMidi(buf), Number(row.bpm));
-      const charts = buildAllCharts(parsed, row.title, Number(row.bpm));
+      // 有节拍器轨的歌重建时重新解析绝对拍点，保证谱面与音乐同相位
+      let beatMap: ChartBeatMap | null = null;
+      if (metroUrl) {
+        setBusy(`解析《${row.title}》节拍器轨…`);
+        const metroResponse = await fetch(metroUrl);
+        if (metroResponse.ok) {
+          const blob = await metroResponse.blob();
+          const AudioCtor = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+          if (AudioCtor) {
+            const ctx = new AudioCtor();
+            try {
+              const analysis = await analyzeMetroFile(new File([blob], "metro.mp3", { type: blob.type }), ctx);
+              if (analysis) beatMap = toChartBeatMap(analysis);
+            } finally {
+              void ctx.close();
+            }
+          }
+        }
+      }
+      const charts = buildAllCharts(parsed, row.title, Number(row.bpm), beatMap);
       await regenerate({
         data: {
           songId: row.id,
-          fingerprint: chartVersionFingerprint(parsed),
+          fingerprint: chartVersionFingerprint(parsed, beatMap),
           charts: charts.map((c) => ({ difficulty: c.difficulty, chart: c.chart })),
         },
       });
-      setNote(`《${row.title}》四档谱面已重建`);
+      setNote(`《${row.title}》四档谱面已重建${beatMap ? "（已按节拍器轨对齐）" : ""}`);
+
     } catch (err) {
       setNote(`重建失败：${(err as Error).message}`);
     } finally {
