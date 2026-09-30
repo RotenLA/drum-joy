@@ -99,7 +99,7 @@ function parseId3(data: Uint8Array): AudioMeta | null {
         p += 1;
       }
       if (p < body.length) {
-        out.cover = { blob: new Blob([body.subarray(p)], { type: mime }), ext: extOfMime(mime) };
+        out.cover = { blob: new Blob([toBlobPart(body.subarray(p))], { type: mime }), ext: extOfMime(mime) };
       }
     }
     at += headerLen + frameSize;
