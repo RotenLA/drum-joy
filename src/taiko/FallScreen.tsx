@@ -243,9 +243,30 @@ export function FallScreen({
       // 倒计时与播放共用同一个时钟（音频时钟为准），从负数连续走到 0
       if (ph === "playing" || ph === "countdown") {
         if (ph === "countdown") {
+          // 暂停后继续：倒计时期间音符静止，倒数结束才继续下落
+          if (!countdownFreshRef.current) return countdownTargetRef.current;
           return countdownTargetRef.current - countdownMsRef.current + (now - countdownStartRef.current);
         }
-        return hasAudio ? songPlayer.timeMs() : now - silentStartRef.current;
+        if (!hasAudio) return now - silentStartRef.current;
+        // 声音时钟卡住（引擎未唤醒）时用页面时钟兜底推进，并定期重新唤醒起播
+        const g = clockGuardRef.current;
+        const a = songPlayer.timeMs();
+        if (songPlayer.playing && a !== g.lastAudio) {
+          g.lastAudio = a; g.lastAt = now; g.stalled = false;
+          return a;
+        }
+        if (now - g.lastAt < 300) return g.lastAudio;
+        const fb = g.lastAudio + (now - g.lastAt);
+        if (!g.stalled || now - g.retryAt > 1000) {
+          g.stalled = true; g.retryAt = now;
+          const ctx = getAudioContext();
+          void ctx.resume().catch(() => undefined).then(() => {
+            if (phaseRef.current !== "playing") return;
+            const t2 = clockGuardRef.current.lastAudio + (performance.now() - clockGuardRef.current.lastAt);
+            songPlayer.play(Math.max(0, t2));
+          });
+        }
+        return fb;
       }
       if (ph === "idle") return 0;
       return timeRef.current;
