@@ -40,14 +40,13 @@ const PAD_HIT_Y = (PAD_TOP + PAD_BOTTOM) / 2;
 const DIAMONDS: readonly [number, number, number, number][] = [
   [478.5, 393.5, 26.5, 27.5], [783.5, 396, 27.5, 31], [928, 396, 27, 31], [1082.5, 392.5, 24.5, 26.5],
 ];
-/**
- * 上排四条红线的独立出生点。红线标注的斜率依次约为
- * -0.94 / 0 / 0.49 / 0.91，不与下排中央消失点共用。
- */
-const TOP_SPAWNS: readonly [number, number][] = [[691, 172], [785, 172], [820, 172], [879, 172]];
-/** 1x 在 1564×720 参考画面中的恒定移动速度（px/ms）。 */
-const FALL_PX_PER_MS = (PAD_HIT_Y - HORIZON_Y) / 2200;
+/** 上排素材保持竖直，底部横片依次沿第 1、3、4、5 条跑道下落。 */
+const TOP_RAIL_SLOTS = [0, 2, 3, 4] as const;
+/** 1x 从地平线到判定线的统一飞行时长。 */
+const FALL_MS = 2200;
 const FLASH_MS = 200;
+const HIT_COVER_MS = 180;
+const MISS_FADE_MS = 200;
 
 const GOLD = "#ffd84a";
 
@@ -57,7 +56,7 @@ const TOP_SLOTS: readonly PartId[] = ["crash", "highTom", "midTom", "ride"];
 interface Slot { row: 0 | 1; index: number }
 interface Xf { s: number; tx: number; ty: number }
 interface Placed {
-  row: 0 | 1; index: number; timeMs: number; label: string | null;
+  row: 0 | 1; index: number; noteIndex: number; timeMs: number; label: string | null;
   /** 参考坐标 */
   cx: number; cy: number; progress: number; alpha: number;
 }
@@ -317,42 +316,41 @@ function drawTargetsFeedback(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame
   }
 }
 
-/** 时间 → 沿实际路径长度的线性进度；缩放不参与位置计算。 */
-function fallProgress(dtMs: number, speed: number, pathLength: number): number {
-  return 1 - (dtMs * speed * FALL_PX_PER_MS) / Math.max(1, pathLength);
+/** 所有跑道共用同一纵向进度，因此同刻音符在任何位置都齐平。 */
+function fallProgress(dtMs: number, speed: number): number {
+  return 1 - (dtMs * speed) / FALL_MS;
 }
 
 function placeNotes(f: StageFrame): Placed[] {
   const out: Placed[] = [];
-  for (const n of f.chart.notes) {
+  for (let noteIndex = 0; noteIndex < f.chart.notes.length; noteIndex++) {
+    const n = f.chart.notes[noteIndex];
+    if (!n) continue;
     if (n.note === undefined) continue;
     const part = partOfNote(n.note);
     const slot = part ? slotOf(part) : null;
     if (!part || !slot) continue;
+    const state = f.noteJudgements?.[noteIndex] ?? 0;
+    if (state === 1) continue;
+    const progress = fallProgress(n.timeMs - f.timeMs, f.speed);
+    const afterHitMs = f.timeMs - n.timeMs;
+    if (progress < 0 || afterHitMs > MISS_FADE_MS || state === 2) continue;
+    const clamped = Math.min(1, progress);
+    const fade = afterHitMs > 0 ? Math.max(0, 1 - afterHitMs / MISS_FADE_MS) : 1;
+    const y = HORIZON_Y + (PAD_HIT_Y - HORIZON_Y) * clamped;
     if (slot.row === 1) {
-      const startY = HORIZON_Y;
-      const startX = (railX(slot.index * 2, startY) + railX(slot.index * 2 + 1, startY)) / 2;
-      const endX = (railX(slot.index * 2, PAD_HIT_Y) + railX(slot.index * 2 + 1, PAD_HIT_Y)) / 2;
-      const pathLength = Math.hypot(endX - startX, PAD_HIT_Y - startY);
-      const progress = fallProgress(n.timeMs - f.timeMs, f.speed, pathLength);
-      if (progress < 0 || progress > 1) continue;
-      const y = startY + (PAD_HIT_Y - startY) * progress;
       const l = railX(slot.index * 2, y), r = railX(slot.index * 2 + 1, y);
       out.push({
-        row: 1, index: slot.index, timeMs: n.timeMs, label: hatLabel(part, n.note),
-        cx: (l + r) / 2, cy: y, progress, alpha: Math.min(1, progress * 8),
+        row: 1, index: slot.index, noteIndex, timeMs: n.timeMs, label: hatLabel(part, n.note),
+        cx: (l + r) / 2, cy: y, progress: clamped, alpha: Math.min(1, clamped * 8) * fade,
       });
     } else {
-      const d = DIAMONDS[slot.index]; if (!d) continue;
-      const spawn = TOP_SPAWNS[slot.index]; if (!spawn) continue;
-      const pathLength = Math.hypot(d[0] - spawn[0], d[1] - spawn[1]);
-      const progress = fallProgress(n.timeMs - f.timeMs, f.speed, pathLength);
-      if (progress < 0 || progress > 1) continue;
+      const railSlot = TOP_RAIL_SLOTS[slot.index];
+      if (railSlot === undefined) continue;
+      const l = railX(railSlot * 2, y), r = railX(railSlot * 2 + 1, y);
       out.push({
-        row: 0, index: slot.index, timeMs: n.timeMs, label: null,
-        cx: spawn[0] + (d[0] - spawn[0]) * progress,
-        cy: spawn[1] + (d[1] - spawn[1]) * progress,
-        progress, alpha: Math.min(1, progress * 8),
+        row: 0, index: slot.index, noteIndex, timeMs: n.timeMs, label: null,
+        cx: (l + r) / 2, cy: y, progress: clamped, alpha: Math.min(1, clamped * 8) * fade,
       });
     }
   }
@@ -366,17 +364,28 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
   const imageW = laneW * 1.05 * t.s;
   const imageH = imageW * (image.naturalHeight / image.naturalWidth);
   const cx = X(t, n.cx), cy = Y(t, n.cy);
+  const topY = n.cy - imageH / t.s / 2;
+  const bottomY = n.cy + imageH / t.s / 2;
   ctx.save();
   ctx.globalAlpha = n.alpha;
   ctx.shadowColor = "rgba(255,255,255,0.45)"; ctx.shadowBlur = glow ? imageH * 0.18 : 0;
-  ctx.drawImage(image, cx - imageW / 2, cy - imageH / 2, imageW, imageH);
+  const slices = 12;
+  for (let i = 0; i < slices; i++) {
+    const p0 = i / slices, p1 = (i + 1) / slices;
+    const sy = Math.floor(image.naturalHeight * p0);
+    const sh = Math.max(1, Math.ceil(image.naturalHeight * p1) - sy);
+    const ry = topY + (bottomY - topY) * ((p0 + p1) / 2);
+    const left = railX(n.index * 2, ry), right = railX(n.index * 2 + 1, ry);
+    const dw = Math.max(2, (right - left) * 1.05 * t.s);
+    ctx.drawImage(image, 0, sy, image.naturalWidth, sh, X(t, (left + right) / 2) - dw / 2, Y(t, topY + (bottomY - topY) * p0), dw, Math.max(1, imageH / slices + 0.75));
+  }
   if (n.label && imageH > 7) {
-    const fs = imageH * 0.24;
+    const fs = imageH * 0.28;
     ctx.shadowBlur = 0;
     ctx.translate(cx, cy);
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.font = `italic 500 ${fs}px system-ui, sans-serif`;
-    const tw = ctx.measureText(n.label).width, max = imageW * 0.64;
+    const tw = ctx.measureText(n.label).width, max = imageW * 0.58;
     if (tw > max) ctx.scale(max / tw, 1);
     ctx.fillStyle = "rgba(12,16,24,0.9)";
     ctx.fillText(n.label, 0, fs * 0.08);
@@ -387,22 +396,54 @@ function drawBar(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean)
 function drawDiamondNote(ctx: CanvasRenderingContext2D, t: Xf, n: Placed, glow: boolean) {
   const image = loadedImage(TOP_IMAGES[n.index] ?? noteT01);
   const d = DIAMONDS[n.index];
-  const spawn = TOP_SPAWNS[n.index];
-  if (!image || !d || !spawn) return;
+  const railSlot = TOP_RAIL_SLOTS[n.index];
+  if (!image || !d || railSlot === undefined) return;
   const cx = X(t, n.cx), cy = Y(t, n.cy);
-  const scale = (0.36 + n.progress * 0.64) * ((d[2] * 2) / 202) * t.s;
-  const imageW = image.naturalWidth * scale, imageH = image.naturalHeight * scale;
-  // 原图菱形头中心在素材顶部约 17%；中心严格跟随匀速轨迹，尾光只改变外观。
-  const headY = imageH * 0.17;
-  // 素材尾光原本向下；旋转到音符来向，使四个音符分别沿红线角度拖尾。
-  const angle = Math.atan2(spawn[1] - d[1], spawn[0] - d[0]) - Math.PI / 2;
+  const laneW = Math.max(2, railX(railSlot * 2 + 1, n.cy) - railX(railSlot * 2, n.cy));
+  const imageW = laneW * 1.12 * t.s;
+  const targetHeadGap = PAD_HIT_Y - d[1];
+  const headRatio = 0.18;
+  const barRatio = 0.94;
+  const targetImageH = targetHeadGap / (barRatio - headRatio);
+  const imageH = Math.max(imageW * 1.3, targetImageH * (0.28 + n.progress * 0.72) * t.s);
+  const anchorY = imageH * barRatio;
   ctx.save();
   ctx.globalAlpha = n.alpha;
   ctx.shadowColor = "rgba(255,255,255,0.45)"; ctx.shadowBlur = glow ? 7 * t.s : 0;
-  ctx.translate(cx, cy);
-  ctx.rotate(angle);
-  ctx.drawImage(image, -imageW / 2, -headY, imageW, imageH);
+  ctx.drawImage(image, cx - imageW / 2, cy - anchorY, imageW, imageH);
   ctx.restore();
+}
+
+function drawNoteHitCovers(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame, glow: boolean) {
+  const states = f.noteJudgements;
+  const times = f.noteJudgementAt;
+  if (!states || !times) return;
+  for (let i = 0; i < states.length; i++) {
+    if (states[i] !== 1) continue;
+    const age = f.now - (times[i] ?? 0);
+    if (age < 0 || age >= HIT_COVER_MS) continue;
+    const note = f.chart.notes[i];
+    if (!note || note.note === undefined) continue;
+    const part = partOfNote(note.note);
+    const slot = part ? slotOf(part) : null;
+    if (!slot) continue;
+    const amount = 1 - age / HIT_COVER_MS;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = amount;
+    ctx.fillStyle = hexToRgba(GOLD, 0.7);
+    ctx.shadowColor = GOLD;
+    ctx.shadowBlur = glow ? 24 * amount * t.s : 0;
+    if (slot.row === 1) {
+      padPath(ctx, t, slot.index);
+    } else {
+      const target = DIAMONDS[slot.index];
+      if (!target) { ctx.restore(); continue; }
+      diamondPath(ctx, t, target[0], target[1], target[2], target[3]);
+    }
+    ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawBeatTargets(ctx: CanvasRenderingContext2D, t: Xf, f: StageFrame) {
@@ -436,6 +477,7 @@ export function renderColumns(ctx: CanvasRenderingContext2D, w: number, h: numbe
   drawReactiveBackdrop(ctx, t, f);
   drawBeatTargets(ctx, t, f);
   drawTargetsFeedback(ctx, t, f, glow);
+  drawNoteHitCovers(ctx, t, f, glow);
   if (f.showNotes !== false) {
     const placed = placeNotes(f);
     for (const n of placed) {

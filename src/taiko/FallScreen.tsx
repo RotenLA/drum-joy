@@ -87,6 +87,8 @@ export function FallScreen({
   const judgementRef = useRef<{ text: string; color: string; until: number } | null>(null);
   /** 0 未判定 / 1 命中 / 2 Miss */
   const judgedRef = useRef<Uint8Array>(new Uint8Array(0));
+  /** 单音符判定发生时刻，用于横排命中遮盖与渐隐。 */
+  const judgedAtRef = useRef<Float64Array>(new Float64Array(0));
   /** 长音符（左踏板踩住闭镲）状态：0 未开始 / 1 按住中 / 2 已断开或结算 */
   const holdStateRef = useRef<Uint8Array>(new Uint8Array(0));
   /** 左踏板当前是否被踩住（MIDI note-off 抬起） */
@@ -98,13 +100,12 @@ export function FallScreen({
   const missCursorRef = useRef(0);
   /** 鼓件 → 该鼓件音符下标（按时间升序），判定时只在时间窗附近二分查找 */
   const noteIndexRef = useRef<Partial<Record<PartId, number[]>>>({});
-  const timersRef = useRef<number[]>([]);
   const countdownStartRef = useRef(0);
   const countdownMsRef = useRef(0);
   const countdownBeatsRef = useRef(4);
   const countdownTargetRef = useRef(0);
-  /** 音频时钟唤醒重试次数（挂起时倒计时会卡住） */
-  const resumeTriesRef = useRef(0);
+  /** 每次开始递增，异步唤醒完成后只允许当前一轮安排音频。 */
+  const countdownRunRef = useRef(0);
   const beatMsRef = useRef(500);
 
   /** 无音频（仅 MIDI）静音试玩时的起始时刻 */
@@ -192,6 +193,7 @@ export function FallScreen({
 
   const resetRun = useCallback(() => {
     judgedRef.current = new Uint8Array(playChart?.notes.length ?? 0);
+    judgedAtRef.current = new Float64Array(playChart?.notes.length ?? 0);
     holdStateRef.current = new Uint8Array(playChart?.notes.length ?? 0);
     statsRef.current = { perfect: 0, good: 0, miss: 0 };
     comboRef.current = 0;
@@ -234,18 +236,15 @@ export function FallScreen({
     return () => songPlayer.setOnEnded(null);
   }, [setPhaseBoth]);
 
-  useEffect(() => {
-    return () => {
-      timersRef.current.forEach((t) => window.clearTimeout(t));
-    };
-  }, []);
-
   /** 当前谱面时间（毫秒）：随时可读，不等下一帧，低帧率下判定也不被推迟 */
   const readTimeMs = useCallback(
     (now: number) => {
       const ph = phaseRef.current;
       // 倒计时与播放共用同一个时钟（音频时钟为准），从负数连续走到 0
       if (ph === "playing" || ph === "countdown") {
+        if (ph === "countdown") {
+          return countdownTargetRef.current - countdownMsRef.current + (now - countdownStartRef.current);
+        }
         return hasAudio ? songPlayer.timeMs() : now - silentStartRef.current;
       }
       if (ph === "idle") return 0;
@@ -301,6 +300,7 @@ export function FallScreen({
       }
       if (best < 0) return;
       judgedRef.current[best] = 1;
+      judgedAtRef.current[best] = now;
       // 长音符：踩下即进入「按住中」，之后由渲染循环检查是否全程踩住
       if ((notes[best]!.holdMs ?? 0) > 0) holdStateRef.current[best] = 1;
       const perfect = bestDiff <= PERFECT_MS;
@@ -362,8 +362,6 @@ export function FallScreen({
   // 开始、重开、暂停后继续共用：按拍号分子倒数，再从指定位置播放。
   const beginCountdown = useCallback((fromMs: number, reset: boolean) => {
     if (!playChart || playChart.notes.length === 0) return;
-    timersRef.current.forEach((t) => window.clearTimeout(t));
-    timersRef.current = [];
     if (reset) {
       resetRun();
       playedRef.current = true;
@@ -379,53 +377,33 @@ export function FallScreen({
     const countdownMs = beats * beatMs;
     countdownMsRef.current = countdownMs;
     countdownTargetRef.current = fromMs;
-    // 一次算好绝对起播时刻，倒计时从目标位置前方走来，结束后无缝衔接。
-    const ctx = getAudioContext();
-    // 音频时钟被系统挂起时 currentTime 完全停滞，倒计时会卡死在第一个数字上。
-    // 先唤醒，短时间内没醒就重试，超过上限仍不醒才照常往下走。
-    if (ctx.state !== "running") {
-      void ctx.resume().catch(() => undefined);
-      if (resumeTriesRef.current < 12) {
-        resumeTriesRef.current++;
-        const t = window.setTimeout(() => beginCountdownRef.current(fromMs, reset), 120);
-        timersRef.current.push(t);
-        return;
-      }
-    }
-    resumeTriesRef.current = 0;
-    const LEAD_SEC = 0.15;
-    const songStartSec = ctx.currentTime + LEAD_SEC + countdownMs / 1000;
-    countdownStartRef.current = performance.now();
+    const run = ++countdownRunRef.current;
+    const LEAD_MS = 80;
+    countdownStartRef.current = performance.now() + LEAD_MS;
     timeRef.current = fromMs - countdownMs;
-    if (hasAudio) songPlayer.play(fromMs, songStartSec);
-    else silentStartRef.current = performance.now() + LEAD_SEC * 1000 + countdownMs - fromMs;
     setPhaseBoth("countdown");
+
+    // 倒计时使用页面单调时钟；声音唤醒后按剩余时间安排到同一个终点。
+    const ctx = getAudioContext();
+    const scheduleAudio = () => {
+      if (run !== countdownRunRef.current || phaseRef.current !== "countdown") return;
+      const remainingMs = Math.max(0, countdownStartRef.current + countdownMs - performance.now());
+      if (hasAudio) songPlayer.play(fromMs, ctx.currentTime + Math.max(0.02, remainingMs / 1000));
+    };
+    if (ctx.state === "running") scheduleAudio();
+    else void ctx.resume().then(scheduleAudio).catch(() => undefined);
+    if (!hasAudio) silentStartRef.current = countdownStartRef.current + countdownMs - fromMs;
     // 倒计时滴答挂在同一条音频时间轴上
     for (let i = 0; i < beats; i++) {
-      metronomeClick(i === 0, songStartSec - countdownMs / 1000 + (i * beatMs) / 1000);
+      metronomeClick(i === 0, ctx.currentTime + LEAD_MS / 1000 + (i * beatMs) / 1000);
     }
-    // 兜底：倒计时应当持续前进，600ms 后时钟没动就唤醒音频并重来一次
-    const watchStartCtx = ctx.currentTime;
-    const watch = window.setTimeout(() => {
-      if (phaseRef.current !== "countdown") return;
-      const moved = getAudioContext().currentTime - watchStartCtx;
-      if (moved > 0.2) return;
-      debugLog.push("system", "倒计时时钟停滞，重新唤醒音频");
-      void getAudioContext().resume().catch(() => undefined);
-      beginCountdownRef.current(fromMs, false);
-    }, 600);
-    timersRef.current.push(watch);
   }, [hasAudio, playChart, resetRun, setPhaseBoth]);
-
-  // 重试与兜底都通过 ref 调用最新的 beginCountdown，避免闭包里递归引用自身
-  const beginCountdownRef = useRef(beginCountdown);
-  beginCountdownRef.current = beginCountdown;
-
 
   const start = useCallback(() => beginCountdown(0, true), [beginCountdown]);
 
   const pause = useCallback(() => {
     if (phaseRef.current === "playing" || phaseRef.current === "countdown") {
+      countdownRunRef.current++;
       const current = readTimeMs(performance.now());
       // 倒计时中暂停后，从目标位置重新按完整拍号倒数，避免恢复到半拍。
       timeRef.current = phaseRef.current === "countdown"
@@ -544,6 +522,10 @@ export function FallScreen({
       const t = readTimeMs(now);
       // 倒计时走到目标位置 → 直接进入演奏（时钟不重设，音符不跳位）
       if (ph === "countdown" && t >= countdownTargetRef.current) {
+        if (hasAudio && !songPlayer.playing) {
+          void getAudioContext().resume().catch(() => undefined);
+          songPlayer.play(Math.max(0, countdownTargetRef.current));
+        }
         ph = "playing";
         phaseRef.current = "playing";
         setPhase("playing");
@@ -564,6 +546,7 @@ export function FallScreen({
         while (c < notes.length && notes[c]!.timeMs < t - GOOD_MS) {
           if (!judgedRef.current[c]) {
             judgedRef.current[c] = 2;
+            judgedAtRef.current[c] = now;
             statsRef.current.miss++;
             comboRef.current = 0;
 
@@ -619,6 +602,8 @@ export function FallScreen({
         now,
         flashes: flashesRef.current,
         missFlashes: missFlashesRef.current,
+        noteJudgements: judgedRef.current,
+        noteJudgementAt: judgedAtRef.current,
         combo: comboRef.current,
         score: scoreRef.current,
         parts,
