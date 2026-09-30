@@ -93,7 +93,12 @@ export interface SaveSongInput {
     drums: string | null;
     other: string | null;
     midi: string;
+    /** 节拍器基准轨：只在后台解析计时用，玩家端不下载 */
+    metro?: string | null;
+    /** 原曲内嵌封面 */
+    cover?: string | null;
   };
+
   sizes: Record<string, number>;
   published?: boolean;
   charts: { difficulty: string; chart: unknown }[];
