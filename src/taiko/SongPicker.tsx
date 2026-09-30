@@ -40,6 +40,23 @@ function playlistBackground(key: string, index: number): string {
   return CARD_GRADIENTS[Math.max(0, index) % CARD_GRADIENTS.length] ?? "var(--taiko-playlist-1)";
 }
 
+/**
+ * 拿到曲库列表时就把所有封面预取进浏览器缓存，
+ * 选歌/切歌时详情卡背景立刻显示，不再等到选中才发请求。
+ */
+const preloadedCovers = new Set<string>();
+function preloadCovers(songs: readonly LibrarySong[]): void {
+  if (typeof Image === "undefined") return;
+  for (const s of songs) {
+    const url = s.coverUrl;
+    if (!url || preloadedCovers.has(url)) continue;
+    preloadedCovers.add(url);
+    const img = new Image();
+    img.decoding = "async";
+    img.src = url;
+  }
+}
+
 const DETAIL_SKEW = -8;
 
 function detailSlotTop(): number {
