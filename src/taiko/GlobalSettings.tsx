@@ -22,6 +22,7 @@ import { midiManager } from "./midiInput";
 import { partOfNote } from "./laneLayouts";
 import { songPlayer } from "./player";
 import { Button } from "@/components/ui/button";
+import { loadViewMode, setViewMode, subscribeViewMode, type ViewMode } from "./viewMode";
 
 const CALIB_TARGET = 8;
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;

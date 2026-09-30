@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
+import { renderColumns } from "./columnRenderer";
+import { loadViewMode, subscribeViewMode, type ViewMode } from "./viewMode";
 import { musicGain, useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { STEM_KINDS, hasAnyStem, stemsDurationMs } from "./stems";
