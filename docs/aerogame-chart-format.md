@@ -15,7 +15,7 @@
 
 ## 歌曲与谱面
 
-每首歌曲包含稳定 `id`、标题、艺人、时长、BPM、拍号、`chartFingerprint`、`coverImage`（封面图，内嵌 data URI，如 `data:image/jpeg;base64,...`；无封面为 `null`）和四档 `charts`：
+每首歌曲包含稳定 `id`、标题、艺人、时长、BPM、拍号、`chartFingerprint`、`coverFile`（与 JSON 同目录的封面 PNG 文件名；无封面为 `null`）和四档 `charts`：
 
 - `easy`：轻松
 - `beginner`：入门
@@ -46,3 +46,6 @@
 4. 不要对音符时间再叠加 AeroGame 的本机校准值；播放设备校准应由目标游戏自行处理。
 
 读取示例见 `examples/read-aerogame-chart.ts`。
+## 封面文件
+
+单曲导出下载 JSON 与同名 PNG 两个文件；全库导出为一个 ZIP，内含总 JSON 与各首封面 PNG。

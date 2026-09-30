@@ -556,18 +556,30 @@ function AdminPage() {
     setNote(null);
     try {
       const result = await exportCharts({ data: { songIds: rows.map((row) => row.id) } });
-      const pack = buildChartPackage(result.songs as ChartExportSourceSong[]);
-      const blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json;charset=utf-8" });
-      const href = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = href;
-      link.download = rows.length === 1
-        ? `${safeExportFileStem(rows[0]?.title ?? "song")}.aerogame-chart.json`
-        : `aerogame-library-${new Date().toISOString().slice(0, 10)}.aerogame-chart.json`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(href);
+      const sources = result.songs as ChartExportSourceSong[];
+      const pack = buildChartPackage(sources);
+      const jsonText = JSON.stringify(pack, null, 2);
+      const pngs: { name: string; bytes: Uint8Array }[] = [];
+      for (let i = 0; i < pack.songs.length; i++) {
+        const name = pack.songs[i]?.coverFile;
+        const src = sources[i]?.coverImage;
+        if (!name || !src) continue;
+        const bytes = await dataUriToPng(src).catch(() => null);
+        if (bytes) pngs.push({ name, bytes });
+      }
+      if (rows.length === 1) {
+        const stem = safeExportFileStem(rows[0]?.title ?? "song");
+        saveBlob(new Blob([jsonText], { type: "application/json;charset=utf-8" }), `${stem}.aerogame-chart.json`);
+        for (const png of pngs) saveBlob(new Blob([png.bytes as BlobPart], { type: "image/png" }), png.name);
+      } else {
+        const { zipSync, strToU8 } = await import("fflate");
+        const files: Record<string, Uint8Array> = {
+          "library.aerogame-chart.json": strToU8(jsonText),
+        };
+        for (const png of pngs) files[png.name] = png.bytes;
+        const zip = zipSync(files, { level: 0 });
+        saveBlob(new Blob([zip as BlobPart], { type: "application/zip" }), `aerogame-library-${new Date().toISOString().slice(0, 10)}.zip`);
+      }
       setNote(rows.length === 1 ? `《${rows[0]?.title ?? "歌曲"}》谱面已导出` : `已导出 ${rows.length} 首歌曲的四档谱面`);
     } catch (error) {
       setNote(`导出失败：${(error as Error).message}`);
@@ -1038,4 +1050,28 @@ function AdminScroll() {
       <AdminPage />
     </div>
   );
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
+async function dataUriToPng(dataUri: string): Promise<Uint8Array> {
+  const img = new Image();
+  img.src = dataUri;
+  await img.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext("2d")!.drawImage(img, 0, 0);
+  const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/png"));
+  if (!blob) throw new Error("png");
+  return new Uint8Array(await blob.arrayBuffer());
 }

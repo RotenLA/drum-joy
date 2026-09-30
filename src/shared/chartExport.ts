@@ -58,7 +58,8 @@ export interface AeroGameExportSong {
   bpm: number;
   timeSignature: [number, number];
   chartFingerprint: string;
-  coverImage: string | null;
+  /** Cover PNG file name shipped next to this JSON (same folder), or null. */
+  coverFile: string | null;
   charts: Record<ExportDifficulty, AeroGameExportChart>;
 }
 
@@ -156,7 +157,11 @@ export function buildChartPackage(
   exportedAt = new Date().toISOString(),
 ): AeroGameChartPackage {
   if (!sourceSongs.length) throw new Error("没有可导出的歌曲");
+  const usedStems = new Set<string>();
   const songs = sourceSongs.map((song) => {
+    let stem = safeExportFileStem(song.title);
+    if (usedStems.has(stem)) stem = `${stem}-${song.id.slice(0, 8)}`;
+    usedStems.add(stem);
     const chartEntries = EXPORT_DIFFICULTIES.map((difficulty) => [
       difficulty,
       exportChart(difficulty, song.charts[difficulty]),
@@ -169,7 +174,7 @@ export function buildChartPackage(
       bpm: song.bpm,
       timeSignature: song.timeSignature,
       chartFingerprint: song.fingerprint,
-      coverImage: song.coverImage ?? null,
+      coverFile: song.coverImage ? `${stem}.png` : null,
       charts: Object.fromEntries(chartEntries) as Record<ExportDifficulty, AeroGameExportChart>,
     };
   });
