@@ -9,7 +9,9 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "tool:build": "vite build --config tools/chart-tool/vite.config.ts",
+    "tool:pack:win": "bun run tool:build && electron-packager electron/chart-tool AeroGameChartTool --platform=win32 --arch=x64 --electron-version=33.2.1 --out=electron-release --overwrite"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -68,6 +70,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "2.23.1",
     "@types/node": "^22.16.5",

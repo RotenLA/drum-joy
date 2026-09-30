@@ -1,0 +1,6 @@
+{
+  "name": "aerogame-chart-tool",
+  "productName": "AeroGameChartTool",
+  "version": "1.0.0",
+  "main": "main.cjs"
+}

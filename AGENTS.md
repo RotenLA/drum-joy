@@ -21,3 +21,4 @@
 
 - The song picker remembers its playlist in session memory; leaving a song returns there, while reload starts home.
 - Calibration moves song playback only; notes and judgement share the unshifted chart clock so they cannot drift apart.
+- Local chart tool (tools/chart-tool + electron/chart-tool) imports src/taiko algorithms directly; never fork them.
