@@ -203,13 +203,18 @@ export function SongPicker({
         const lib = await loadLibraryOnce();
         setLibrary(lib.songs);
         setTags(lib.tags);
+        preloadCovers(lib.songs);
       } catch {
         setListErr(tr("曲库读取失败，请稍后重试", "Failed to load the song library"));
       } finally {
         setListing(false);
       }
     })();
-    const off = onLibraryChanged((lib) => { setLibrary(lib.songs); setTags(lib.tags); });
+    const off = onLibraryChanged((lib) => {
+      setLibrary(lib.songs);
+      setTags(lib.tags);
+      preloadCovers(lib.songs);
+    });
     void loadFavorites().then(setFavs);
     void loadPlayData().then((r) => {
       setHistory(r.history);
