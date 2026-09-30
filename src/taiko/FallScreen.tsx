@@ -659,7 +659,7 @@ export function FallScreen({
       ro?.disconnect();
       if (!ro) window.removeEventListener("resize", resize);
     };
-  }, [playChart, speed, parts, hasAudio, readTimeMs, tier]);
+  }, [playChart, speed, parts, hasAudio, readTimeMs, tier, viewMode]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;
