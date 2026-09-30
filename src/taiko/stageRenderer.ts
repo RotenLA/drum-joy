@@ -439,8 +439,57 @@ function drawLanes(ctx: CanvasRenderingContext2D, w: number, h: number, parts: r
 }
 
 /**
+ * 节拍网格相位：从谱面音符自身反推「第一拍在哪」。
+ * 谱面进入游玩前会整体平移（音频空白裁剪 + 真实起振咬合），
+ * 所以不能假设 beat 0 落在 0ms，必须用音符分布求相位与重拍位置。
+ */
+type BeatPhase = { phaseMs: number; shift: number };
+const beatPhaseCache = new WeakMap<object, BeatPhase>();
+
+function beatPhaseOf(chart: StageFrame["chart"], stepMs: number, barSteps: number): BeatPhase {
+  const cached = beatPhaseCache.get(chart as unknown as object);
+  if (cached) return cached;
+  const notes = chart.notes;
+  // 1) 子格相位：对 (t mod stepMs) 做圆周均值，抗离群
+  let sx = 0;
+  let sy = 0;
+  for (const n of notes) {
+    const a = ((n.timeMs % stepMs) / stepMs) * Math.PI * 2;
+    sx += Math.cos(a);
+    sy += Math.sin(a);
+  }
+  let phaseMs = 0;
+  if (sx !== 0 || sy !== 0) {
+    let a = Math.atan2(sy, sx);
+    if (a < 0) a += Math.PI * 2;
+    phaseMs = (a / (Math.PI * 2)) * stepMs;
+  }
+  // 2) 重拍位置：底鼓/军鼓优先落在正拍上的那个偏移胜出
+  const scores = new Array<number>(barSteps).fill(0);
+  for (const n of notes) {
+    const idx = Math.round((n.timeMs - phaseMs) / stepMs);
+    const weight = n.note === 35 || n.note === 36 ? 3 : n.note === 38 || n.note === 40 ? 2 : 0.4;
+    const pos = ((idx % barSteps) + barSteps) % barSteps;
+    scores[pos] += weight;
+  }
+  let shift = 0;
+  let best = -1;
+  for (let s = 0; s < barSteps; s++) {
+    let sum = 0;
+    for (let b = 0; b < barSteps; b += 4) sum += scores[(s + b) % barSteps] * (b === 0 ? 1.3 : 1);
+    if (sum > best) {
+      best = sum;
+      shift = s;
+    }
+  }
+  const out = { phaseMs, shift };
+  beatPhaseCache.set(chart as unknown as object, out);
+  return out;
+}
+
+/**
  * 引导线上的节拍刻度：正拍实线、反拍虚线、十六分小点。
- * 与音符同轴同速，从车道起点流向鼓面；没有音符的空拍也能看到节拍流动。
+ * 与音符同轴同速、同相位；很短、很淡，只作参考不抢视线。
  */
 function drawBeatMarks(
   ctx: CanvasRenderingContext2D,
@@ -455,11 +504,12 @@ function drawBeatMarks(
   const beatMs = (60000 / bpm) * (4 / den);
   const stepMs = beatMs / 4; // 十六分栅格
   if (stepMs < 30) return;
+  const barSteps = Math.max(4, Math.round(Math.max(1, num) * 4));
+  const { phaseMs, shift } = beatPhaseOf(f.chart, stepMs, barSteps);
   const span = LEAD_MS / Math.max(0.1, f.speed);
-  const fromStep = Math.max(0, Math.ceil(f.timeMs / stepMs));
-  const toStep = Math.floor((f.timeMs + span) / stepMs);
+  const fromStep = Math.ceil((f.timeMs - phaseMs) / stepMs);
+  const toStep = Math.floor((f.timeMs + span - phaseMs) / stepMs);
   if (toStep < fromStep) return;
-  const beatsPerBar = Math.max(1, num);
 
   ctx.save();
   ctx.lineCap = "round";
@@ -471,53 +521,55 @@ function drawBeatMarks(
     const px = -dy / len;
     const py = dx / len;
     for (let k = fromStep; k <= toStep; k++) {
-      const timeMs = k * stepMs;
+      const timeMs = phaseMs + k * stepMs;
+      if (timeMs < 0) continue;
       const t = 1 - ((timeMs - f.timeMs) * f.speed) / LEAD_MS;
       if (t <= 0.02 || t > 1) continue;
       const p = flightProgress(pad, t, h);
       const cx = pad.gx + dx * p;
       const cy = pad.gy + dy * p;
-      const base = Math.max(3, Math.min(w, h) * 0.05 * (0.18 + 0.82 * p));
+      const base = Math.max(2, Math.min(w, h) * 0.05 * (0.18 + 0.82 * p));
       const fade = Math.min(1, t / 0.12);
-      const sub = ((k % 4) + 4) % 4;
+      const rel = ((k - shift) % barSteps + barSteps) % barSteps;
+      const sub = rel % 4;
 
       if (sub === 0) {
-        // 正拍：实线；小节首拍略宽
-        const barHead = ((k / 4) % beatsPerBar + beatsPerBar) % beatsPerBar === 0;
-        const halfW = base * (barHead ? 1.0 : 0.82);
-        ctx.globalAlpha = (0.2 + 0.5 * p) * fade;
-        ctx.strokeStyle = "rgba(255,255,255,0.95)";
-        ctx.lineWidth = Math.max(1, base * 0.14);
+        // 正拍：很短的细实线；小节首拍略长
+        const halfW = base * (rel === 0 ? 0.3 : 0.24);
+        ctx.globalAlpha = (0.05 + 0.16 * p) * fade;
+        ctx.strokeStyle = "rgba(255,255,255,0.7)";
+        ctx.lineWidth = Math.max(0.8, base * 0.07);
         ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(cx - px * halfW, cy - py * halfW);
         ctx.lineTo(cx + px * halfW, cy + py * halfW);
         ctx.stroke();
       } else if (sub === 2) {
-        // 反拍：虚线
-        const halfW = base * 0.62;
-        ctx.globalAlpha = (0.12 + 0.34 * p) * fade;
-        ctx.strokeStyle = "rgba(255,255,255,0.8)";
-        ctx.lineWidth = Math.max(1, base * 0.1);
-        const dash = Math.max(2, base * 0.26);
-        ctx.setLineDash([dash, dash * 0.9]);
+        // 反拍：更短更淡的虚线
+        const halfW = base * 0.18;
+        ctx.globalAlpha = (0.035 + 0.1 * p) * fade;
+        ctx.strokeStyle = "rgba(255,255,255,0.6)";
+        ctx.lineWidth = Math.max(0.7, base * 0.055);
+        const dash = Math.max(1.5, base * 0.12);
+        ctx.setLineDash([dash, dash]);
         ctx.beginPath();
         ctx.moveTo(cx - px * halfW, cy - py * halfW);
         ctx.lineTo(cx + px * halfW, cy + py * halfW);
         ctx.stroke();
         ctx.setLineDash([]);
-      } else if (QUALITY_TIER !== "low") {
-        // 十六分：车道中心小点
-        ctx.globalAlpha = (0.1 + 0.26 * p) * fade;
-        ctx.fillStyle = "rgba(255,255,255,0.75)";
+      } else if (QUALITY_TIER === "high") {
+        // 十六分：车道中心极小的点
+        ctx.globalAlpha = (0.03 + 0.07 * p) * fade;
+        ctx.fillStyle = "rgba(255,255,255,0.6)";
         ctx.beginPath();
-        ctx.arc(cx, cy, Math.max(0.8, base * 0.08), 0, Math.PI * 2);
+        ctx.arc(cx, cy, Math.max(0.6, base * 0.05), 0, Math.PI * 2);
         ctx.fill();
       }
     }
   }
   ctx.restore();
 }
+
 
 
 
