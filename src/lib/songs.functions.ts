@@ -19,7 +19,10 @@ export interface LibrarySong {
   sizes: Record<string, number>;
   createdAt: string;
   tagIds: string[];
+  /** 原曲内嵌封面的签名直链（无封面为 null） */
+  coverUrl: string | null;
 }
+
 
 export interface LibraryTag {
   id: string;
