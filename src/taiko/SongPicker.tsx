@@ -647,7 +647,16 @@ export function SongPicker({
               className="taiko-detail-card relative flex h-[min(82%,430px)] w-[clamp(320px,42vw,520px)] min-h-0 min-w-0 items-stretch justify-self-center overflow-hidden rounded-lg border border-[var(--taiko-glass-line-strong)] shadow-2xl backdrop-blur-[18px]"
               style={{ transform: `skewX(${DETAIL_SKEW}deg)`, background: activePlaylistBackground }}
             >
+              {selected?.coverUrl ? (
+                // 有专辑封面时详情卡背景用封面（压暗保证文字可读），没有就回退歌单纯色
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 bg-cover bg-center"
+                  style={{ backgroundImage: `url("${selected.coverUrl}")`, opacity: 0.55 }}
+                />
+              ) : null}
               <span className="pointer-events-none absolute inset-0 bg-[image:var(--taiko-playlist-shade)]" />
+
               {!selected ? (
                 <p className="relative z-10 m-auto text-sm text-[rgba(255,255,255,0.6)]" style={{ transform: `skewX(${-DETAIL_SKEW}deg)` }}>
                   {tr("选择一首歌", "Pick a song")}
