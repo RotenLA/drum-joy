@@ -7,7 +7,7 @@ export type ViewMode = "stage" | "columns";
 
 const KEY = "taiko.viewMode.v1";
 
-let current: ViewMode = "stage";
+let current: ViewMode = "columns";
 let hydrated = false;
 
 const listeners = new Set<(mode: ViewMode) => void>();

@@ -130,7 +130,7 @@ export function FallScreen({
   }, []);
 
   // 视觉模式：舞台下落式 / 横排下落式（横排始终显示全部 9 个部件）
-  const [viewMode, setViewModeState] = useState<ViewMode>("stage");
+  const [viewMode, setViewModeState] = useState<ViewMode>("columns");
   useEffect(() => {
     setViewModeState(loadViewMode());
     return subscribeViewMode(setViewModeState);

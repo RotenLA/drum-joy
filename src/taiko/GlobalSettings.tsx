@@ -39,8 +39,8 @@ export function GlobalSettings({
   const { tr, language } = useLanguage();
   const labTapRef = useRef({ count: 0, at: 0 });
 
-  // ---- 视觉模式（舞台 / 横排） ----
-  const [viewMode, setViewModeState] = useState<ViewMode>("stage");
+  // ---- 视觉模式（横排 / 舞台） ----
+  const [viewMode, setViewModeState] = useState<ViewMode>("columns");
   useEffect(() => {
     setViewModeState(loadViewMode());
     return subscribeViewMode(setViewModeState);
@@ -165,8 +165,8 @@ export function GlobalSettings({
         </span>
         {(
           [
-            ["stage", tr("舞台模式", "Stage")],
             ["columns", tr("横排模式", "Classic lanes")],
+            ["stage", tr("舞台模式", "Stage")],
           ] as const
         ).map(([mode, label]) => (
           <Button
