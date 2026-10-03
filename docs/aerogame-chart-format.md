@@ -46,6 +46,22 @@
 4. 不要对音符时间再叠加 AeroGame 的本机校准值；播放设备校准应由目标游戏自行处理。
 
 读取示例见 `examples/read-aerogame-chart.ts`。
+
+## 封面 PNG 的用法
+
+- PNG 与 JSON 通过歌曲的 `coverFile` 字段配对（默认与 JSON 同名），只作展示用途：歌单封面、选中详情、加载画面；不包含任何谱面或游戏数据。
+- 每张约 800×800 方形；目标游戏可自行压缩缩放，改名后需同步更新 `coverFile`；没有封面的歌该字段为 `null`，游戏需自行准备默认图。
+- 玩法画面用不用封面由目标游戏自定；封面缺失不影响谱面读取。
+
+## 接入步骤（音游开发）
+
+1. 校验 `format` === `aerogame.chart-package` 且 `schemaVersion` === 1，不满足时拒绝读取。
+2. 选难度：`easy`/`beginner`/`standard`/`hard`，对应轻松/入门/标准/困难。
+3. 时间对齐：所有 `timeMs` 以音频文件起点为 0；音游直接用 `timeMs − 音频播放当前位置` 放置音符；玩家延迟/设备校准由目标游戏自己加，不要再叠加 AeroGame 的偏移。
+4. 拍点优先级：有 `beatMap` 用 `beatMap.beats`（逐拍绝对毫秒，保留动态速度），没有才退回 `grid`（`originMs` + `stepMs` × 步数）。
+5. 轨道映射：优先用 `instrument` 或 `midiNote`（General MIDI 鼓件）映射自己的轨道；`inputLane`（don=脚部/ka=手部）与 `big`、可选 `holdMs` 供需要的游戏使用；不要依赖 AeroGame 的画面布局。
+6. 缓存：`chartFingerprint` 变化即替换旧谱面缓存。
+
 ## 导出方式
 
 ### 后台导出（网页）
