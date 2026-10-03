@@ -16,5 +16,7 @@ export function readAeroGameChart(
     chart,
     notesInPlaybackOrder: [...chart.notes].sort((a, b) => a.timeMs - b.timeMs),
     beatTimesMs: chart.beatMap?.beats ?? [],
+    // 封面 PNG 与 JSON 同目录，用 coverFile 配对；为 null 时用游戏内默认封面
+    coverFile: song.coverFile,
   };
 }
