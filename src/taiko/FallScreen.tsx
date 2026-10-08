@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PART_BY_ID, VISIBLE_PARTS, partOfNote, type PartId } from "./laneLayouts";
 import { renderStage } from "./stageRenderer";
+import { flatHandParts, renderFlatLanes } from "./flatLaneRenderer";
 import { musicGain, useSong } from "./songStore";
 import { songPlayer } from "./player";
 import { STEM_KINDS, hasAnyStem, stemsDurationMs } from "./stems";
@@ -55,6 +56,7 @@ export function FallScreen({
   onSpeedChange,
   onExit,
   gestureHits = false,
+  flatLanes = false,
   exitLabel,
   onSecretUnlock,
 }: {
@@ -64,6 +66,8 @@ export function FallScreen({
   onExit?: (() => void) | undefined;
   /** 实验版：手部七个鼓面改由鼓棒角度判定，踏板仍走 MIDI */
   gestureHits?: boolean;
+  /** 实验室：手部一字横排下落 + 踏板缩圈（需配合 gestureHits） */
+  flatLanes?: boolean;
   exitLabel?: string | undefined;
   onSecretUnlock?: (() => void) | undefined;
 }) {
@@ -381,8 +385,8 @@ export function FallScreen({
       if (!parts.includes(hit.part)) return;
       stickManager.switchLayerForHit(hit.part, parts);
       hitPartRef.current(hit.part, hit.atMs, hit.velocity, noteOfPart(hit.part));
-    }, { parts });
-  }, [gestureHits, parts]);
+    }, flatLanes ? { parts, flatHands: flatHandParts(parts) } : { parts });
+  }, [gestureHits, flatLanes, parts]);
 
 
   // 开始、重开、暂停后继续共用：按拍号分子倒数，再从指定位置播放。
@@ -681,7 +685,7 @@ export function FallScreen({
         sticks: stickManager.latest(),
       };
 
-      renderStage(ctx, canvas.clientWidth, canvas.clientHeight, frame);
+      (flatLanes ? renderFlatLanes : renderStage)(ctx, canvas.clientWidth, canvas.clientHeight, frame);
     };
 
     raf = requestAnimationFrame(draw);
@@ -691,7 +695,7 @@ export function FallScreen({
       ro?.disconnect();
       if (!ro) window.removeEventListener("resize", resize);
     };
-  }, [playChart, speed, parts, hasAudio, readTimeMs, tier]);
+  }, [playChart, speed, parts, hasAudio, readTimeMs, tier, flatLanes]);
 
   const judged = statsRef.current;
   const totalJudged = judged.perfect + judged.good + judged.miss;

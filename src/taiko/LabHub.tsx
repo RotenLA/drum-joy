@@ -3,13 +3,14 @@
  * 只能由选歌页顶部「选择歌曲」连续点击 12 次进入，不影响正式版本流程。
  */
 import { useLanguage } from "./i18n";
-import { Activity, Hammer, LogOut, Radio } from "lucide-react";
+import { Activity, Hammer, LogOut, Radio, Rows3 } from "lucide-react";
 import { toast } from "sonner";
 
-export type LabGame = "rhythm" | "mole" | "theremin";
+export type LabGame = "rhythm" | "flat" | "mole" | "theremin";
 
 const CARD_BG: Record<LabGame, string> = {
   rhythm: "linear-gradient(150deg, #4c3a28 0%, #8a5d2a 55%, #2a1d10 100%)",
+  flat: "linear-gradient(150deg, #3a2840 0%, #7a3d6a 55%, #1f1424 100%)",
   mole: "linear-gradient(150deg, #2c4a47 0%, #3f6d63 55%, #1e3230 100%)",
   theremin: "linear-gradient(150deg, #33305c 0%, #4d4a86 55%, #211f3c 100%)",
 };
@@ -33,6 +34,17 @@ export function LabHub({ onPick, onBack }: { onPick: (game: LabGame) => void; on
       body: tr(
         "现在的鼓游戏，但手上七个鼓面改由鼓棒角度实时判定，踏板仍用 MIDI。",
         "The drum game, with the seven hand pads triggered by stick angle; pedals still use MIDI.",
+      ),
+      ready: true,
+    },
+    {
+      id: "flat",
+      icon: Rows3,
+      title: tr("横排缩圈", "Flat Lanes"),
+      tag: tr("横排手势实验版", "Gesture flat-lane build"),
+      body: tr(
+        "手部鼓面按难度一字排开下落，左右挥棒决定打哪一列；两个踏板在第二排，用缩圈提示。",
+        "Hand pads in one row with falling notes, chosen by swinging left or right; pedals sit below with shrinking rings.",
       ),
       ready: true,
     },

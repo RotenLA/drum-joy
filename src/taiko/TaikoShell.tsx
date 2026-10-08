@@ -133,6 +133,16 @@ function ShellInner() {
             gestureHits
             exitLabel={tr("返回", "Back")}
           />
+        ) : lab === "flat" ? (
+          <FallScreen
+            key="lab-flat"
+            speed={settings.speed}
+            onSpeedChange={(speed) => updateSettings({ speed })}
+            onExit={() => setLab("hub")}
+            gestureHits
+            flatLanes
+            exitLabel={tr("返回", "Back")}
+          />
         ) : lab === null ? (
           <FallScreen
             key="release"
