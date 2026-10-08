@@ -638,7 +638,7 @@ export function FallScreen({
           ? String(
               Math.min(
                 countdownBeatsRef.current,
-                Math.max(1, Math.ceil((countdownTargetRef.current - t) / beatMsRef.current)),
+                Math.max(1, Math.ceil((countdownStartRef.current + countdownMsRef.current - now) / beatMsRef.current)),
               ),
             )
           : null;
