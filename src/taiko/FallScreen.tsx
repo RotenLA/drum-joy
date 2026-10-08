@@ -404,9 +404,13 @@ export function FallScreen({
     countdownMsRef.current = countdownMs;
     countdownTargetRef.current = fromMs;
     const run = ++countdownRunRef.current;
+    // 开局：音符从上方提前落下；暂停后继续：倒计时期间音符静止。
+    countdownFreshRef.current = reset;
     const LEAD_MS = 80;
     countdownStartRef.current = performance.now() + LEAD_MS;
-    timeRef.current = fromMs - countdownMs;
+    timeRef.current = reset ? fromMs - countdownMs : fromMs;
+    const now0 = performance.now();
+    clockGuardRef.current = { lastAudio: fromMs, lastAt: now0, stalled: false, retryAt: now0 };
     setPhaseBoth("countdown");
 
     // 倒计时使用页面单调时钟；声音唤醒后按剩余时间安排到同一个终点。
@@ -436,8 +440,10 @@ export function FallScreen({
   }, []);
   useEffect(() => {
     if (!pendingStartRef.current || !playChart) return;
-    if (phaseRef.current !== "idle" && phaseRef.current !== "ended") { pendingStartRef.current = false; return; }
+    const ph = phaseRef.current;
+    if (ph !== "idle" && ph !== "ended" && ph !== "paused") { pendingStartRef.current = false; return; }
     pendingStartRef.current = false;
+    if (ph === "paused") songPlayer.stop();
     beginCountdown(0, true);
   }, [startTick, playChart, stems, beginCountdown]);
 
@@ -510,7 +516,7 @@ export function FallScreen({
         else resume();
       } else if (
         e.key === "Enter" &&
-        (phaseRef.current === "idle" || phaseRef.current === "ended")
+        (phaseRef.current === "idle" || phaseRef.current === "ended" || phaseRef.current === "paused")
       ) {
         start();
       }
@@ -561,7 +567,7 @@ export function FallScreen({
       let ph = phaseRef.current;
       const t = readTimeMs(now);
       // 倒计时走到目标位置 → 直接进入演奏（时钟不重设，音符不跳位）
-      if (ph === "countdown" && t >= countdownTargetRef.current) {
+      if (ph === "countdown" && now >= countdownStartRef.current + countdownMsRef.current) {
         if (hasAudio && !songPlayer.playing) {
           void getAudioContext().resume().catch(() => undefined);
           songPlayer.play(Math.max(0, countdownTargetRef.current));
