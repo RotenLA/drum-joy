@@ -198,3 +198,84 @@ export function safeExportFileStem(title: string): string {
   const cleaned = title.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").replace(/\s+/g, " ");
   return cleaned.slice(0, 80) || "song";
 }
+// ================= 拆分导出：歌曲信息 + 三份独立难度谱面 =================
+
+export const SONG_INFO_FORMAT = "aerogame.song-info" as const;
+export const CHART_DATA_FORMAT = "aerogame.chart-data" as const;
+/** 导出的三档：A=入门 B=标准 C=困难（轻松不导出） */
+export const SPLIT_LEVELS = [
+  { code: "A", difficulty: "beginner" },
+  { code: "B", difficulty: "standard" },
+  { code: "C", difficulty: "hard" },
+] as const;
+
+export interface SplitExportFile {
+  name: string;
+  text: string;
+}
+
+export interface SplitAudioNames {
+  vocals?: string | null;
+  others?: string | null;
+  bass?: string | null;
+}
+
+export function chartFileName(stem: string, code: string): string {
+  return `${stem} - ${code} - game.json`;
+}
+
+/**
+ * 一首歌 → 4 份 JSON：`歌名.info.json`（歌名/歌手/速度/拍号等）+
+ * `歌名 - A/B/C - game.json`（仅谱面）。谱面 durationMs 统一取歌曲音频时长。
+ */
+export function buildSplitExport(
+  song: ChartExportSourceSong,
+  stem: string,
+  audio: SplitAudioNames = {},
+): SplitExportFile[] {
+  const durationMs = Math.round(song.durationMs);
+  const charts = SPLIT_LEVELS.map(({ code, difficulty }) => {
+    const c = exportChart(difficulty, song.charts[difficulty]);
+    return {
+      name: chartFileName(stem, code),
+      text: JSON.stringify(
+        {
+          format: CHART_DATA_FORMAT,
+          schemaVersion: CHART_EXPORT_SCHEMA_VERSION,
+          songId: song.id,
+          difficulty: code,
+          difficultyLabel: difficulty,
+          timeUnit: "milliseconds",
+          coordinateSystem: "song-start",
+          durationMs,
+          ...(c.beatMap ? { beatMap: c.beatMap } : {}),
+          ...(c.grid ? { grid: c.grid } : {}),
+          notes: c.notes,
+        },
+        null,
+        2,
+      ),
+    };
+  });
+  const info = {
+    format: SONG_INFO_FORMAT,
+    schemaVersion: CHART_EXPORT_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    id: song.id,
+    title: song.title,
+    artist: song.artist,
+    durationMs,
+    bpm: song.bpm,
+    timeSignature: song.timeSignature,
+    chartFingerprint: song.fingerprint,
+    coverFile: song.coverImage ? `${stem}.png` : null,
+    charts: Object.fromEntries(SPLIT_LEVELS.map(({ code }) => [code, chartFileName(stem, code)])),
+    difficultyLabels: { A: "beginner", B: "standard", C: "hard" },
+    audioTracks: {
+      vocals: audio.vocals ?? null,
+      others: audio.others ?? null,
+      bass: audio.bass ?? null,
+    },
+  };
+  return [{ name: `${stem}.info.json`, text: JSON.stringify(info, null, 2) }, ...charts];
+}
