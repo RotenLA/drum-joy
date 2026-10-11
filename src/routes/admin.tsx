@@ -13,7 +13,7 @@ import { analyzeMetroFile, toChartBeatMap } from "@/taiko/metroAnalysis";
 import { readAudioMeta } from "@/taiko/audioMeta";
 import type { ChartBeatMap } from "@/shared/taikoChart";
 import {
-  buildChartPackage,
+  buildSplitExport,
   safeExportFileStem,
   type ChartExportSourceSong,
 } from "@/shared/chartExport";
@@ -557,30 +557,25 @@ function AdminPage() {
     try {
       const result = await exportCharts({ data: { songIds: rows.map((row) => row.id) } });
       const sources = result.songs as ChartExportSourceSong[];
-      const pack = buildChartPackage(sources);
-      const jsonText = JSON.stringify(pack, null, 2);
-      const pngs: { name: string; bytes: Uint8Array }[] = [];
-      for (let i = 0; i < pack.songs.length; i++) {
-        const name = pack.songs[i]?.coverFile;
-        const src = sources[i]?.coverImage;
-        if (!name || !src) continue;
-        const bytes = await dataUriToPng(src).catch(() => null);
-        if (bytes) pngs.push({ name, bytes });
+      const { zipSync, strToU8 } = await import("fflate");
+      const files: Record<string, Uint8Array> = {};
+      const used = new Set<string>();
+      for (const src of sources) {
+        let stem = safeExportFileStem(src.title);
+        if (used.has(stem)) stem = `${stem}-${src.id.slice(0, 8)}`;
+        used.add(stem);
+        let cover: Uint8Array | null = null;
+        if (src.coverImage) cover = await dataUriToPng(src.coverImage).catch(() => null);
+        const song = cover ? src : { ...src, coverImage: null };
+        for (const f of buildSplitExport(song, stem)) files[f.name] = strToU8(f.text);
+        if (cover) files[`${stem}.png`] = cover;
       }
-      if (rows.length === 1) {
-        const stem = safeExportFileStem(rows[0]?.title ?? "song");
-        saveBlob(new Blob([jsonText], { type: "application/json;charset=utf-8" }), `${stem}.aerogame-chart.json`);
-        for (const png of pngs) saveBlob(new Blob([png.bytes as BlobPart], { type: "image/png" }), png.name);
-      } else {
-        const { zipSync, strToU8 } = await import("fflate");
-        const files: Record<string, Uint8Array> = {
-          "library.aerogame-chart.json": strToU8(jsonText),
-        };
-        for (const png of pngs) files[png.name] = png.bytes;
-        const zip = zipSync(files, { level: 0 });
-        saveBlob(new Blob([zip as BlobPart], { type: "application/zip" }), `aerogame-library-${new Date().toISOString().slice(0, 10)}.zip`);
-      }
-      setNote(rows.length === 1 ? `《${rows[0]?.title ?? "歌曲"}》谱面已导出` : `已导出 ${rows.length} 首歌曲的四档谱面`);
+      const zip = zipSync(files, { level: 0 });
+      const zipName = rows.length === 1
+        ? `${safeExportFileStem(rows[0]?.title ?? "song")}.zip`
+        : `aerogame-library-${new Date().toISOString().slice(0, 10)}.zip`;
+      saveBlob(new Blob([zip as BlobPart], { type: "application/zip" }), zipName);
+      setNote(rows.length === 1 ? `《${rows[0]?.title ?? "歌曲"}》谱面已导出` : `已导出 ${rows.length} 首歌曲的三档谱面`);
     } catch (error) {
       setNote(`导出失败：${(error as Error).message}`);
     } finally {

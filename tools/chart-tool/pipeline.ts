@@ -9,7 +9,7 @@ import { readAudioMeta } from "@/taiko/audioMeta";
 import type { FolderImportSong } from "@/taiko/adminFolderImport";
 import type { ChartBeatMap } from "@/shared/taikoChart";
 import {
-  buildChartPackage,
+  buildSplitExport,
   safeExportFileStem,
   type ChartExportJson,
   type ChartExportSourceSong,
@@ -18,8 +18,10 @@ import {
 export interface SongOutput {
   title: string;
   bpm: number;
-  jsonName: string;
-  jsonText: string;
+  /** 4 份 JSON：info + A/B/C */
+  jsons: { name: string; text: string }[];
+  /** 原样拷贝的分轨音频 */
+  audio: { name: string; file: File }[];
   pngName: string | null;
   png: Uint8Array | null;
 }
@@ -118,7 +120,7 @@ export async function processSong(
     }
   }
 
-  onStep("生成四档谱面");
+  onStep("生成谱面");
   const charts = buildAllCharts(parsed, title, displayBpm, beatMap);
   const fingerprint = chartVersionFingerprint(parsed, beatMap);
   let durationMs = parsed.durationMs;
@@ -148,13 +150,22 @@ export async function processSong(
     png = await toPng(coverBlob).catch(() => null);
     if (!png) source.coverImage = null;
   }
-  const pack = buildChartPackage([source]);
   const stem = safeExportFileStem(title);
+  const ext = (f: File) => f.name.split(".").pop()?.toLowerCase() || "mp3";
+  const audio: { name: string; file: File }[] = [];
+  const names: Record<string, string | null> = { vocals: null, others: null, bass: null };
+  for (const [key, label, outKey] of [["vocals", "Vocals", "vocals"], ["other", "Others", "others"], ["bass", "Bass", "bass"]] as const) {
+    const f = files[key];
+    if (!f) continue;
+    const name = `${stem}_${label}.${ext(f)}`;
+    audio.push({ name, file: f });
+    names[outKey] = name;
+  }
   return {
     title,
     bpm,
-    jsonName: `${stem}.aerogame-chart.json`,
-    jsonText: JSON.stringify(pack, null, 2),
+    jsons: buildSplitExport(source, stem, names),
+    audio,
     pngName: png ? `${stem}.png` : null,
     png,
   };

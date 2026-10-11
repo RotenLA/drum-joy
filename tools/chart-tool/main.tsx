@@ -97,9 +97,11 @@ function App() {
           (files as Record<string, File>)[k] = new File([bytes as BlobPart], name);
         }
         const out = await processSong({ ...row.song, files }, (step) => update(i, { step }));
-        await bridge.writeFile(await bridge.joinPath(output, out.jsonName), out.jsonText);
+        for (const j of out.jsons) await bridge.writeFile(await bridge.joinPath(output, j.name), j.text);
+        update(i, { step: "拷贝分轨音频" });
+        for (const a of out.audio) await bridge.writeFile(await bridge.joinPath(output, a.name), new Uint8Array(await a.file.arrayBuffer()));
         if (out.png && out.pngName) await bridge.writeFile(await bridge.joinPath(output, out.pngName), out.png);
-        update(i, { state: "done", step: out.png ? "已导出 JSON + PNG" : "已导出 JSON（无封面）", bpm: out.bpm });
+        update(i, { state: "done", step: `已导出 ${out.jsons.length} 份 JSON · ${out.audio.length} 条音频${out.png ? " · 封面" : "（无封面）"}`, bpm: out.bpm });
       } catch (e) {
         update(i, { state: "fail", step: (e as Error).message });
       }

@@ -1,79 +1,89 @@
-# AeroGame 通用谱面 JSON
+# AeroGame 谱面导出格式
 
-谱面文件后缀为 `.aerogame-chart.json`，由后台导出，或用本地导出工具（Windows）生成，两者使用同一套算法，同一首歌的谱面内容一致。文件只包含歌曲信息、节拍基准和四档谱面，不包含音频、存储地址或后台凭据。
+每首歌导出一组文件（以歌名 `aLIEz` 为例）：
 
-## 顶层字段
+```text
+aLIEz.info.json          歌曲信息：歌名、歌手、时长、速度、拍号、封面与各文件名
+aLIEz - A - game.json    入门谱面
+aLIEz - B - game.json    标准谱面
+aLIEz - C - game.json    困难谱面
+aLIEz.png                封面（原曲没有封面时不导出）
+aLIEz_Vocals.mp3         人声分轨（仅本地工具导出）
+aLIEz_Others.mp3         其他乐器分轨（仅本地工具导出）
+aLIEz_Bass.mp3           贝斯分轨（仅本地工具导出）
+```
+
+不包含鼓分轨（鼓声由玩家击打产生）、存储地址或后台凭据。
+
+## 歌曲信息 `歌名.info.json`
 
 | 字段 | 含义 |
 | --- | --- |
-| `format` | 固定为 `aerogame.chart-package` |
-| `schemaVersion` | 当前为 `1`；读取方应先检查版本 |
+| `format` | 固定 `aerogame.song-info` |
+| `schemaVersion` | 当前 `1` |
 | `exportedAt` | ISO 8601 导出时间 |
-| `timeUnit` | 固定为 `milliseconds` |
-| `coordinateSystem` | 固定为 `song-start`，所有时间都相对歌曲文件起点 |
-| `songs` | 一首或多首歌曲；单曲导出也使用数组 |
+| `id` | 稳定歌曲 ID |
+| `title` / `artist` | 歌名 / 歌手（可能为 `null`） |
+| `durationMs` | 歌曲音频总时长（毫秒） |
+| `bpm` | 平均速度（展示用；计时请用谱面里的 `beatMap`） |
+| `timeSignature` | 拍号，如 `[4, 4]` |
+| `chartFingerprint` | 谱面版本指纹，变化即替换缓存 |
+| `coverFile` | 封面 PNG 文件名，无封面为 `null` |
+| `charts` | `{ "A": "...", "B": "...", "C": "..." }` 三份谱面文件名 |
+| `difficultyLabels` | `A=beginner` 入门、`B=standard` 标准、`C=hard` 困难 |
+| `audioTracks` | `vocals` / `others` / `bass` 分轨文件名，缺失为 `null` |
 
-## 歌曲与谱面
+## 谱面 `歌名 - A|B|C - game.json`
 
-每首歌曲包含稳定 `id`、标题、艺人、时长、BPM、拍号、`chartFingerprint`、`coverFile`（与 JSON 同目录的封面 PNG 文件名；无封面为 `null`）和四档 `charts`：
-
-- `easy`：轻松
-- `beginner`：入门
-- `standard`：标准
-- `hard`：困难
-
-每档谱面包含 `durationMs`、`grid`、可选 `beatMap` 和按时间升序排列的 `notes`。若 `beatMap` 存在，应优先使用其中的逐拍绝对毫秒时间；它能保留真人演奏或动态速度变化。`grid` 是没有动态拍点时的固定网格基准。
-
-## 音符字段
+只含谱面数据：
 
 | 字段 | 含义 |
 | --- | --- |
-| `timeMs` | 音符相对歌曲起点的命中时刻（毫秒） |
-| `instrument` | 与界面无关的英文鼓件 ID，如 `bass-drum`、`acoustic-snare` |
-| `inputLane` | 原玩法输入组：`don` 为脚部输入，`ka` 为手部输入 |
-| `midiNote` | General MIDI 打击乐音符号；源谱未记录时为 `null` |
-| `drumName` | 对应 MIDI 鼓件的中英文名称 |
-| `big` | 是否为重击音符 |
-| `holdMs` | 可选持续时间；没有该字段即为单击 |
+| `format` | 固定 `aerogame.chart-data` |
+| `schemaVersion` | 当前 `1` |
+| `songId` | 对应 info 的 `id` |
+| `difficulty` | `A` / `B` / `C` |
+| `difficultyLabel` | `beginner` / `standard` / `hard` |
+| `timeUnit` / `coordinateSystem` | 固定 `milliseconds` / `song-start` |
+| `durationMs` | 与 info 相同，即音频总时长；三档一致 |
+| `beatMap` | 可选：`beats` 逐拍绝对毫秒、`beatsPerBar`、`barPhase`（首个重拍下标） |
+| `grid` | 固定网格：`originMs`、`stepMs`（十六分）、`stepsPerBeat`、`stepsPerBar` |
+| `notes` | 按时间升序的音符 |
 
-其他音游应优先用 `instrument` 或 `midiNote` 映射自己的轨道，不要依赖 AeroGame 的舞台位置或画面布局。
+### 音符字段
 
-## 兼容规则
-
-1. 读取前检查 `format` 与 `schemaVersion`。
-2. 忽略不认识的新增字段，避免小版本扩展导致读取失败。
-3. `chartFingerprint` 改变表示该歌曲谱面已更新，应替换旧缓存。
-4. 不要对音符时间再叠加 AeroGame 的本机校准值；播放设备校准应由目标游戏自行处理。
-
-读取示例见 `examples/read-aerogame-chart.ts`。
-
-## 封面 PNG 的用法
-
-- PNG 与 JSON 通过歌曲的 `coverFile` 字段配对（默认与 JSON 同名），只作展示用途：歌单封面、选中详情、加载画面；不包含任何谱面或游戏数据。
-- 每张约 800×800 方形；目标游戏可自行压缩缩放，改名后需同步更新 `coverFile`；没有封面的歌该字段为 `null`，游戏需自行准备默认图。
-- 玩法画面用不用封面由目标游戏自定；封面缺失不影响谱面读取。
+| 字段 | 含义 |
+| --- | --- |
+| `timeMs` | 相对音频起点的命中时刻（毫秒） |
+| `instrument` | 英文鼓件 ID，如 `bass-drum`、`acoustic-snare` |
+| `inputLane` | `don` 脚部 / `ka` 手部 |
+| `midiNote` | General MIDI 打击乐音符号 |
+| `drumName` | 鼓件中英文名 |
+| `big` | 是否重击 |
+| `holdMs` | 可选持续时间；无此字段即单击 |
 
 ## 接入步骤（音游开发）
 
-1. 校验 `format` === `aerogame.chart-package` 且 `schemaVersion` === 1，不满足时拒绝读取。
-2. 选难度：`easy`/`beginner`/`standard`/`hard`，对应轻松/入门/标准/困难。
-3. 时间对齐：所有 `timeMs` 以音频文件起点为 0；音游直接用 `timeMs − 音频播放当前位置` 放置音符；玩家延迟/设备校准由目标游戏自己加，不要再叠加 AeroGame 的偏移。
-4. 拍点优先级：有 `beatMap` 用 `beatMap.beats`（逐拍绝对毫秒，保留动态速度），没有才退回 `grid`（`originMs` + `stepMs` × 步数）。
-5. 轨道映射：优先用 `instrument` 或 `midiNote`（General MIDI 鼓件）映射自己的轨道；`inputLane`（don=脚部/ka=手部）与 `big`、可选 `holdMs` 供需要的游戏使用；不要依赖 AeroGame 的画面布局。
-6. 缓存：`chartFingerprint` 变化即替换旧谱面缓存。
+1. 歌单页只读 `*.info.json`：歌名、歌手、封面、时长、速度。
+2. 进入某难度时，按 `charts.A/B/C` 读对应谱面，校验 `format === "aerogame.chart-data"` 与 `schemaVersion === 1`。
+3. 同时播放 `audioTracks` 中的三条分轨（同时起播，不要裁切开头）。
+4. 时间对齐：音符位置 = `timeMs − 音频当前播放位置`；设备延迟校准由游戏自己处理。
+5. 拍点：有 `beatMap` 用 `beatMap.beats`（保留动态速度），否则用 `grid`。
+6. 轨道映射：用 `instrument` 或 `midiNote` 映射到自己的鼓面。
+7. 缓存：`chartFingerprint` 变化即替换旧谱面。
+8. 忽略不认识的新增字段。
 
 ## 导出方式
 
-### 后台导出（网页）
+### 后台导出（网页，需登录）
 
-- 曲库每首歌旁的「导出谱面」按钮：下载该歌的 `歌名.aerogame-chart.json` 与同名 `歌名.png`。浏览器第一次可能询问「是否允许下载多个文件」，点允许即可。
-- 曲库顶部的「导出全部谱面」按钮：下载一个 ZIP，内含一份总 JSON 与各首歌的封面 PNG。
-- 需要先登录后台；导出数据不含音频存储地址、签名链接或任何后台凭据。
+- 每首歌的「导出谱面」：下载 `歌名.zip`，内含 info、A/B/C 三份谱面与封面。
+- 「导出全部谱面」：下载一个 ZIP，内含每首歌的同一组文件。
+- 后台导出不含音频，请另行提供分轨。
 
-### 本地导出工具（Windows，免登录）
+### 本地导出工具（Windows，离线）
 
-- 解压 `AeroGameChartTool-win32-x64.zip`，双击 `AeroGameChartTool.exe` 即可使用，全程离线，不上传任何文件。
-- 「选择歌曲文件夹」：命名规则与后台上传相同，`歌名 - Drums` 与 `歌名_Drums` 均可识别，子文件夹内的文件也会找到；每首歌必须有 MIDI 文件，缺失会标为失败并跳过。
-- 「选择导出文件夹」：点「开始导出」后逐首处理，每首歌输出 `歌名.aerogame-chart.json` 与 `歌名.png`；封面取自原曲内嵌封面，原曲没有封面时只输出 JSON。
-- 工具与后台共用同一套谱面算法，同一首歌两者导出的谱面除 `exportedAt` 导出时间外内容一致；界面会记住上次选择的两个文件夹。
-- 算法更新后想重新打包工具：解压源码包后运行 `bun install`，再运行 `bun run tool:pack:win`，新程序在项目的 `electron-release` 文件夹。
+- 双击 `AeroGameChartTool.exe`；选择歌曲文件夹与导出文件夹，点「开始导出」。
+- 命名规则与后台上传相同（`歌名 - Drums`、`歌名_Drums` 均可）；每首歌必须有 MIDI。
+- 每首歌输出上面列出的全部文件，分轨音频按原格式拷贝并改名。
+- 与后台共用同一套算法；重打包：`bun install` 后 `bun run tool:pack:win`，产物在 `electron-release`。
