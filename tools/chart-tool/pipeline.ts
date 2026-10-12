@@ -123,11 +123,13 @@ export async function processSong(
   onStep("生成谱面");
   const charts = buildAllCharts(parsed, title, displayBpm, beatMap);
   const fingerprint = chartVersionFingerprint(parsed, beatMap);
-  let durationMs = parsed.durationMs;
+  // 时长严格以音频为准（MIDI 尾部常有空白小节会虚高）；无音频才回退 MIDI
+  let audioMs = 0;
   for (const key of ["vocals", "bass", "drums", "other", "original"] as const) {
     const f = files[key];
-    if (f) durationMs = Math.max(durationMs, await audioDurationMs(f));
+    if (f) audioMs = Math.max(audioMs, await audioDurationMs(f));
   }
+  const durationMs = audioMs > 0 ? audioMs : parsed.durationMs;
 
   const bpm = Math.round(displayBpm * 10) / 10;
   const source: ChartExportSourceSong = {

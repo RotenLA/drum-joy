@@ -31,12 +31,7 @@ export interface ChartExportSourceSong {
 
 export interface AeroGameExportNote {
   timeMs: number;
-  instrument: string;
-  inputLane: DrumLane;
   midiNote: number | null;
-  drumName: string | null;
-  big: boolean;
-  holdMs?: number;
 }
 
 export interface AeroGameExportChart {
@@ -136,18 +131,7 @@ function exportChart(difficulty: ExportDifficulty, value: ChartExportJson | unde
     ...(chart.grid ? { grid: chart.grid } : {}),
     ...(chart.beatMap ? { beatMap: chart.beatMap } : {}),
     notes: chart.notes
-      .map((note) => {
-        const midiNote = note.note ?? null;
-        return {
-          timeMs: note.timeMs,
-          instrument: midiNote === null ? "unknown" : (MIDI_INSTRUMENTS[midiNote] ?? `midi-${midiNote}`),
-          inputLane: note.lane,
-          midiNote,
-          drumName: midiNote === null ? null : (DRUM_NOTE_NAMES[midiNote] ?? `MIDI Note ${midiNote}`),
-          big: note.big === true,
-          ...(note.holdMs !== undefined ? { holdMs: note.holdMs } : {}),
-        };
-      })
+      .map((note) => ({ timeMs: note.timeMs, midiNote: note.note ?? null }))
       .sort((a, b) => a.timeMs - b.timeMs),
   };
 }
