@@ -23,12 +23,7 @@ export interface ChartData {
   grid?: { originMs: number; stepMs: number; stepsPerBeat: number; stepsPerBar: number };
   notes: {
     timeMs: number;
-    instrument: string;
-    inputLane: "don" | "ka";
     midiNote: number | null;
-    drumName: string | null;
-    big: boolean;
-    holdMs?: number;
   }[];
 }
 
