@@ -294,11 +294,13 @@ function AdminPage() {
 
     const charts = buildAllCharts(parsed, title, displayBpm, beatMap);
     const fingerprint = chartVersionFingerprint(parsed, beatMap);
-    let durationMs = parsed.durationMs;
+    // 时长严格以音频为准；无音频才回退 MIDI（MIDI 尾部空白会虚高）
+    let audioMs = 0;
     for (const field of STEM_FIELDS) {
       const file = files[field.key];
-      if (file) durationMs = Math.max(durationMs, await audioDurationMs(file));
+      if (file) audioMs = Math.max(audioMs, await audioDurationMs(file));
     }
+    const durationMs = audioMs > 0 ? audioMs : parsed.durationMs;
 
     const uploadFiles = [
       ...STEM_FIELDS.map((field) => ({ key: field.key as string, file: files[field.key] })),

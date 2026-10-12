@@ -55,12 +55,9 @@ aLIEz_Bass.mp3           贝斯分轨（仅本地工具导出）
 | 字段 | 含义 |
 | --- | --- |
 | `timeMs` | 相对音频起点的命中时刻（毫秒） |
-| `instrument` | 英文鼓件 ID，如 `bass-drum`、`acoustic-snare` |
-| `inputLane` | `don` 脚部 / `ka` 手部 |
-| `midiNote` | General MIDI 打击乐音符号 |
-| `drumName` | 鼓件中英文名 |
-| `big` | 是否重击 |
-| `holdMs` | 可选持续时间；无此字段即单击 |
+| `midiNote` | General MIDI 打击乐音符号（36 底鼓、38 军鼓、42/46 闭/开镲、44 踩镲踏板等），鼓面由游戏按此映射 |
+
+所有音符都是单击，没有持续时间。
 
 ## 接入步骤（音游开发）
 
@@ -69,7 +66,7 @@ aLIEz_Bass.mp3           贝斯分轨（仅本地工具导出）
 3. 同时播放 `audioTracks` 中的三条分轨（同时起播，不要裁切开头）。
 4. 时间对齐：音符位置 = `timeMs − 音频当前播放位置`；设备延迟校准由游戏自己处理。
 5. 拍点：有 `beatMap` 用 `beatMap.beats`（保留动态速度），否则用 `grid`。
-6. 轨道映射：用 `instrument` 或 `midiNote` 映射到自己的鼓面。
+6. 轨道映射：用 `midiNote` 映射到自己的鼓面。
 7. 缓存：`chartFingerprint` 变化即替换旧谱面。
 8. 忽略不认识的新增字段。
 
