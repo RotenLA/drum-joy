@@ -11,7 +11,7 @@ import { buildPlayChart, type Difficulty } from "./difficulty";
 import type { PlayChartOptions } from "./difficulty";
 
 const CACHE_KEY = "taiko.charts.v16";
-const CHART_ALGORITHM_VERSION = "metro-beatmap-v6";
+const CHART_ALGORITHM_VERSION = "metro-beatmap-v7-pedalhold";
 
 
 

@@ -24,6 +24,7 @@ export interface ChartData {
   notes: {
     timeMs: number;
     midiNote: number | null;
+    holdMs?: number;
   }[];
 }
 
