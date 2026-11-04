@@ -15,6 +15,8 @@ export interface PatternHit {
   part: PartId;
   velocity: number;
   open?: boolean;
+  /** 左踏板长音符：持续的网格步数（仅 pedalHat） */
+  holdSteps?: number;
 }
 
 /** 0 安静 / 1 普通 / 2 密集 */
@@ -162,7 +164,7 @@ const STANDARD: Gen = (c) => {
   if (snare8.length === 0) snare8 = bb.map((b) => b * 2);
   for (const s of c.level === 0 ? snare8.slice(-1) : snare8) out.push([(s * c.spb) / 2, "snare"]);
   const kick8 = c.level === 0 ? [0] : c.groove.kick8;
-  for (const k of kick8.slice(0, 4)) out.push([(k * c.spb) / 2, "kick"]);
+  for (const k of kick8.slice(0, c.level === 2 ? 4 : 3)) out.push([(k * c.spb) / 2, "kick"]);
   if (c.bar.isPhraseStart && c.level >= 1 && (c.bar.slots.crash?.length ?? 0) > 0) out.push([0, "crash", 115]);
   for (const s of c.bar.openHat) if (!c.ride && s % (c.spb / 2) === 0) out.push([s, "hihat", 100]);
   return out;
@@ -171,10 +173,11 @@ const STANDARD: Gen = (c) => {
 const HARD: Gen = (c) => {
   const out = STANDARD(c);
   const src = c.bar.slots.kick ?? [];
-  // 困难：密集段底鼓更贴近 MIDI（允许十六分，但每拍最多 2 下）
+  // 困难：密集段底鼓更贴近 MIDI（仍只取八分位，每拍最多 2 下）
   if (c.level === 2) {
     const perBeat = new Map<number, number>();
     for (const s of src) {
+      if (s % (c.spb / 2) !== 0) continue;
       const b = Math.floor(s / c.spb);
       if ((perBeat.get(b) ?? 0) >= 2) continue;
       perBeat.set(b, (perBeat.get(b) ?? 0) + 1);
@@ -195,11 +198,14 @@ function fill(c: BarCtx, diff: PatternDifficulty, base: Array<[number, PartId, n
   const beats = diff === "hard" ? 2 : 1;
   const from = Math.max(0, c.beats - beats) * c.spb;
   const keep = base.filter(([s, p]) => s < from || p === "kick");
-  const div = diff === "easy" ? c.spb : diff === "beginner" || diff === "standard" ? c.spb / 2 : c.spb / 4;
   const toms: PartId[] =
-    diff === "hard" ? ["snare", "highTom", "midTom", "floorTom"] : diff === "standard" ? ["snare", "floorTom"] : ["snare"];
+    diff === "hard" ? ["snare", "highTom", "midTom", "floorTom"] : ["snare"];
+  // 入门/轻松全程八分以内；标准/困难只有过门最后半拍允许十六分（偶尔）
+  const end = c.beats * c.spb;
+  const sixteenthFrom = diff === "standard" || diff === "hard" ? end - c.spb / 2 : end;
+  const div = diff === "easy" ? c.spb : c.spb / 2;
   const slots: number[] = [];
-  for (let s = from; s < c.beats * c.spb; s += div) slots.push(s);
+  for (let s = from; s < end; s += s >= sixteenthFrom ? c.spb / 4 : div) slots.push(s);
   slots.forEach((s, i) => {
     const part = toms[Math.min(toms.length - 1, Math.floor((i * toms.length) / slots.length))]!;
     keep.push([s, part, 100]);
@@ -224,6 +230,7 @@ export function patternEmits(sk: Skeleton, diff: PatternDifficulty, beatsPerBar:
   const grooves = extractGrooves(sk, beats);
 
   const out: PatternHit[] = [];
+  const modes: Array<"hold" | "chick"> = [];
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i]!;
     // 乐句（4 小节）内统一疏密：取众数，避免一小节一个型
@@ -242,11 +249,17 @@ export function patternEmits(sk: Skeleton, diff: PatternDifficulty, beatsPerBar:
       spb,
       level,
       bar,
-      ride: diff !== "easy" && diff !== "beginner" && bar.ridePrimary,
+      ride: diff === "hard" && bar.ridePrimary,
       variant: phraseEnd && bar.index % 8 === 7,
       groove: grooves[level],
     };
     let hits = GEN[diff](c);
+    // 左脚「点踩」段：标准/困难的安静乐句或叮叮镲段，手上不打踩镲，左脚在反拍短踩
+    const chick = (diff === "standard" || diff === "hard") && (level === 0 || c.ride);
+    if (chick) {
+      hits = hits.filter(([, p]) => p !== "hihat");
+      for (const b of backbeats(c)) hits.push([b * spb, "pedalHat", 80]);
+    }
     const doFill = (diff === "hard" && bar.isFill) || (phraseEnd && nextPhraseStart && bar.index % 8 === 7 && level >= 1);
     if (doFill) hits = fill(c, diff, hits);
     const seen = new Set<string>();
@@ -263,6 +276,78 @@ export function patternEmits(sk: Skeleton, diff: PatternDifficulty, beatsPerBar:
       if (part === "hihat") hit.open = vel === 100 && diff !== "easy" && diff !== "beginner";
       out.push(hit);
     }
+    modes.push(chick ? "chick" : "hold");
   }
+  out.sort((a, b) => a.step - b.step);
+  return applyPedalHolds(out, sk, diff, modes);
+}
+
+/**
+ * 左踏板长音符 + 开闭镲物理一致性。
+ * - 长音符按乐句换脚：入门/轻松每 8 小节、标准/困难每 4 小节一段，段尾提前一拍松开（视觉呼吸）；
+ * - 标准/困难遇到开镲也松开，开镲后的下一个闭镲重新踩下；
+ * - 踩住期间的踩镲一律闭镲(42)；松开期间：入门/轻松直接删掉，标准/困难改为开镲(46)；
+ * - 「点踩」小节不出长音符，只有反拍的短踩。
+ */
+function applyPedalHolds(
+  hits: PatternHit[],
+  sk: Skeleton,
+  diff: PatternDifficulty,
+  modes: Array<"hold" | "chick">,
+): PatternHit[] {
+  const { bars, stepsPerBeat: spb, stepsPerBar } = sk;
+  const simple = diff === "easy" || diff === "beginner";
+  const phraseBars = simple ? 8 : 4;
+  const first = bars[0]!.startStep;
+  const barIdx = (step: number) => Math.floor((step - first) / stepsPerBar);
+  const modeAt = (step: number) => modes[barIdx(step)] ?? "hold";
+
+  const hats = hits.filter((h) => h.part === "hihat");
+  const segs: Array<[number, number]> = [];
+  let start: number | null = null;
+  let blockEnd = 0;
+  const close = (end: number) => {
+    if (start !== null && end - start >= spb) segs.push([start, end]);
+    start = null;
+  };
+  for (const h of hats) {
+    if (modeAt(h.step) === "chick") continue;
+    if (start !== null && h.step >= blockEnd) close(blockEnd - spb);
+    if (start !== null && h.open && !simple) {
+      close(h.step - 1);
+      continue;
+    }
+    if (start === null && !(h.open && !simple)) {
+      // 段尾松开的那一拍里不重新踩
+      const b = barIdx(h.step);
+      const end = first + (Math.floor(b / phraseBars) + 1) * phraseBars * stepsPerBar;
+      if (end - h.step <= spb) continue;
+      start = h.step;
+      blockEnd = end;
+      // 中途遇到点踩小节则提前结束
+      for (let s = h.step; s < end; s += stepsPerBar) {
+        if (modeAt(s) === "chick") {
+          blockEnd = first + barIdx(s) * stepsPerBar + spb;
+          break;
+        }
+      }
+    }
+  }
+  if (start !== null) {
+    const lastHat = hats[hats.length - 1]!.step;
+    close(Math.min(blockEnd - spb, lastHat + spb));
+  }
+
+  const held = (step: number) => segs.some(([a, b]) => step >= a && step <= b);
+  const out: PatternHit[] = [];
+  for (const h of hits) {
+    if (h.part !== "hihat") {
+      out.push(h);
+      continue;
+    }
+    if (held(h.step)) out.push({ ...h, open: false });
+    else if (!simple) out.push({ ...h, open: true });
+  }
+  for (const [a, b] of segs) out.push({ step: a, part: "pedalHat", velocity: 90, holdSteps: b - a });
   return out.sort((a, b) => a.step - b.step);
 }
