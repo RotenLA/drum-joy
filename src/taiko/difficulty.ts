@@ -35,15 +35,15 @@ export const DIFFICULTIES: readonly {
     id: "beginner",
     label: "入门",
     labelEn: "Beginner",
-    hint: "轻松 + 右踏板",
-    hintEn: "Easy + right pedal",
+    hint: "军鼓 · 踩镲 · 双踏板（左脚长踩）",
+    hintEn: "Snare · hi-hat · both pedals (left held)",
   },
   {
     id: "standard",
     label: "标准",
     labelEn: "Standard",
-    hint: "加入低通 / 吊镲 / 叮叮镲",
-    hintEn: "Adds floor tom / crash / ride",
+    hint: "入门 + 吊镲，左脚长踩/点踩",
+    hintEn: "Beginner + crash, left pedal held/tapped",
   },
   {
     id: "hard",
@@ -65,7 +65,7 @@ export function layoutOf(diff: Difficulty): LayoutMode {
 export const NOTE_PARTS: Record<Difficulty, readonly PartId[]> = {
   easy: ["snare", "hihat", "pedalHat"],
   beginner: ["snare", "hihat", "pedalHat", "kick"],
-  standard: ["snare", "hihat", "pedalHat", "kick", "floorTom", "crash", "ride"],
+  standard: ["snare", "hihat", "pedalHat", "kick", "crash"],
   hard: ["snare", "hihat", "pedalHat", "kick", "floorTom", "crash", "ride", "highTom", "midTom"],
 };
 
@@ -73,6 +73,30 @@ export const NOTE_PARTS: Record<Difficulty, readonly PartId[]> = {
 const HIHAT_EXCLUSIVE: readonly PartId[] = ["floorTom", "crash", "ride"];
 
 const BIG_VELOCITY = 108;
+const OPEN_HAT_NOTE = 46;
+const CLOSED_HAT_NOTE = 42;
+const PEDAL_HAT_NOTE = 44;
+
+/**
+ * 最终物理校验（毫秒层，消抖/对齐之后）：左踏板踩住区间内的踩镲只能是 42，
+ * 区间外只能是 46；简单档不出开镲，区间外的踩镲直接删除。
+ */
+export function enforceHatPedal(notes: TaikoNote[], allowOpen: boolean): TaikoNote[] {
+  const holds = notes
+    .filter((n) => n.note === PEDAL_HAT_NOTE && (n.holdMs ?? 0) > 0)
+    .map((n) => [n.timeMs, n.timeMs + (n.holdMs ?? 0)] as const);
+  const held = (t: number) => holds.some(([a, b]) => t >= a && t < b);
+  const out: TaikoNote[] = [];
+  for (const n of notes) {
+    if (n.note !== CLOSED_HAT_NOTE && n.note !== OPEN_HAT_NOTE) {
+      out.push(n);
+      continue;
+    }
+    if (held(n.timeMs)) out.push({ ...n, note: CLOSED_HAT_NOTE });
+    else if (allowOpen) out.push({ ...n, note: OPEN_HAT_NOTE });
+  }
+  return out;
+}
 
 export interface MidiAnalysis {
   clean: CleanedMidi;
@@ -92,6 +116,8 @@ interface Emit {
   timeMs?: number;
   /** 踩镲为开镲（此刻左脚必须松开，长音符要断开） */
   open?: boolean;
+  /** 左踏板长音符持续步数 */
+  holdSteps?: number;
 }
 
 /** 手部件（左右踏板之外的 7 件）：同一时刻最多同时出现 2 个 */
@@ -145,39 +171,6 @@ function limitHands(emits: Emit[]): Emit[] {
   }
   out.sort((a, b) => a.step - b.step);
   return out;
-}
-
-interface HoldSeg {
-  startStep: number;
-  endStep: number;
-}
-
-/**
- * 左踏板：整曲踩住。
- * 轻松 / 入门 → 第一个闭镲踩下后一直踩到结束，只有一条长音符；
- * 标准 / 困难 → 开镲处松开断开，开镲之后重新踩下。
- */
-function pedalHolds(emits: Emit[], diff: Difficulty, endStep: number): HoldSeg[] {
-  const hats = emits.filter((e) => e.part === "hihat").sort((a, b) => a.step - b.step);
-  const first = hats[0];
-  if (!first) return [];
-  const alwaysClosed = diff === "easy" || diff === "beginner";
-  if (alwaysClosed) {
-    return endStep > first.step ? [{ startStep: first.step, endStep }] : [];
-  }
-
-  const opens = hats.filter((e) => e.open === true).map((e) => e.step);
-  const segs: HoldSeg[] = [];
-  let start = first.step;
-  for (const o of opens) {
-    if (o - 1 > start) segs.push({ startStep: start, endStep: o - 1 });
-    // 开镲之后的下一个闭镲重新踩下
-    const next = hats.find((e) => e.step > o && e.open !== true);
-    if (!next) return segs;
-    start = next.step;
-  }
-  if (endStep > start) segs.push({ startStep: start, endStep });
-  return segs;
 }
 
 /**
@@ -363,42 +356,22 @@ function emitsToNotes(
     seen.add(key);
     const timeMs = aligner.timeOf(e.step, e.part) + offsetMs;
     if (timeMs < 0) continue;
-    notes.push({
+    const note: TaikoNote = {
       timeMs,
       lane: e.part === "kick" || e.part === "pedalHat" ? "don" : "ka",
       big: e.velocity >= BIG_VELOCITY,
-      note: noteForPart(e.part),
-    });
+      note: e.part === "hihat" && e.open ? OPEN_HAT_NOTE : noteForPart(e.part),
+    };
+    if (e.part === "pedalHat" && e.holdSteps) {
+      const endMs = aligner.rawOf(e.step + e.holdSteps) + offsetMs;
+      if (endMs > timeMs) note.holdMs = Math.round(endMs - timeMs);
+    }
+    notes.push(note);
   }
   notes.sort((a, b) => a.timeMs - b.timeMs);
   return notes;
 }
 
-
-function holdsToNotes(
-  segs: HoldSeg[],
-  offsetMs: number,
-  aligner: StepTimer,
-): TaikoNote[] {
-  const notes: TaikoNote[] = [];
-  for (const s of segs) {
-    // 相位微调可能让首个闭镲落在 0 之前，长音符起点夹到曲首
-    const startStep = Math.max(0, s.startStep);
-    const startMs = Math.max(0, aligner.timeOf(startStep, "pedalHat") + offsetMs);
-
-    const endMs = aligner.rawOf(s.endStep) + offsetMs;
-    if (endMs <= startMs) continue;
-
-
-    notes.push({
-      timeMs: startMs,
-      lane: "don",
-      note: noteForPart("pedalHat"),
-      holdMs: Math.round(endMs - startMs),
-    });
-  }
-  return notes;
-}
 
 export interface PlayChartOptions extends MidiChartOptions {
   /** 小节相位手动微调（拍） */
@@ -429,18 +402,13 @@ export function buildPlayChart(
   }
   emits = excludeHihatClashes(limitHands(emits));
 
-  const lastStep = emits.reduce((m, e) => Math.max(m, e.step), 0);
-  const holds = pedalHolds(emits, diff, lastStep + skeleton.stepsPerBeat);
 
   const aligner: StepTimer = beatMap
     ? new MetroTimer(beatMap.beats, clean.stepsPerBeat, skeleton.phaseSteps, beatMap.barPhase)
     : new HitAligner(midi, clean);
-  const notes = enforceMinGap(
-    [
-      ...emitsToNotes(emits, NOTE_PARTS[diff], offset, aligner),
-      ...holdsToNotes(holds, offset, aligner),
-    ].sort((a, b) => a.timeMs - b.timeMs),
-    diff,
+  const notes = enforceHatPedal(
+    enforceMinGap(emitsToNotes(emits, NOTE_PARTS[diff], offset, aligner), diff),
+    diff !== "easy" && diff !== "beginner",
   );
 
   const last = notes[notes.length - 1]?.timeMs ?? 0;

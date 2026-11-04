@@ -312,7 +312,7 @@ function applyPedalHolds(
   };
   for (const h of hats) {
     if (modeAt(h.step) === "chick") continue;
-    if (start !== null && h.step >= blockEnd) close(blockEnd - spb);
+    if (start !== null && h.step >= blockEnd) close(blockEnd - spb - 1);
     if (start !== null && h.open && !simple) {
       close(h.step - 1);
       continue;
@@ -335,7 +335,7 @@ function applyPedalHolds(
   }
   if (start !== null) {
     const lastHat = hats[hats.length - 1]!.step;
-    close(Math.min(blockEnd - spb, lastHat + spb));
+    close(Math.min(blockEnd - spb - 1, lastHat + spb));
   }
 
   const held = (step: number) => segs.some(([a, b]) => step >= a && step <= b);
