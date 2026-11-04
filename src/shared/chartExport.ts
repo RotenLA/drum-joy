@@ -32,6 +32,8 @@ export interface ChartExportSourceSong {
 export interface AeroGameExportNote {
   timeMs: number;
   midiNote: number | null;
+  /** 仅左踏板(44)长音符有：踩住持续毫秒 */
+  holdMs?: number;
 }
 
 export interface AeroGameExportChart {
@@ -131,7 +133,11 @@ function exportChart(difficulty: ExportDifficulty, value: ChartExportJson | unde
     ...(chart.grid ? { grid: chart.grid } : {}),
     ...(chart.beatMap ? { beatMap: chart.beatMap } : {}),
     notes: chart.notes
-      .map((note) => ({ timeMs: note.timeMs, midiNote: note.note ?? null }))
+      .map((note) => ({
+        timeMs: note.timeMs,
+        midiNote: note.note ?? null,
+        ...(note.holdMs && note.holdMs > 0 ? { holdMs: Math.round(note.holdMs) } : {}),
+      }))
       .sort((a, b) => a.timeMs - b.timeMs),
   };
 }
