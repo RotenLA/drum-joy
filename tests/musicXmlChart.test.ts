@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { readFileSync, existsSync } from "node:fs";
-import { parseMusicXmlDrums } from "./musicXmlChart";
+import { parseMusicXmlDrums } from "../src/shared/musicXmlChart";
 
 const head = `<score-partwise><part-list><score-part id="P1"><score-instrument id="P1-I1"><instrument-name>Snare (hit)</instrument-name></score-instrument><midi-instrument id="P1-I1"><midi-unpitched>39</midi-unpitched></midi-instrument></score-part></part-list><part id="P1">`;
 const n = (dur: number, extra = "") => `<note>${extra}<unpitched/><duration>${dur}</duration><instrument id="P1-I1"/></note>`;
