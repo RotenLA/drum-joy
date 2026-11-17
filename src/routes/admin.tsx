@@ -552,6 +552,32 @@ function AdminPage() {
     }
   };
 
+  const convertMusicXml = async (list: FileList | null) => {
+    if (!list?.length || busy !== null) return;
+    setBusy("正在转换 XML 鼓谱…");
+    setNote(null);
+    try {
+      const { parseMusicXmlDrums, buildMusicXmlExport } = await import("@/shared/musicXmlChart");
+      const { zipSync, strToU8 } = await import("fflate");
+      const files: Record<string, Uint8Array> = {};
+      let count = 0;
+      for (const f of Array.from(list)) {
+        const base = f.name.replace(/\.(musicxml|xml)$/i, "");
+        const chart = parseMusicXmlDrums(await f.text(), base);
+        for (const out of buildMusicXmlExport(chart, safeExportFileStem(base))) files[out.name] = strToU8(out.text);
+        count += chart.notes.length;
+      }
+      const zip = zipSync(files, { level: 0 });
+      const name = list.length === 1 ? `${safeExportFileStem(list[0]!.name.replace(/\.(musicxml|xml)$/i, ""))}.zip` : "musicxml-charts.zip";
+      saveBlob(new Blob([zip as BlobPart], { type: "application/zip" }), name);
+      setNote(`已转换 ${list.length} 个 XML，共 ${count} 个音符`);
+    } catch (error) {
+      setNote(`XML 转换失败：${(error as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const downloadChartExport = async (rows: AdminSongRow[]) => {
     if (!rows.length || busy !== null) return;
     setBusy(rows.length === 1 ? `正在导出《${rows[0]?.title ?? "歌曲"}》谱面…` : `正在导出全部 ${rows.length} 首歌曲谱面…`);
@@ -913,6 +939,17 @@ function AdminPage() {
             >
               导出全部谱面
             </Button>
+            <label className="cursor-pointer border border-[var(--taiko-accent)] bg-[var(--taiko-accent-soft)] px-3 py-1.5 text-xs text-[var(--taiko-accent)]">
+              XML 鼓谱转 JSON
+              <input
+                type="file"
+                accept=".xml,.musicxml"
+                multiple
+                className="hidden"
+                disabled={busy !== null}
+                onChange={(e) => { void convertMusicXml(e.target.files); e.target.value = ""; }}
+              />
+            </label>
             <button
               type="button"
               disabled={batchRunning || busy !== null || songs.length === 0}
