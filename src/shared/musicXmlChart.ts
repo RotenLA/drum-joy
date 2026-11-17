@@ -32,13 +32,13 @@ const NAME_FALLBACK: [RegExp, number][] = [
 
 export function parseMusicXmlDrums(xml: string, fallbackTitle = "song"): MusicXmlChart {
   const instNote = new Map<string, number>();
-  for (const [, attrs, body] of all(xml, "score-instrument")) {
+  for (const [, attrs = "", body = ""] of all(xml, "score-instrument")) {
     const id = attrs.match(/id="([^"]+)"/)?.[1];
     const name = tag(body, "instrument-name") ?? "";
     const hit = NAME_FALLBACK.find(([re]) => re.test(name));
     if (id && hit) instNote.set(id, hit[1]);
   }
-  for (const [, attrs, body] of all(xml, "midi-instrument")) {
+  for (const [, attrs = "", body = ""] of all(xml, "midi-instrument")) {
     const id = attrs.match(/id="([^"]+)"/)?.[1];
     const u = Number(tag(body, "midi-unpitched"));
     if (id && Number.isFinite(u) && u > 0) instNote.set(id, u - 1); // MusicXML 为 1 起计
