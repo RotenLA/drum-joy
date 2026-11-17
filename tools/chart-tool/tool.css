@@ -22,3 +22,5 @@ button.primary { background: #f2a33a; color: #1a1a1a; border-color: #f2a33a; fon
 .row.fail .step { color: #ef6b6b; }
 .foot { display: flex; align-items: center; gap: 12px; }
 .foot span { flex: 1; color: #9aa0ab; }
+.xmlbtn { background: #232730; color: #e8e8ea; border: 1px solid #353a45; border-radius: 6px; padding: 7px 14px; cursor: pointer; white-space: nowrap; }
+.xmlbtn:hover { border-color: #f2a33a; }

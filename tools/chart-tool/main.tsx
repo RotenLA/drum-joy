@@ -2,6 +2,8 @@ import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { groupImportFiles, type FolderImportSong } from "@/taiko/adminFolderImport";
 import { processSong } from "./pipeline";
+import { buildMusicXmlExport, parseMusicXmlDrums } from "@/shared/musicXmlChart";
+import { safeExportFileStem } from "@/shared/chartExport";
 import "./tool.css";
 
 interface Bridge {
@@ -110,6 +112,24 @@ function App() {
     setFinished(true);
   }
 
+  const [xmlMsg, setXmlMsg] = useState<string>("");
+  async function convertXml(list: FileList | null) {
+    if (!bridge || !list?.length) return;
+    if (!output) { setXmlMsg("请先选择导出文件夹"); return; }
+    const msgs: string[] = [];
+    for (const f of Array.from(list)) {
+      try {
+        const base = f.name.replace(/\.(musicxml|xml)$/i, "");
+        const chart = parseMusicXmlDrums(await f.text(), base);
+        for (const j of buildMusicXmlExport(chart, safeExportFileStem(base))) await bridge.writeFile(await bridge.joinPath(output, j.name), j.text);
+        msgs.push(`${base}：${chart.notes.length} 个音符 · ${chart.measureCount} 小节 · ${chart.bpm} BPM`);
+      } catch (e) {
+        msgs.push(`${f.name}：失败 ${(e as Error).message}`);
+      }
+    }
+    setXmlMsg(msgs.join("；"));
+  }
+
   const done = rows.filter((r) => r.state === "done").length;
   const failed = rows.filter((r) => r.state === "fail").length;
 
@@ -125,6 +145,15 @@ function App() {
       <div className="pick">
         <button disabled={running} onClick={() => void pickOutput()}>选择导出文件夹</button>
         <span className="path">{output || "未选择"}</span>
+      </div>
+
+      <div className="pick">
+        <label className="xmlbtn">
+          XML 鼓谱转 JSON（A 档）
+          <input type="file" accept=".xml,.musicxml" multiple hidden disabled={running}
+            onChange={(e) => { void convertXml(e.target.files); e.target.value = ""; }} />
+        </label>
+        <span className="path">{xmlMsg || "选择 Guitar Pro 导出的 MusicXML，输出到导出文件夹"}</span>
       </div>
 
       <div className="list">
