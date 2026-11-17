@@ -46,7 +46,7 @@ export function parseMusicXmlDrums(xml: string, fallbackTitle = "song"): MusicXm
 
   const part = all(xml, "part")[0]?.[2];
   if (!part) throw new Error("XML 中没有找到谱表 <part>");
-  const measures = all(part, "measure").map((m) => m[2]);
+  const measures = all(part, "measure").map((m) => m[2] ?? "");
   if (!measures.length) throw new Error("XML 中没有小节");
 
   // 反复记号展开（forward/backward repeat + 1/2 房子）
@@ -94,7 +94,7 @@ export function parseMusicXmlDrums(xml: string, fallbackTitle = "song"): MusicXm
       return ms + ((pos - p) / divisions) * 60000 / cur;
     };
     tempoAt.push({ pos: 0, bpm: bpm || 120 });
-    for (const [, kind, attrs, , body = ""] of events) {
+    for (const [, kind, attrs = "", , body = ""] of events) {
       if (kind === "sound") {
         const v = Number(attrs.match(/tempo="([\d.]+)"/)?.[1]);
         if (v > 0) { bpm = v; if (!firstBpm) firstBpm = v; if (cursor === 0) tempoAt[0] = { pos: 0, bpm: v }; else tempoAt.push({ pos: cursor, bpm: v }); }
@@ -123,7 +123,7 @@ export function parseMusicXmlDrums(xml: string, fallbackTitle = "song"): MusicXm
 
   if (!firstBpm) firstBpm = 120;
   const rawTitle = tag(xml, "work-title") ?? tag(xml, "movement-title");
-  const artist = all(xml, "creator").find(([, a]) => /composer|artist/i.test(a))?.[2]?.trim() || null;
+  const artist = all(xml, "creator").find(([, a = ""]) => /composer|artist/i.test(a))?.[2]?.trim() || null;
   return {
     title: rawTitle ? unesc(rawTitle) : fallbackTitle,
     artist: artist ? unesc(artist) : null,
