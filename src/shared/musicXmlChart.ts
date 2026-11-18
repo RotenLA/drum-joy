@@ -5,7 +5,7 @@
 import { CHART_DATA_FORMAT, CHART_EXPORT_SCHEMA_VERSION, SONG_INFO_FORMAT, chartFileName } from "./chartExport";
 import type { SplitExportFile } from "./chartExport";
 
-export interface MusicXmlNote { timeMs: number; midiNote: number }
+export interface MusicXmlNote { timeMs: number; midiNote: number; holdMs?: number }
 export interface MusicXmlChart {
   title: string;
   artist: string | null;
@@ -131,10 +131,47 @@ export function parseMusicXmlDrums(xml: string, fallbackTitle = "song"): MusicXm
     timeSignature: firstTs ?? ts,
     durationMs: Math.round(t),
     beatMap: { beats, beatsPerBar: (firstTs ?? ts)[0], barPhase: 0 },
-    notes: notes.map((n) => ({ timeMs: Math.round(n.timeMs), midiNote: n.midiNote }))
-      .sort((a, b) => a.timeMs - b.timeMs || a.midiNote - b.midiNote),
+    notes: addPedalHolds(
+      notes.map((n) => ({ timeMs: Math.round(n.timeMs), midiNote: n.midiNote })),
+      60000 / (firstBpm || 120), (firstTs ?? ts)[0],
+    ),
     measureCount: order.length,
   };
+}
+
+/**
+ * 闭镲 42 需左脚踩住：自动补 44 长音符。
+ * 分段：相邻 42 间隔超过 1 小节、中间出现开镲 46、或段长满 8 小节 → 换段（换脚）。
+ * 段长 = 首个 42 → 末个 42 + 半拍，且必须在下一个 46 前 30ms 松开。
+ */
+export function addPedalHolds(input: MusicXmlNote[], beatMs: number, beatsPerBar: number): MusicXmlNote[] {
+  const notes = [...input].sort((a, b) => a.timeMs - b.timeMs || a.midiNote - b.midiNote);
+  const barMs = beatMs * beatsPerBar;
+  const hats = notes.filter((n) => n.midiNote === 42).map((n) => n.timeMs);
+  const opens = notes.filter((n) => n.midiNote === 46).map((n) => n.timeMs);
+  const holds: MusicXmlNote[] = [];
+  let i = 0;
+  while (i < hats.length) {
+    const start = hats[i]!;
+    let last: number = start;
+    let j = i + 1;
+    while (j < hats.length) {
+      const t = hats[j]!;
+      if (t - last > barMs + 1) break;
+      if (opens.some((o) => o > last && o < t)) break;
+      if (t - start >= barMs * 8 - 1) break;
+      last = t; j++;
+    }
+    let end = last + beatMs / 2;
+    const nextOpen = opens.find((o) => o > last);
+    if (nextOpen != null) end = Math.min(end, nextOpen - 30);
+    if (j < hats.length) end = Math.min(end, hats[j]! - 30);
+    holds.push({ timeMs: start, midiNote: 44, holdMs: Math.max(1, Math.round(end - start)) });
+    i = j;
+  }
+  const holdStarts = new Set(holds.map((h) => h.timeMs));
+  return notes.filter((n) => !(n.midiNote === 44 && holdStarts.has(n.timeMs))).concat(holds)
+    .sort((a, b) => a.timeMs - b.timeMs || a.midiNote - b.midiNote);
 }
 
 /** 生成 `歌名.info.json` + `歌名 - A - game.json` */
@@ -149,7 +186,7 @@ export function buildMusicXmlExport(chart: MusicXmlChart, stem: string, audioDur
   const info = {
     format: SONG_INFO_FORMAT, schemaVersion: CHART_EXPORT_SCHEMA_VERSION, exportedAt: new Date().toISOString(),
     id, title: chart.title, artist: chart.artist, durationMs, bpm: chart.bpm, timeSignature: chart.timeSignature,
-    chartFingerprint: `musicxml-v1`, coverFile: null,
+    chartFingerprint: `musicxml-v2-pedalhold`, coverFile: null,
     charts: { A: chartFileName(stem, "A") }, difficultyLabels: { A: "beginner" },
     audioTracks: { vocals: null, others: null, bass: null }, source: "musicxml",
   };

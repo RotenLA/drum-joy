@@ -18,11 +18,20 @@ describe("MusicXML 鼓谱 1:1 转换", () => {
     const p = "/mnt/user-uploads/2-4.xml";
     if (!existsSync(p)) return;
     const c = parseMusicXmlDrums(readFileSync(p, "utf8"));
-    expect(c.notes.length).toBe(72);
-    expect(c.notes.every((x) => x.midiNote === 42)).toBe(true);
+    expect(c.notes.filter((n) => n.midiNote === 42).length).toBe(72);
+    expect(c.notes.filter((n) => n.midiNote === 44).length).toBe(10);
+    expect(c.notes.every((x) => x.midiNote === 42 || x.midiNote === 44)).toBe(true);
     expect(c.notes[0]!.timeMs).toBe(6575);
     expect(c.measureCount).toBe(33);
     expect(c.beatMap.beats.length).toBe(132);
     expect(c.bpm).toBe(73);
   });
+});
+
+import { addPedalHolds } from "../src/shared/musicXmlChart";
+it("closed hats get 44 holds, released before open hat", () => {
+  const n = [0, 500, 1000, 1500].map((t) => ({ timeMs: t, midiNote: 42 }));
+  n.push({ timeMs: 2000, midiNote: 46 }, { timeMs: 2500, midiNote: 42 });
+  const out = addPedalHolds(n, 500, 4).filter((x) => x.midiNote === 44);
+  expect(out).toEqual([{ timeMs: 0, midiNote: 44, holdMs: 1750 }, { timeMs: 2500, midiNote: 44, holdMs: 250 }]);
 });
